@@ -18,6 +18,19 @@ default:
     - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
     - apk add --no-cache curl bash >/dev/null
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
+    # How this job reaches the Docker daemon. If DOCKER_HOST points at
+    # tcp://docker:2375 but no dind service exists, every docker command fails
+    # with "lookup docker ... no such host". Prefer the mounted host socket.
+    - |
+      echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
+      if [ -S /var/run/docker.sock ]; then
+        echo "host socket: present -> using it"
+        unset DOCKER_HOST
+        export DOCKER_HOST=unix:///var/run/docker.sock
+      else
+        echo "host socket: ABSENT"
+      fi
+      docker info --format 'daemon ok: {{.ServerVersion}}' 2>&1 | head -3 || true
 
 # ------------------------------------------------------------
 #  Validate compose against hackathon rules
