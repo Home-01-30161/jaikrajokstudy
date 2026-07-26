@@ -36,11 +36,6 @@ app.add_middleware(
 app.include_router(line_router)
 app.include_router(web_router)
 
-# Serve frontend
-frontend_dir = Path(__file__).parent / "frontend"
-if frontend_dir.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
-
 
 @app.get("/health")
 async def health() -> dict:
@@ -55,3 +50,8 @@ async def health() -> dict:
         ),
         "aiforthai_key_set": bool(settings.aiforthai_api_key),
     }
+
+# Serve frontend (must be after all routes, or it catches /health too)
+frontend_dir = Path(__file__).parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
