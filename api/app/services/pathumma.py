@@ -38,18 +38,20 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None) -> 
         "Apikey": settings.aiforthai_api_key,
         "X-lib": "ai4thai-lib",
     }
-    payload = {
-        "instruction": prompt,
-        "system_prompt": SYSTEM_PROMPT,
-        "max_new_tokens": 512,
-        "temperature": 0.4,
-        "return_json": True,
+    # The endpoint requires multipart/form-data. Sending urlencoded form data
+    # (httpx `data=`) makes it reply 422 "Field required: body.instruction",
+    # so fields are passed as multipart parts via `files=` instead.
+    form = {
+        "instruction": (None, prompt.encode("utf-8"), "text/plain; charset=utf-8"),
+        "system_prompt": (None, SYSTEM_PROMPT.encode("utf-8"), "text/plain; charset=utf-8"),
+        "max_new_tokens": (None, "512"),
+        "temperature": (None, "0.4"),
     }
 
     url = settings.pathumma_endpoint or PATHUMMA_TEXTQA_URL
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, headers=headers, data=payload)
+            resp = await client.post(url, headers=headers, files=form)
             try:
                 raw = resp.json()
             except Exception:

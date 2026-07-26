@@ -68,6 +68,19 @@ async def analyze_text(text: str) -> ServiceResult:
         return ServiceResult(service="sentiment", ok=False, error=str(exc))
 
 
+def _normalize_score(score: object) -> float | None:
+    """ssense returns score as a percentage string, e.g. "80" -> 0.8."""
+    if score is None:
+        return None
+    try:
+        val = float(score)
+    except (TypeError, ValueError):
+        return None
+    if val > 1.0:
+        val = val / 100.0
+    return max(0.0, min(1.0, val))
+
+
 def _parse_sentiment(raw: dict) -> tuple[str | None, float | None]:
     sentiment = raw.get("sentiment") or raw.get("polarity") or raw.get("label")
     score = raw.get("score") or raw.get("confidence")
@@ -76,11 +89,8 @@ def _parse_sentiment(raw: dict) -> tuple[str | None, float | None]:
         score = sentiment.get("score", score)
         return (
             str(label) if label is not None else None,
-            float(score) if score is not None else None,
+            _normalize_score(score),
         )
     if sentiment is not None:
-        try:
-            return str(sentiment), float(score) if score is not None else None
-        except (TypeError, ValueError):
-            return str(sentiment), None
+        return str(sentiment), _normalize_score(score)
     return None, None

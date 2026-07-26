@@ -11,6 +11,17 @@ from app.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _scrub(text: str, secret: str) -> str:
+    """Remove the API key from text before logging.
+
+    The STT API echoes the key back inside `inputfilename`, so raw response
+    bodies must never be logged verbatim (container logs are exposed at /logs/).
+    """
+    if secret and secret in text:
+        return text.replace(secret, "<redacted>")
+    return text
+
+
 async def transcribe(audio_bytes: bytes) -> ServiceResult:
     """Transcribe Thai speech audio to text using AI for Thai STT API.
 
@@ -37,8 +48,13 @@ async def transcribe(audio_bytes: bytes) -> ServiceResult:
                 raw = {"text": resp.text}
 
             if resp.status_code >= 400:
-                logger.warning("STT HTTP %s: %s", resp.status_code, resp.text[:300])
+                logger.warning(
+                    "STT HTTP %s: %s",
+                    resp.status_code,
+                    _scrub(resp.text[:300], settings.aiforthai_api_key),
+                )
                 raw_dict = raw if isinstance(raw, dict) else {}
+                raw_dict.pop("inputfilename", None)  # contains the API key
                 api_msg = raw_dict.get("message") or raw_dict.get("error") or ""
                 return ServiceResult(
                     service="stt",

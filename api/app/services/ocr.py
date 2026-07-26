@@ -77,4 +77,41 @@ def _extract_text(raw: dict) -> str | None:
             parts = [v.get("text") or v.get("content") or str(v) for v in val if isinstance(v, dict)]
             if parts:
                 return " ".join(p.strip() for p in parts if p.strip())
+
+    # /handwritten returns per-character detections, not a text field:
+    #   {"objects":[{"bbox":{"xLeftTop":31,...},"class":"๗","score":"0.58"}, ...]}
+    # Rebuild reading order by sorting left-to-right within top-to-bottom lines.
+    objects = raw.get("objects")
+    if isinstance(objects, list) and objects:
+        chars = []
+        for o in objects:
+            if not isinstance(o, dict):
+                continue
+            ch = o.get("class")
+            if ch is None or str(ch) == "":
+                continue
+            box = o.get("bbox") or {}
+            try:
+                x = float(box.get("xLeftTop", 0))
+                y = float(box.get("yLeftTop", 0))
+            except (TypeError, ValueError):
+                x = y = 0.0
+            chars.append((y, x, str(ch)))
+        if not chars:
+            return None
+        # group into lines using a tolerance relative to glyph spread
+        chars.sort(key=lambda c: (c[0], c[1]))
+        lines: list[list[tuple[float, float, str]]] = []
+        tol = 12.0
+        for c in chars:
+            if lines and abs(c[0] - lines[-1][0][0]) <= tol:
+                lines[-1].append(c)
+            else:
+                lines.append([c])
+        out = []
+        for line in lines:
+            line.sort(key=lambda c: c[1])
+            out.append("".join(c[2] for c in line))
+        text = "\n".join(out).strip()
+        return text or None
     return None

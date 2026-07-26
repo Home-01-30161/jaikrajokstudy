@@ -126,6 +126,8 @@ restart:
 
 smoke-ai:
   <<: *ops
+  # allow_failure stays true (inherited) so a flaky upstream API never blocks
+  # ops, but the script now exits non-zero on failure so the job badge is honest.
   script:
     - docker compose -p "$TEAM" exec -T api python scripts/test_aiforthai_apis.py
 

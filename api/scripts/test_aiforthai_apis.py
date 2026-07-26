@@ -11,20 +11,41 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]  # the /app (api) dir
+HERE = Path(__file__).resolve().parent  # where the test assets live
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
 
+# In the container, CI-written .env is loaded by compose env_file; locally it
+# sits at the repo root, one level above api/.
 load_dotenv(ROOT / ".env")
+load_dotenv(ROOT.parent / ".env")
 
 from app.services import face, ocr, pathumma, sentiment, stt, tts  # noqa: E402
 
 
+FAILURES: list[str] = []
+SKIPPED: list[str] = []
+
+
+def record(name: str, result) -> None:
+    """Track failures so the process can exit non-zero."""
+    if not result.ok:
+        FAILURES.append(f"{name}: {result.error}")
+
+
 async def main() -> None:
     print("=== JaiKrajok API smoke tests ===")
-    print(f"AIFORTHAI_API_KEY set: {bool(os.getenv('AIFORTHAI_API_KEY'))}")
+    # Settings resolves both plain and APP_-prefixed names; check both so this
+    # reports accurately on the server, where CI writes only APP_* into .env.
+    from app.config import get_settings
+
+    key_set = bool(get_settings().aiforthai_api_key)
+    print(f"AIFORTHAI_API_KEY resolved by app: {key_set}")
+    if not key_set:
+        print("  -> set APP_AIFORTHAI_API_KEY in GitLab CI/CD Variables")
     print()
 
     # --- Pathumma ---
@@ -32,6 +53,7 @@ async def main() -> None:
     r = await pathumma.generate_reply("อธิบายสั้น ๆ ว่า photosynthesis คืออะไร")
     print("  ok:", r.ok)
     print("  text:", (r.text or r.error or "")[:400])
+    record("pathumma", r)
     print()
 
     # --- Sentiment ---
@@ -40,6 +62,7 @@ async def main() -> None:
     print("  ok:", r2.ok)
     print("  label:", r2.label, "score:", r2.score)
     print("  error:", r2.error)
+    record("sentiment", r2)
     print()
 
     # --- Face ---
@@ -54,8 +77,10 @@ async def main() -> None:
             print("  result:", str(faces)[:300])
         else:
             print("  error:", r3.error)
+        record("face", r3)
     else:
         print("  SKIP: test_face.jpg not found (place one at scripts/test_face.jpg)")
+        SKIPPED.append("face")
     print()
 
     # --- OCR ---
@@ -66,8 +91,10 @@ async def main() -> None:
         r4 = await ocr.extract_text(img_bytes)
         print("  ok:", r4.ok)
         print("  text:", (r4.text or r4.error or "")[:300])
+        record("ocr", r4)
     else:
         print("  SKIP: test_ocr.jpg not found (place one at scripts/test_ocr.jpg)")
+        SKIPPED.append("ocr")
     print()
 
     # --- STT ---
@@ -78,8 +105,10 @@ async def main() -> None:
         r5 = await stt.transcribe(audio_bytes)
         print("  ok:", r5.ok)
         print("  text:", (r5.text or r5.error or "")[:300])
+        record("stt", r5)
     else:
         print("  SKIP: test_speech.wav not found (place one at scripts/test_speech.wav)")
+        SKIPPED.append("stt")
     print()
 
     # --- TTS ---
@@ -90,9 +119,18 @@ async def main() -> None:
         print("  audio bytes:", len(r6.data) if r6.data else 0)
     else:
         print("  error:", r6.error)
+    record("tts", r6)
     print()
 
-    print("=== Done ===")
+    print("=== Summary ===")
+    if SKIPPED:
+        print("skipped (no test asset):", ", ".join(SKIPPED))
+    if FAILURES:
+        print(f"FAILED {len(FAILURES)}:")
+        for f in FAILURES:
+            print("  -", f)
+        raise SystemExit(1)
+    print("all services OK")
 
 
 if __name__ == "__main__":
