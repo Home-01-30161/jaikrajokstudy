@@ -1,8 +1,9 @@
-﻿# JaiKrajok — team07 (Phase 1: LINE-only, no frontend, no DB yet)
+﻿# JaiKrajok — team07 (Phase 1: LINE + web chat, no DB yet)
 #
 # base = 20000 + (7 - 1) * 10 = 20060
-#   20060 -> reserved for frontend (not used yet)
-#   20061 -> api  (LINE webhook + health)
+#   20060 -> frontend  (static files served by the api app at "/")
+#   20061 -> api       (LINE webhook + /health)
+# Both point at the same container:8000 because one FastAPI app serves both.
 #
 # TEAM / BASE / BASE_1 are injected by GitLab CI variables.
 name: ${TEAM:-team07}
