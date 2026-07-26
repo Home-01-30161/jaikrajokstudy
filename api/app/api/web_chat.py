@@ -31,7 +31,10 @@ class EmotionResponse(BaseModel):
     confidence: float
 
 
-@router.post("/api/chat/send")
+# The reverse proxy strips /api before the request reaches this container
+# (guide s.7/s.15), so routes are declared WITHOUT the /api prefix.
+# Public URL: https://team07.aiforthai.in.th/api/chat/send
+@router.post("/chat/send")
 async def send_message(req: ChatRequest) -> ChatResponse:
     """Handle web chat message and return AI response with emotion."""
     if not req.message.strip():
@@ -49,7 +52,7 @@ async def send_message(req: ChatRequest) -> ChatResponse:
     return ChatResponse(reply=reply, emotion=emotion)
 
 
-@router.post("/api/emotion/analyze")
+@router.post("/emotion/analyze")
 async def analyze_emotion(req: EmotionRequest) -> EmotionResponse:
     """Analyze emotion/sentiment of text."""
     if not req.text.strip():
