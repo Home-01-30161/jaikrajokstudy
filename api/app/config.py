@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,13 +22,38 @@ class Settings(BaseSettings):
     root_path: str = ""
     team: str = "team07"
 
-    aiforthai_api_key: str = ""
-    aiforthai_base_url: str = "https://api.aiforthai.in.th"
-    pathumma_endpoint: str = ""
-    pathumma_model: str = "pathumma-llm-text-1.0.0"
+    # Secrets. On the hackathon server, CI writes only APP_*-prefixed CI/CD
+    # variables into .env, so each secret accepts both the plain name (local
+    # dev) and the APP_-prefixed name (deployed).
+    aiforthai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("AIFORTHAI_API_KEY", "APP_AIFORTHAI_API_KEY"),
+    )
+    aiforthai_base_url: str = Field(
+        default="https://api.aiforthai.in.th",
+        validation_alias=AliasChoices("AIFORTHAI_BASE_URL", "APP_AIFORTHAI_BASE_URL"),
+    )
+    pathumma_endpoint: str = Field(
+        default="",
+        validation_alias=AliasChoices("PATHUMMA_ENDPOINT", "APP_PATHUMMA_ENDPOINT"),
+    )
+    pathumma_model: str = Field(
+        default="pathumma-llm-text-1.0.0",
+        validation_alias=AliasChoices("PATHUMMA_MODEL", "APP_PATHUMMA_MODEL"),
+    )
 
-    line_channel_access_token: str = ""
-    line_channel_secret: str = ""
+    line_channel_access_token: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "LINE_CHANNEL_ACCESS_TOKEN", "APP_LINE_CHANNEL_ACCESS_TOKEN"
+        ),
+    )
+    line_channel_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "LINE_CHANNEL_SECRET", "APP_LINE_CHANNEL_SECRET"
+        ),
+    )
 
     @property
     def pathumma_url(self) -> str:

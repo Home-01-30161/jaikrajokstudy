@@ -74,14 +74,28 @@ deploy:
     - docker compose -p "$TEAM" up -d --build --remove-orphans
     - |
       echo "waiting for healthcheck..."
+      # resolve the container id from compose instead of guessing the name
+      CID=$(docker compose -p "$TEAM" ps -q api)
+      echo "api container: $CID"
+      st=none
       for i in $(seq 1 40); do
-        st=$(docker inspect -f '{{.State.Health.Status}}' "${TEAM}-api-1" 2>/dev/null || echo none)
+        st=$(docker inspect -f '{{.State.Health.Status}}' "$CID" 2>/dev/null || echo none)
         [ "$st" = "healthy" ] && { echo "api healthy"; break; }
+        echo "  [$i/40] status=$st"
         sleep 5
       done
       docker compose -p "$TEAM" ps
-      sleep 3
-    - curl -fsS "http://127.0.0.1:${BASE_1}/health" && echo " <- /health OK"
+      if [ "$st" != "healthy" ]; then
+        echo "api never became healthy - last 200 log lines:"
+        docker compose -p "$TEAM" logs --tail=200 --no-color api
+        exit 1
+      fi
+    - |
+      # The job runs in its own container, so the host loopback where compose
+      # published ${BASE_1} is not reachable from here. Verify /health from
+      # inside the api container instead.
+      docker compose -p "$TEAM" exec -T api curl -fsS http://localhost:8000/health \
+        && echo " <- /health OK"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
