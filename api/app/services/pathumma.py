@@ -16,6 +16,7 @@ SYSTEM_PROMPT = (
     "คุณคือ JaiKrajok (ใจกระจก) เพื่อนช่วยเรียนที่เข้าใจอารมณ์ "
     "ตอบเป็นภาษาไทย ชัดเจน สุภาพ สนับสนุนผู้เรียน "
     "อย่าวินิจฉัยโรคหรือเป็นนักจิตวิทยา "
+    "ห้ามใช้อีโมจิหรือสัญลักษณ์รูปภาพในคำตอบ ใช้ข้อความล้วนเท่านั้น "
     "หากผู้ใช้มีความเสี่ยงรุนแรง ให้แนะนำติดต่อสายด่วน 1323"
 )
 
@@ -33,6 +34,31 @@ def _strip_reasoning(text: str) -> str:
     if "<think>" in text.lower():
         text = re.split(r"<think>", text, flags=re.IGNORECASE)[0]
     return text.strip()
+
+
+# The system prompt forbids emoji, but the model complies only intermittently, so
+# the output is filtered too. Ranges cover pictographs, dingbats, symbols and the
+# regional-indicator/flag block, plus the variation selector and zero-width joiner
+# that would otherwise be left stranded behind a removed glyph.
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001f000-\U0001faff"
+    "☀-➿"
+    "⬀-⯿"
+    "︎️‍"
+    "\U0001f1e6-\U0001f1ff"
+    "]"
+)
+
+
+def _strip_emoji(text: str) -> str:
+    """Drop emoji and tidy the whitespace they leave behind."""
+    cleaned = _EMOJI_RE.sub("", text)
+    # Collapse runs of spaces/tabs left where a glyph was, but keep newlines so
+    # multi-line explanations do not turn into one paragraph.
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"[ \t]+([,.!?ๆ])", r"\1", cleaned)
+    return "\n".join(line.rstrip() for line in cleaned.split("\n")).strip()
 
 
 async def generate_reply(user_text: str, *, emotion_hint: str | None = None) -> ServiceResult:
@@ -98,7 +124,9 @@ async def _generate_tokenmind(prompt: str, settings) -> ServiceResult:
                     raw=raw if isinstance(raw, dict) else {"body": str(raw)},
                 )
 
-            text = _strip_reasoning(_extract_text(raw if isinstance(raw, dict) else {}))
+            text = _strip_emoji(
+                _strip_reasoning(_extract_text(raw if isinstance(raw, dict) else {}))
+            )
             if not text:
                 return ServiceResult(
                     service="pathumma", ok=False, error="empty reply after stripping reasoning"
@@ -151,7 +179,9 @@ async def _generate_textqa(prompt: str, settings) -> ServiceResult:
                     raw=raw if isinstance(raw, dict) else {"body": str(raw)},
                 )
 
-            text = _extract_text(raw if isinstance(raw, dict) else {})
+            text = _strip_emoji(
+                _strip_reasoning(_extract_text(raw if isinstance(raw, dict) else {}))
+            )
             return ServiceResult(
                 service="pathumma",
                 ok=True,
