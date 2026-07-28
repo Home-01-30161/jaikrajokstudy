@@ -20,12 +20,14 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
-    // Local dev only: proxy API calls to the FastAPI app so the frontend can
-    // use the same root-relative paths it uses in production.
+    // Local dev only. In production the hackathon proxy strips /api before the
+    // request reaches the container (guide s.7), so dev has to strip it too or
+    // the same client code would hit different paths in each environment.
     proxy: {
-      "^/(chat|emotion|selfie|voice|homework|tts|trend|school|health)": {
+      "/api": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ""),
       },
     },
   },
