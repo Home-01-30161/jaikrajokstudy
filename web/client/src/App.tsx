@@ -2,12 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { api, ApiError, type Mood, type SchoolResult, type TrendResult } from "@/lib/api";
+import { useInView, useCountUp, createRipple } from "@/lib/animations";
 
-/* ============ LOCAL IDENTITY ============
- * There is no auth backend, so a random id is generated per browser and kept in
- * localStorage. It only scopes this browser's own mood history; it grants
- * nothing and is hashed before the server stores it.
- */
+/* ================================================================
+   LOCAL IDENTITY
+   ================================================================ */
 const USER_KEY = "jaikrajok_user_id";
 
 function getUserId(): string {
@@ -19,14 +18,13 @@ function getUserId(): string {
     }
     return id;
   } catch {
-    // Private mode with storage blocked: fall back to a per-session id.
     return "web-anon";
   }
 }
 
-/* ============ IMAGE PATHS ============ */
-// Served from client/public/assets by the FastAPI static mount. The originals
-// lived behind a storage proxy that needs credentials the deploy does not have.
+/* ================================================================
+   IMAGE PATHS
+   ================================================================ */
 const IMG = {
   loginCollage: "/assets/login_collage.svg",
   handPen: "/assets/hand_pen.svg",
@@ -42,26 +40,252 @@ const IMG = {
   shieldLock: "/assets/shield_lock.svg",
 };
 
-/* ============ EMOJI / MOOD ============ */
-const EMO: Record<string, { emoji: string; label: string; mid: string; edge: string }> = {
-  stressed: { emoji: "😣", label: "เครียด", mid: "#c4b5a0", edge: "#8b7355" },
-  tired: { emoji: "😴", label: "เหนื่อย", mid: "#b0a898", edge: "#7a6f60" },
-  neutral: { emoji: "😐", label: "ปกติ", mid: "#d4cfc5", edge: "#a09888" },
-  calm: { emoji: "😌", label: "สงบ", mid: "#c8ddd5", edge: "#7da89a" },
-  sad: { emoji: "😢", label: "เศร้า", mid: "#a0a8b8", edge: "#6a7080" },
-  positive: { emoji: "😊", label: "สดใส", mid: "#e8d5c0", edge: "#c4a882" },
+/* ================================================================
+   SVG ICONS (replacing emoji)
+   ================================================================ */
+function IconHome({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  );
+}
+
+function IconChat({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function IconTrend({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
+function IconSchool({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 22V8l10-6 10 6v14" />
+      <path d="M6 12v6" /><path d="M10 12v6" /><path d="M14 12v6" /><path d="M18 12v6" />
+      <path d="M2 8h20" /><path d="M12 2v6" />
+    </svg>
+  );
+}
+
+function IconShield({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
+function IconSend({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  );
+}
+
+function IconMic({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  );
+}
+
+function IconCamera({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function IconImage({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+    </svg>
+  );
+}
+
+function IconText({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+    </svg>
+  );
+}
+
+function IconVolume({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+    </svg>
+  );
+}
+
+function IconDownload({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function IconTrash({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
+function IconMenu({ size = 24, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
+function IconX({ size = 24, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function IconCalendar({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function IconMessages({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <line x1="8" y1="9" x2="16" y2="9" /><line x1="8" y1="13" x2="13" y2="13" />
+    </svg>
+  );
+}
+
+function IconHeart({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  );
+}
+
+function IconStop({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+    </svg>
+  );
+}
+
+function IconPhone({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
+function IconLock({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function IconEye({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconAlert({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function IconUsers({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function IconActivity({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
+function IconBell({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+/* ================================================================
+   MOOD SYSTEM (no emoji, text + color only)
+   ================================================================ */
+const MOOD: Record<string, { label: string; color: string; bgColor: string; icon: string }> = {
+  stressed: { label: "เครียด", color: "#C41E3A", bgColor: "rgba(196,30,58,0.08)", icon: "!!" },
+  tired:    { label: "เหนื่อย", color: "#8b7355", bgColor: "rgba(139,115,85,0.08)", icon: "~" },
+  neutral:  { label: "ปกติ", color: "#888888", bgColor: "rgba(136,136,136,0.08)", icon: "--" },
+  calm:     { label: "สงบ", color: "#2D6A6F", bgColor: "rgba(45,106,111,0.08)", icon: "~~" },
+  sad:      { label: "เศร้า", color: "#6a7080", bgColor: "rgba(106,112,128,0.08)", icon: ".." },
+  positive: { label: "สดใส", color: "#2D8F5C", bgColor: "rgba(45,143,92,0.08)", icon: "++" },
 };
 
-/* Shown while a request is in flight, so the user knows which service is
- * running. The reply itself always comes from the backend. */
 const TRANSPARENCY: Record<string, string> = {
-  เซลฟี่: "กำลังตรวจจับใบหน้าจากภาพ (Face Detection API)",
-  ข้อความ: "กำลังวิเคราะห์น้ำเสียงจากข้อความ (Sentiment Analysis + Pathumma LLM)",
+  "เซลฟี่": "กำลังตรวจจับใบหน้าจากภาพ (Face Detection API)",
+  "ข้อความ": "กำลังวิเคราะห์น้ำเสียงจากข้อความ (Sentiment Analysis + Pathumma LLM)",
   "เสียงพูด": "กำลังแปลงเสียงพูดเป็นข้อความ (Speech-to-Text API)",
   "รูปการบ้าน": "กำลังอ่านข้อความจากภาพ (OCR API)",
 };
 
-/** Shown only when a service is unreachable, so the chat never dead-ends. */
 const ERROR_REPLY =
   "ขออภัยนะ ตอนนี้กระจกเชื่อมต่อระบบวิเคราะห์ไม่ได้ ลองอีกครั้งในอีกสักครู่ได้ไหม";
 
@@ -71,14 +295,21 @@ type ChatMode = "ข้อความ" | "เซลฟี่" | "เสีย�
 
 const MAX_RECORD_SECONDS = 60;
 
-/**
- * Microphone recording via MediaRecorder.
- *
- * The browser picks the container (webm/opus in Chrome, mp4 in Safari), and the
- * backend's ASR accepts both. Recording stops itself at MAX_RECORD_SECONDS so a
- * forgotten session cannot upload something huge, and the mic track is always
- * released so the recording indicator does not linger.
- */
+/* ================================================================
+   TIME GREETING
+   ================================================================ */
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 6) return "ยังตื่นอยู่เหรอ";
+  if (h < 12) return "สวัสดีตอนเช้า";
+  if (h < 17) return "สวัสดีตอนบ่าย";
+  if (h < 21) return "สวัสดีตอนเย็น";
+  return "สวัสดีตอนค่ำ";
+}
+
+/* ================================================================
+   VOICE RECORDER HOOK
+   ================================================================ */
 function useRecorder(onComplete: (audio: Blob, filename: string) => void) {
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -128,7 +359,6 @@ function useRecorder(onComplete: (audio: Blob, filename: string) => void) {
     setSeconds(0);
   }, [onComplete]);
 
-  // Tick the timer and enforce the cap.
   useEffect(() => {
     if (!recording) return;
     const id = setInterval(() => {
@@ -140,7 +370,6 @@ function useRecorder(onComplete: (audio: Blob, filename: string) => void) {
     return () => clearInterval(id);
   }, [recording, stop]);
 
-  // Release the mic if the view unmounts mid-recording.
   useEffect(() => () => {
     const rec = recorderRef.current;
     if (rec?.state === "recording") rec.stop();
@@ -153,69 +382,84 @@ interface ChatMsg {
   role: "user" | "bot";
   text: string;
   timestamp: number;
+  service?: string;
 }
 
-/* ============ CHECKERBOARD STRIP ============ */
-function CheckerStrip() {
-  const squares = Array.from({ length: 20 }, (_, i) => i);
-  return (
-    <div className="fixed top-0 left-0 right-0 z-50 h-10 flex overflow-hidden" style={{ background: "#1a1a1a" }}>
-      {squares.map((i) => (
-        <div
-          key={i}
-          className="h-full flex-1 min-w-[2rem]"
-          style={{
-            background: i % 2 === 0 ? "#1a1a1a" : "#f5f0e8",
-            borderRadius: "0",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/* ============ HALFTONE DOTS BG ============ */
-function HalftoneBg() {
-  return (
-    <div
-      className="fixed inset-0 z-0 pointer-events-none opacity-[0.07]"
-      style={{
-        backgroundImage: `radial-gradient(circle, #1a1a1a 1px, transparent 1px)`,
-        backgroundSize: "18px 18px",
-        backgroundPosition: "center",
-      }}
-    />
-  );
-}
-
-/* ============ GRAPH PAPER BG ============ */
+/* ================================================================
+   BACKGROUND DECORATIONS
+   ================================================================ */
 function GridBg() {
   return (
     <div
       className="fixed inset-0 z-0 pointer-events-none"
       style={{
         background: `
-          linear-gradient(rgba(180,170,150,0.15) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(180,170,150,0.15) 1px, transparent 1px)
+          linear-gradient(rgba(180,170,150,0.12) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(180,170,150,0.12) 1px, transparent 1px)
         `,
-        backgroundSize: "24px 24px",
-        backgroundPosition: "center",
+        backgroundSize: "28px 28px",
         backgroundColor: "#f5f0e8",
       }}
     />
   );
 }
 
-/* ============ RED SPARKLE ============ */
-function Sparkle({ className = "" }: { className?: string }) {
+function HalftoneBg() {
   return (
-    <svg className={className} width="40" height="40" viewBox="0 0 40 40" fill="none">
-      <path d="M20 0 L23 15 L38 17 L25 23 L20 40 L17 23 L2 17 L15 15 Z" fill="#C41E3A" />
-    </svg>
+    <div
+      className="fixed inset-0 z-0 pointer-events-none opacity-[0.05]"
+      style={{
+        backgroundImage: `radial-gradient(circle, #1a1a1a 1px, transparent 1px)`,
+        backgroundSize: "20px 20px",
+      }}
+    />
   );
 }
 
-/* ============ LOGIN PAGE ============ */
+function CheckerStrip() {
+  const squares = Array.from({ length: 24 }, (_, i) => i);
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 h-8 flex overflow-hidden" style={{ background: "#1a1a1a" }}>
+      {squares.map((i) => (
+        <div
+          key={i}
+          className="h-full flex-1 min-w-[1.5rem]"
+          style={{ background: i % 2 === 0 ? "#1a1a1a" : "#f5f0e8" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ================================================================
+   MOOD BADGE
+   ================================================================ */
+function MoodBadge({ mood, size = "md", animate = false }: { mood: string; size?: "sm" | "md" | "lg"; animate?: boolean }) {
+  const m = MOOD[mood] || MOOD.neutral;
+  const sizeClasses = {
+    sm: "text-xs px-2 py-0.5",
+    md: "text-sm px-3 py-1",
+    lg: "text-base px-4 py-1.5",
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${sizeClasses[size]} ${animate ? "mood-pop" : ""}`}
+      style={{
+        backgroundColor: m.bgColor,
+        color: m.color,
+        border: `1.5px solid ${m.color}20`,
+        fontFamily: "'Noto Sans Thai', sans-serif",
+      }}
+    >
+      <span className="font-mono text-xs opacity-70">{m.icon}</span>
+      {m.label}
+    </span>
+  );
+}
+
+/* ================================================================
+   LOGIN PAGE
+   ================================================================ */
 function LoginPage({ onNext }: { onNext: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -227,24 +471,24 @@ function LoginPage({ onNext }: { onNext: () => void }) {
       <GridBg />
       <HalftoneBg />
 
-      {/* Main collage image left */}
-      <div className="absolute left-0 top-10 bottom-0 w-1/2 z-10">
+      {/* Left collage */}
+      <div className="absolute left-0 top-8 bottom-0 w-1/2 z-10 hidden md:block">
         <img src={IMG.loginCollage} alt="" className="w-full h-full object-cover object-left-top opacity-90" />
         <div className="absolute bottom-0 left-0 w-full h-32 z-20"
           style={{ background: "linear-gradient(to top, #1a1a1a 0%, transparent 100%)" }} />
       </div>
 
       {/* Curved black shape */}
-      <div className="absolute left-0 bottom-0 w-[45%] z-10" style={{ height: "60%" }}>
+      <div className="absolute left-0 bottom-0 w-[45%] z-10 hidden md:block" style={{ height: "60%" }}>
         <svg viewBox="0 0 600 500" className="w-full h-full" preserveAspectRatio="none">
           <path d="M0,0 C200,50 300,100 500,200 C600,300 600,500 600,500 L0,500 Z" fill="#1a1a1a" />
         </svg>
       </div>
 
-      {/* Right side - login card */}
-      <div className="absolute right-0 top-10 bottom-0 w-[55%] flex items-center justify-center z-20 px-8">
+      {/* Login card */}
+      <div className="absolute right-0 top-8 bottom-0 w-full md:w-[55%] flex items-center justify-center z-20 px-6 md:px-8">
         <div
-          className="w-full max-w-md p-8 relative"
+          className="w-full max-w-md p-8 relative animate-scale-in"
           style={{
             background: "linear-gradient(160deg, #FFB5A7 0%, #FFC8B8 40%, #FFD5CC 100%)",
             borderRadius: "28px",
@@ -252,17 +496,12 @@ function LoginPage({ onNext }: { onNext: () => void }) {
             boxShadow: "6px 6px 0px rgba(26,26,26,0.15), 0 20px 60px rgba(0,0,0,0.1)",
           }}
         >
-          {/* Paper texture overlay */}
           <div className="absolute inset-0 rounded-[28px] opacity-[0.06] pointer-events-none"
             style={{
               backgroundImage: `radial-gradient(circle, #1a1a1a 1px, transparent 1px)`,
               backgroundSize: "12px 12px",
             }} />
 
-          <Sparkle className="absolute -top-4 right-8" />
-          <Sparkle className="absolute top-12 -left-4 opacity-60" />
-
-          {/* Warm Thai brand headline */}
           <h1
             className="text-2xl font-bold mb-1"
             style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
@@ -276,9 +515,8 @@ function LoginPage({ onNext }: { onNext: () => void }) {
             JaiKrajok
           </h2>
 
-          {/* Monospace label */}
           <p className="text-xs mb-5 tracking-widest uppercase" style={{ color: "#888", fontFamily: "'Space Mono', monospace" }}>
-            พื้นที่ปลอดภัย · สำหรับนักเรียน
+            พื้นที่ปลอดภัย - สำหรับนักเรียน
           </p>
 
           <div className="space-y-4">
@@ -359,44 +597,35 @@ function LoginPage({ onNext }: { onNext: () => void }) {
         </div>
       </div>
 
-      {/* Hand with pen at bottom right */}
-      <div className="absolute bottom-4 right-4 z-30 opacity-70" style={{ width: "200px" }}>
-        <img src={IMG.handPen} alt="" className="w-full h-auto" style={{ filter: "brightness(0.8) contrast(1.2)" }} />
+      {/* Hand with pen */}
+      <div className="absolute bottom-4 right-4 z-30 opacity-60 hidden md:block" style={{ width: "180px" }}>
+        <img src={IMG.handPen} alt="" className="w-full h-auto animate-float" style={{ filter: "brightness(0.8) contrast(1.2)" }} />
       </div>
     </div>
   );
 }
 
-/* ============ ONBOARDING STEP 1: Welcome ============ */
+/* ================================================================
+   ONBOARDING STEP 1: Welcome
+   ================================================================ */
 function OnbWelcome({ onNext }: { onNext: () => void }) {
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-8" style={{ backgroundColor: "#f5f0e8" }}>
+    <div className="relative min-h-screen flex items-center justify-center p-6 md:p-8" style={{ backgroundColor: "#f5f0e8" }}>
       <GridBg />
       <HalftoneBg />
 
-      {/* Halftone dots top-left */}
-      <img
-        src={IMG.halftoneDots}
-        alt=""
-        className="absolute top-0 left-0 w-[400px] opacity-20 pointer-events-none"
-        style={{ transform: "scaleX(-1)" }}
-      />
+      <img src={IMG.halftoneDots} alt="" className="absolute top-0 left-0 w-[300px] md:w-[400px] opacity-20 pointer-events-none" style={{ transform: "scaleX(-1)" }} />
 
-      {/* Red sparkle top-right */}
-      <Sparkle className="absolute top-16 right-12" />
-
-      {/* Hand with pen bottom-right */}
-      <div className="absolute bottom-8 right-8 opacity-60" style={{ width: "250px" }}>
-        <img src={IMG.handPen} alt="" className="w-full h-auto" style={{ filter: "grayscale(0.3)" }} />
+      <div className="absolute bottom-8 right-8 opacity-50 hidden md:block" style={{ width: "220px" }}>
+        <img src={IMG.handPen} alt="" className="w-full h-auto animate-float" />
       </div>
 
-      {/* Main card */}
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl" style={{ border: "2px solid #e0d8cc" }}>
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl animate-scale-in" style={{ border: "2px solid #e0d8cc" }}>
         <div
           className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 text-white"
           style={{ backgroundColor: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}
         >
-          AI for Thai · Pathumma LLM
+          AI for Thai - Pathumma LLM
         </div>
 
         <h1 className="text-3xl font-black mb-4 leading-tight" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
@@ -406,7 +635,7 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
           พื้นที่ปลอดภัยให้ใจได้มองเห็นตัวเอง
         </p>
         <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
-          แอปพลิเคชัน AI สำหรับนักเรียน ม.ปลาย ที่ช่วยให้คุณสำรวจและเข้าใจอารมณ์ของตัวเอง ผ่านการวิเคราะห์ใบหน้า, ข้อความ, และเสียงพูด อย่างปลอดภัยและโปร่งใส
+          แอปพลิเคชัน AI สำหรับนักเรียน ม.ปลาย ที่ช่วยให้คุณสำรวจและเข้าใจอารมณ์ของตัวเอง ผ่านการวิเคราะห์ข้อความ และเสียงพูด อย่างปลอดภัยและโปร่งใส
         </p>
 
         <button
@@ -421,27 +650,22 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
   );
 }
 
-/* ============ ONBOARDING STEP 2: Age ============ */
+/* ================================================================
+   ONBOARDING STEP 2: Age
+   ================================================================ */
 function OnbAge({ onNext, age, setAge }: { onNext: () => void; age: string; setAge: (v: string) => void }) {
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-8" style={{ backgroundColor: "#f5f0e8" }}>
+    <div className="relative min-h-screen flex items-center justify-center p-6 md:p-8" style={{ backgroundColor: "#f5f0e8" }}>
       <GridBg />
       <HalftoneBg />
 
-      {/* Halftone dots */}
       <img src={IMG.halftoneDots} alt="" className="absolute top-0 left-0 w-[350px] opacity-15 pointer-events-none" />
 
-      {/* Origami stars bottom */}
-      <div className="absolute bottom-4 left-8 opacity-50" style={{ width: "180px" }}>
+      <div className="absolute bottom-4 left-8 opacity-50 hidden md:block" style={{ width: "180px" }}>
         <img src={IMG.origamiStars} alt="" className="w-full h-auto" />
       </div>
 
-      {/* Hand with pen bottom-right */}
-      <div className="absolute bottom-4 right-4 opacity-60" style={{ width: "200px" }}>
-        <img src={IMG.handPen} alt="" className="w-full h-auto" />
-      </div>
-
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl" style={{ border: "2px solid #e0d8cc" }}>
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl animate-scale-in" style={{ border: "2px solid #e0d8cc" }}>
         <div
           className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 text-white"
           style={{ backgroundColor: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}
@@ -488,41 +712,21 @@ function OnbAge({ onNext, age, setAge }: { onNext: () => void; age: string; setA
   );
 }
 
-/* ============ GUARDIAN CONSENT ============ */
+/* ================================================================
+   GUARDIAN CONSENT
+   ================================================================ */
 function GuardianPage({
-  approved,
-  onSend,
-  onNext,
-  guardianEmail,
-  setGuardianEmail,
+  approved, onSend, onNext, guardianEmail, setGuardianEmail,
 }: {
-  approved: boolean;
-  onSend: () => void;
-  onNext: () => void;
-  guardianEmail: string;
-  setGuardianEmail: (v: string) => void;
+  approved: boolean; onSend: () => void; onNext: () => void;
+  guardianEmail: string; setGuardianEmail: (v: string) => void;
 }) {
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-8" style={{ backgroundColor: "#f5f0e8" }}>
+    <div className="relative min-h-screen flex items-center justify-center p-6 md:p-8" style={{ backgroundColor: "#f5f0e8" }}>
       <GridBg />
       <HalftoneBg />
 
-      {/* Hand with pen top center */}
-      <div className="absolute top-16 left-1/2 -translate-x-1/2 opacity-40" style={{ width: "200px" }}>
-        <img src={IMG.handPen} alt="" className="w-full h-auto" />
-      </div>
-
-      {/* Glasses top-right */}
-      <div className="absolute top-12 right-16 opacity-40" style={{ width: "140px" }}>
-        <img src={IMG.glasses} alt="" className="w-full h-auto" />
-      </div>
-
-      {/* Crumpled paper bottom-left */}
-      <div className="absolute bottom-8 left-8 opacity-30" style={{ width: "160px" }}>
-        <img src={IMG.crumpledPaper} alt="" className="w-full h-auto" />
-      </div>
-
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl" style={{ border: "2px solid #e0d8cc" }}>
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl animate-scale-in" style={{ border: "2px solid #e0d8cc" }}>
         <div
           className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 text-white"
           style={{ backgroundColor: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}
@@ -540,8 +744,9 @@ function GuardianPage({
         {approved ? (
           <div className="space-y-4">
             <div className="p-4 rounded-xl" style={{ backgroundColor: "#E8F5E9", border: "1px solid #A5D6A7" }}>
-              <p className="text-sm font-semibold" style={{ color: "#2E7D32", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-                ✓ ผู้ปกครองให้ความยินยอมแล้ว
+              <p className="text-sm font-semibold flex items-center gap-2" style={{ color: "#2E7D32", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+                <IconShield size={16} color="#2E7D32" />
+                ผู้ปกครองให้ความยินยอมแล้ว
               </p>
             </div>
             <button
@@ -560,12 +765,7 @@ function GuardianPage({
               value={guardianEmail}
               onChange={(e) => setGuardianEmail(e.target.value)}
               className="w-full px-5 py-4 rounded-2xl text-lg outline-none"
-              style={{
-                backgroundColor: "#f5f0e8",
-                fontFamily: "'Noto Sans Thai', sans-serif",
-                border: "2px solid #e0d8cc",
-                color: "#1a1a1a",
-              }}
+              style={{ backgroundColor: "#f5f0e8", fontFamily: "'Noto Sans Thai', sans-serif", border: "2px solid #e0d8cc", color: "#1a1a1a" }}
             />
             <button
               onClick={onSend}
@@ -581,26 +781,29 @@ function GuardianPage({
   );
 }
 
-/* ============ PRIVACY / FINAL STEP ============ */
+/* ================================================================
+   PRIVACY PAGE
+   ================================================================ */
 function PrivacyPage({ onNext }: { onNext: () => void }) {
   const [accepted, setAccepted] = useState(false);
 
+  const items = [
+    "ไม่เก็บข้อมูลใบหน้า -- ใช้การวิเคราะห์ทันทีแล้วลบ",
+    "ข้อมูลทั้งหมดเข้ารหัสแบบ end-to-end",
+    "ไม่ใช่การวินิจฉัยทางการแพทย์",
+    "คุณสามารถลบข้อมูลได้ทุกเมื่อ",
+  ];
+
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-8" style={{ backgroundColor: "#f5f0e8" }}>
+    <div className="relative min-h-screen flex items-center justify-center p-6 md:p-8" style={{ backgroundColor: "#f5f0e8" }}>
       <GridBg />
       <HalftoneBg />
 
-      {/* Megaphone bottom-left */}
-      <div className="absolute bottom-8 left-8 opacity-50" style={{ width: "200px" }}>
+      <div className="absolute bottom-8 left-8 opacity-40 hidden md:block" style={{ width: "180px" }}>
         <img src={IMG.megaphone} alt="" className="w-full h-auto" />
       </div>
 
-      {/* Hand with pen bottom-right */}
-      <div className="absolute bottom-4 right-4 opacity-50" style={{ width: "200px" }}>
-        <img src={IMG.handPen} alt="" className="w-full h-auto" />
-      </div>
-
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl" style={{ border: "2px solid #e0d8cc" }}>
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl animate-scale-in" style={{ border: "2px solid #e0d8cc" }}>
         <div
           className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 text-white"
           style={{ backgroundColor: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}
@@ -615,15 +818,10 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
           โปรดอ่านและยอมรับเงื่อนไขก่อนใช้งาน
         </p>
 
-        <ul className="space-y-3 mb-6">
-          {[
-            "ไม่เก็บข้อมูลใบหน้า — ใช้การวิเคราะห์ทันทีแล้วลบ",
-            "ข้อมูลทั้งหมดเข้ารหัสแบบ end-to-end",
-            "ไม่ใช่การวินิจฉัยทางการแพทย์",
-            "คุณสามารถลบข้อมูลได้ทุกเมื่อ",
-          ].map((item, i) => (
+        <ul className="space-y-3 mb-6 stagger-children">
+          {items.map((item, i) => (
             <li key={i} className="flex items-start gap-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#444", fontSize: "14px" }}>
-              <span style={{ color: "#2D6A6F", fontWeight: 700 }}>•</span>
+              <span className="mt-0.5"><IconShield size={14} color="#2D6A6F" /></span>
               {item}
             </li>
           ))}
@@ -659,20 +857,20 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
   );
 }
 
-/* ============ MAIN APP SHELL ============ */
+/* ================================================================
+   MAIN APP SHELL
+   ================================================================ */
 function AppShell() {
   const [currentView, setCurrentView] = useState<AppView>("home");
-  const [age, setAge] = useState("16");
-  const [guardianEmail, setGuardianEmail] = useState("");
-  const [guardianApproved, setGuardianApproved] = useState(true);
+  const [age] = useState("16");
   const [mood, setMood] = useState<string>("neutral");
   const [userId] = useState(getUserId);
   const [crisisRaised, setCrisisRaised] = useState(false);
   const [trend, setTrend] = useState<TrendResult | null>(null);
   const [school, setSchool] = useState<SchoolResult | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  /** Re-read the mood history after anything that records a new reading. */
   const refreshTrend = useCallback(async () => {
     try {
       const [t, s] = await Promise.all([api.trend(userId), api.school()]);
@@ -684,14 +882,12 @@ function AppShell() {
     }
   }, [userId]);
 
-  useEffect(() => {
-    void refreshTrend();
-  }, [refreshTrend]);
+  useEffect(() => { void refreshTrend(); }, [refreshTrend]);
 
-  // A crisis signal routes the user to the safety page, where the helpline is.
   useEffect(() => {
     if (crisisRaised) setCurrentView("safety");
   }, [crisisRaised]);
+
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
       role: "bot",
@@ -702,30 +898,31 @@ function AppShell() {
   const [inputText, setInputText] = useState("");
   const [chatMode, setChatMode] = useState<ChatMode>("ข้อความ");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  // chatBodyRef is managed internally by ChatView
 
-  useEffect(() => {
-    // Messages auto-scroll handled by ChatView
-  }, [messages]);
-
-  const navItems: { id: AppView; label: string; img: string }[] = [
-    { id: "home", label: "หน้าหลัก", img: IMG.booksStack },
-    { id: "chat", label: "แชท", img: IMG.chatBubbles },
-    { id: "trend", label: "แนวโน้มของฉัน", img: IMG.chartGraph },
-    { id: "school", label: "ภาพรวมโรงเรียน", img: IMG.schoolBuilding },
-    { id: "safety", label: "ความปลอดภัย & ข้อมูล", img: IMG.shieldLock },
+  const navItems: { id: AppView; label: string; Icon: typeof IconHome }[] = [
+    { id: "home", label: "หน้าหลัก", Icon: IconHome },
+    { id: "chat", label: "แชท", Icon: IconChat },
+    { id: "trend", label: "แนวโน้มของวัน", Icon: IconTrend },
+    { id: "school", label: "ภาพรวมโรงเรียน", Icon: IconSchool },
+    { id: "safety", label: "ความปลอดภัย & ข้อมูล", Icon: IconShield },
   ];
 
-  const addBot = useCallback((text: string) => {
-    setMessages((prev) => [...prev, { role: "bot", text, timestamp: Date.now() }]);
+  const viewLabels: Record<AppView, string> = {
+    home: "หน้าหลัก",
+    chat: "คุยกับกระจก",
+    trend: "แนวโน้มของฉัน",
+    school: "ภาพรวมโรงเรียน",
+    safety: "ความปลอดภัย & ข้อมูล",
+  };
+
+  const addBot = useCallback((text: string, service?: string) => {
+    setMessages((prev) => [...prev, { role: "bot", text, timestamp: Date.now(), service }]);
   }, []);
 
-  /** Warn once per session when a service degrades, without derailing the chat. */
   const noteDegraded = useCallback((degraded: string[]) => {
     if (degraded.length) toast(`บางบริการไม่พร้อมใช้งาน: ${degraded.join(", ")}`);
   }, []);
 
-  /** Text mode: sentiment + mood-aware LLM reply, both from the backend. */
   const sendMessage = useCallback(async () => {
     const text = inputText.trim();
     if (!text || isAnalyzing) return;
@@ -736,7 +933,7 @@ function AppShell() {
     try {
       const res = await api.sendMessage(userId, text);
       setMood(res.mood);
-      addBot(res.reply);
+      addBot(res.reply, res.service);
       if (res.crisis) setCrisisRaised(true);
       noteDegraded(res.degraded);
       void refreshTrend();
@@ -748,7 +945,6 @@ function AppShell() {
     }
   }, [inputText, isAnalyzing, userId, addBot, noteDegraded, refreshTrend]);
 
-  /** Shared tail for the three upload modes. */
   const runAnalysis = useCallback(
     async (label: string, call: () => Promise<import("@/lib/api").AnalysisResult>) => {
       if (isAnalyzing) return;
@@ -762,7 +958,7 @@ function AppShell() {
           ]);
         }
         setMood(res.mood);
-        addBot(res.reply);
+        addBot(res.reply, res.service);
         void refreshTrend();
       } catch (err) {
         addBot(ERROR_REPLY);
@@ -778,17 +974,19 @@ function AppShell() {
     (image: Blob) => runAnalysis("วิเคราะห์ภาพ", () => api.analyzeSelfie(userId, image)),
     [runAnalysis, userId],
   );
-
   const doVoice = useCallback(
-    (audio: Blob, filename: string) =>
-      runAnalysis("ถอดเสียง", () => api.transcribeVoice(userId, audio, filename)),
+    (audio: Blob, filename: string) => runAnalysis("ถอดเสียง", () => api.transcribeVoice(userId, audio, filename)),
     [runAnalysis, userId],
   );
-
   const doHomework = useCallback(
     (image: Blob) => runAnalysis("อ่านการบ้าน", () => api.readHomework(userId, image)),
     [runAnalysis, userId],
   );
+
+  const navigateTo = (view: AppView) => {
+    setCurrentView(view);
+    setSidebarOpen(false);
+  };
 
   return (
     <div className="relative min-h-screen flex" style={{ backgroundColor: "#f5f0e8" }}>
@@ -796,65 +994,85 @@ function AppShell() {
       <GridBg />
       <HalftoneBg />
 
-      {/* Curved black sidebar */}
+      {/* Mobile hamburger button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="fixed top-9 left-3 z-[60] p-2 rounded-xl lg:hidden"
+        style={{ backgroundColor: "rgba(26,26,26,0.85)", color: "#FFB5A7" }}
+        aria-label="เปิดเมนู"
+      >
+        {sidebarOpen ? <IconX size={20} /> : <IconMenu size={20} />}
+      </button>
+
+      {/* Sidebar overlay for mobile */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
       <div
-        className="fixed left-0 top-10 bottom-0 w-[260px] z-30 flex flex-col pt-6 px-4"
-        style={{ backgroundColor: "#1a1a1a", borderRadius: "0 32px 32px 0" }}
+        className={`fixed left-0 top-8 bottom-0 w-[240px] z-40 flex flex-col pt-6 px-4 transition-transform duration-300 lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        style={{ backgroundColor: "#1a1a1a", borderRadius: "0 24px 24px 0" }}
       >
         {/* Brand */}
         <div className="mb-8 px-2">
           <h1
-            className="text-2xl font-black tracking-tight"
+            className="text-xl font-black tracking-tight"
             style={{ fontFamily: "'Playfair Display', serif", color: "#FFB5A7" }}
           >
             JaiKrajok
           </h1>
-          <p className="text-xs mt-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "rgba(255,181,167,0.7)" }}>
+          <p className="text-xs mt-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "rgba(255,181,167,0.6)" }}>
             กระจกสะท้อนใจ
           </p>
         </div>
 
-        {/* Nav items */}
-        <nav className="flex-1 space-y-2">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setCurrentView(item.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all duration-200"
-              style={{
-                backgroundColor: currentView === item.id ? "#FFB5A7" : "transparent",
-                color: currentView === item.id ? "#1a1a1a" : "rgba(255,255,255,0.7)",
-                fontFamily: "'Noto Sans Thai', sans-serif",
-                fontWeight: currentView === item.id ? 700 : 400,
-                fontSize: "14px",
-              }}
-            >
-              <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0 opacity-70">
-                <img src={item.img} alt="" className="w-full h-full object-cover" style={{ filter: currentView === item.id ? "none" : "grayscale(1) brightness(0.8)" }} />
-              </div>
-              {item.label}
-            </button>
-          ))}
+        {/* Nav */}
+        <nav className="flex-1 space-y-1.5">
+          {navItems.map((item) => {
+            const isActive = currentView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => navigateTo(item.id)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all duration-200"
+                style={{
+                  backgroundColor: isActive ? "#FFB5A7" : "transparent",
+                  color: isActive ? "#1a1a1a" : "rgba(255,255,255,0.65)",
+                  fontFamily: "'Noto Sans Thai', sans-serif",
+                  fontWeight: isActive ? 700 : 400,
+                  fontSize: "14px",
+                }}
+              >
+                <item.Icon size={18} color={isActive ? "#1a1a1a" : "rgba(255,255,255,0.55)"} />
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
 
-        {/* Mood indicator */}
-        <div className="mt-auto mb-4 px-2">
-          <div className="p-3 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.1)" }}>
-            <p className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+        {/* Mood status */}
+        <div className="mt-auto mb-4 px-1">
+          <div className="p-3 rounded-xl" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
+            <p className="text-xs mb-1.5" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "'Noto Sans Thai', sans-serif" }}>
               สภาวะล่าสุด
             </p>
-            <p className="text-sm font-bold flex items-center gap-2" style={{ color: "#FFB5A7", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-              <span>{EMO[mood]?.emoji}</span>
-              {EMO[mood]?.label || "ปกติ"}
-            </p>
+            <MoodBadge mood={mood} size="sm" />
           </div>
         </div>
       </div>
 
-      {/* Main content area */}
-      <div className="ml-[260px] flex-1 pt-14 min-h-screen">
-        {/* Page badge */}
-        <div className="px-8 pt-6 pb-2">
+      {/* Main content */}
+      <div className="lg:ml-[240px] flex-1 pt-10 min-h-screen w-full">
+        {/* Page header */}
+        <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-3">
+          {/* Spacer for hamburger on mobile */}
+          <div className="w-10 lg:hidden" />
           <div
             className="inline-block px-5 py-2 rounded-full text-sm font-bold"
             style={{
@@ -863,18 +1081,14 @@ function AppShell() {
               fontFamily: "'Noto Sans Thai', sans-serif",
             }}
           >
-            {currentView === "home" && "หน้าหลัก"}
-            {currentView === "chat" && "คุยกับกระจก"}
-            {currentView === "trend" && "แนวโน้มของฉัน"}
-            {currentView === "school" && "ภาพรวมโรงเรียน"}
-            {currentView === "safety" && "ความปลอดภัย & ข้อมูล"}
+            {viewLabels[currentView]}
           </div>
         </div>
 
-        {/* Content */}
-        <div className="px-8 pb-8">
+        {/* Content area */}
+        <div className="px-4 md:px-8 pb-8">
           {currentView === "home" && (
-            <HomeView mood={mood} setMood={setMood} age={age} />
+            <HomeView mood={mood} setMood={setMood} age={age} trend={trend} onNavigate={navigateTo} />
           )}
           {currentView === "chat" && (
             <ChatView
@@ -894,128 +1108,197 @@ function AppShell() {
           {currentView === "school" && <SchoolView school={school} error={dataError} />}
           {currentView === "safety" && <SafetyView crisis={crisisRaised} />}
         </div>
-
-        {/* Decorative collage element */}
-        <div className="fixed bottom-8 right-8 z-20 opacity-30 pointer-events-none" style={{ width: "180px" }}>
-          <img src={IMG.handPen} alt="" className="w-full h-auto" style={{ filter: "grayscale(0.5)" }} />
-        </div>
       </div>
     </div>
   );
 }
 
-/* ============ HOME VIEW ============ */
-function HomeView({ mood, setMood, age }: { mood: string; setMood: (v: string) => void; age: string }) {
-  const moods = Object.entries(EMO);
+/* ================================================================
+   HOME VIEW
+   ================================================================ */
+function HomeView({ mood, setMood, age, trend, onNavigate }: {
+  mood: string; setMood: (v: string) => void; age: string;
+  trend: TrendResult | null; onNavigate: (v: AppView) => void;
+}) {
+  const greeting = getGreeting();
+  const moods = Object.entries(MOOD);
+
+  const quickActions = [
+    { label: "คุยกับกระจก", desc: "พิมพ์หรือพูดเล่าให้กระจกฟัง", Icon: IconChat, view: "chat" as AppView, color: "#2D6A6F" },
+    { label: "แนวโน้มของฉัน", desc: "ดูกราฟสภาวะอารมณ์ย้อนหลัง", Icon: IconTrend, view: "trend" as AppView, color: "#C41E3A" },
+    { label: "ภาพรวมโรงเรียน", desc: "สถิติรวมแบบไม่ระบุตัวตน", Icon: IconSchool, view: "school" as AppView, color: "#8b7355" },
+  ];
+
+  const tips = [
+    "หายใจเข้าลึก ๆ นับ 4 ค้าง 4 หายใจออก 4 ทำซ้ำ 3 รอบ",
+    "เขียนสิ่งที่รู้สึกขอบคุณ 3 อย่างก่อนนอน ช่วยให้นอนหลับสบายขึ้น",
+    "ลองเดินเล่น 10 นาที เปลี่ยนบรรยากาศ ช่วยให้สมองปลอดโปร่ง",
+    "ดื่มน้ำให้เพียงพอ ร่างกายที่ขาดน้ำทำให้อารมณ์หงุดหงิดง่าย",
+    "ก่อนสอบ ลองทบทวนบทเรียนก่อนนอน สมองจะจัดระเบียบข้อมูลขณะหลับ",
+  ];
+  const todayTip = tips[new Date().getDate() % tips.length];
+
+  const [heroRef, heroInView] = useInView<HTMLDivElement>();
+  const [actionsRef, actionsInView] = useInView<HTMLDivElement>();
+  const [tipsRef, tipsInView] = useInView<HTMLDivElement>();
+  const msgCount = useCountUp(trend?.messages ?? 0, 800, heroInView);
+  const dayCount = useCountUp(trend?.active_days ?? 0, 600, heroInView);
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
-        วันนี้รู้สึกยังไง?
-      </h2>
+    <div className="space-y-6 view-transition">
+      {/* Hero greeting */}
+      <div
+        ref={heroRef}
+        className={`p-6 rounded-2xl relative overflow-hidden transition-all duration-700 ${heroInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
+        style={{
+          background: "linear-gradient(135deg, #2D6A6F 0%, #3a8a90 50%, #2D6A6F 100%)",
+          border: "none",
+        }}
+      >
+        <div className="absolute inset-0 opacity-10"
+          style={{
+            backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)",
+            backgroundSize: "16px 16px",
+          }} />
+        <div className="relative z-10">
+          <p className="text-sm font-medium mb-1" style={{ color: "rgba(255,255,255,0.7)", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+            {greeting}
+          </p>
+          <h2 className="text-2xl md:text-3xl font-black mb-2" style={{ fontFamily: "'Playfair Display', serif", color: "#fff" }}>
+            กระจกสะท้อนใจ
+          </h2>
+          <p className="text-sm" style={{ color: "rgba(255,255,255,0.8)", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+            พื้นที่ปลอดภัยที่เข้าใจอารมณ์ของคุณ
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <MoodBadge mood={mood} animate={heroInView} />
+            <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "'Space Mono', monospace" }}>
+              {msgCount} ข้อความ - {dayCount} วันใช้งาน
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* Mood picker */}
-      <div className="grid grid-cols-3 gap-4">
-        {moods.map(([key, emo]) => (
+      <div>
+        <h3 className="text-lg font-bold mb-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+          วันนี้รู้สึกยังไง?
+        </h3>
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 stagger-children">
+          {moods.map(([key, m]) => (
+            <button
+              key={key}
+              onClick={() => setMood(key)}
+              className="p-3 rounded-xl transition-all duration-200 active:scale-[0.95] hover-lift text-center"
+              style={{
+                backgroundColor: mood === key ? m.bgColor : "rgba(255,255,255,0.8)",
+                border: mood === key ? `2px solid ${m.color}` : "2px solid #e0d8cc",
+                fontFamily: "'Noto Sans Thai', sans-serif",
+              }}
+            >
+              <span className="text-lg font-mono font-bold block mb-1" style={{ color: m.color }}>{m.icon}</span>
+              <span className="text-xs font-semibold" style={{ color: mood === key ? m.color : "#666" }}>
+                {m.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick actions */}
+      <div
+        ref={actionsRef}
+        className={`grid grid-cols-1 md:grid-cols-3 gap-4 transition-all duration-500 ${actionsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}
+      >
+        {quickActions.map((action, idx) => (
           <button
-            key={key}
-            onClick={() => setMood(key)}
-            className="p-4 rounded-2xl transition-all duration-200 active:scale-[0.97]"
-            style={{
-              backgroundColor: mood === key ? "#FFB5A7" : "rgba(255,255,255,0.8)",
-              border: mood === key ? "2px solid #C41E3A" : "2px solid #e0d8cc",
-              fontFamily: "'Noto Sans Thai', sans-serif",
-            }}
+            key={action.label}
+            onClick={(e) => { createRipple(e); onNavigate(action.view); }}
+            className="glass-card p-5 text-left hover-lift transition-all duration-200 active:scale-[0.98]"
+            style={{ transitionDelay: `${idx * 0.08}s` }}
           >
-            <span className="text-3xl block mb-2">{emo.emoji}</span>
-            <span className="text-sm font-semibold" style={{ color: "#1a1a1a" }}>
-              {emo.label}
-            </span>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${action.color}15` }}>
+                <action.Icon size={20} color={action.color} />
+              </div>
+              <p className="font-bold text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+                {action.label}
+              </p>
+            </div>
+            <p className="text-xs" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
+              {action.desc}
+            </p>
           </button>
         ))}
       </div>
 
-      {/* Quick info cards */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="p-5 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.9)", border: "2px solid #e0d8cc" }}>
-          <p className="text-xs font-bold mb-1" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
-            SUDTHAI API
-          </p>
-          <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
-            ระบบวิเคราะห์อารมณ์ภาษาไทย
-          </p>
-          <p className="text-lg font-bold mt-2" style={{ color: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-            เชื่อมต่อ ✓
-          </p>
-        </div>
-        <div className="p-5 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.9)", border: "2px solid #e0d8cc" }}>
-          <p className="text-xs font-bold mb-1" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
-            CONSENT STATUS
-          </p>
-          <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
-            อายุ {age} ปี · ยินยอมแล้ว
-          </p>
-          <p className="text-lg font-bold mt-2" style={{ color: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-            ผ่าน ✓
+      {/* Tip of the day + API status */}
+      <div
+        ref={tipsRef}
+        className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-all duration-500 delay-100 ${tipsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}
+      >
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <IconHeart size={16} color="#C41E3A" />
+            <p className="text-xs font-bold" style={{ color: "#C41E3A", fontFamily: "'Space Mono', monospace" }}>
+              เคล็ดลับวันนี้
+            </p>
+          </div>
+          <p className="text-sm leading-relaxed" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#444" }}>
+            {todayTip}
           </p>
         </div>
-      </div>
 
-      {/* Recent activity */}
-      <div className="p-5 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.9)", border: "2px solid #e0d8cc" }}>
-        <p className="text-sm font-bold mb-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-          กิจกรรมล่าสุด
-        </p>
-        <div className="space-y-2">
-          {[
-            { time: "เมื่อ 2 ชม.ก่อน", event: "แชทกับกระจก · สภาวะ: ปกติ" },
-            { time: "เมื่อวาน", event: "วิเคราะห์เซลฟี่ · สภาวะ: เครียด" },
-            { time: "3 วันก่อน", event: "ส่งรูปการบ้าน · สภาวะ: เหนื่อย" },
-          ].map((item, i) => (
-            <div key={i} className="flex items-center gap-3 py-2 border-b border-[#e0d8cc] last:border-0">
-              <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#f5f0e8", color: "#888", fontFamily: "'Space Mono', monospace" }}>
-                {item.time}
-              </span>
-              <span className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#444" }}>
-                {item.event}
-              </span>
-            </div>
-          ))}
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <IconActivity size={16} color="#2D6A6F" />
+            <p className="text-xs font-bold" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
+              สถานะระบบ
+            </p>
+          </div>
+          <div className="space-y-2">
+            {[
+              { name: "Pathumma LLM", ok: true },
+              { name: "Sentiment API", ok: true },
+              { name: "Face Detection", ok: true },
+              { name: "Text-to-Speech", ok: true },
+            ].map((s) => (
+              <div key={s.name} className="flex items-center justify-between">
+                <span className="text-xs" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>{s.name}</span>
+                <span className="text-xs font-bold flex items-center gap-1" style={{ color: s.ok ? "#2D8F5C" : "#C41E3A" }}>
+                  <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: s.ok ? "#2D8F5C" : "#C41E3A" }} />
+                  {s.ok ? "เชื่อมต่อ" : "ขัดข้อง"}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* ============ CHAT VIEW ============ */
+/* ================================================================
+   CHAT VIEW
+   ================================================================ */
 function ChatView({
-  messages,
-  inputText,
-  setInputText,
-  sendMessage,
-  chatMode,
-  setChatMode,
-  isAnalyzing,
-  doSelfie,
-  doVoice,
-  doHomework,
+  messages, inputText, setInputText, sendMessage, chatMode, setChatMode, isAnalyzing, doSelfie, doVoice, doHomework,
 }: {
-  messages: ChatMsg[];
-  inputText: string;
-  setInputText: (v: string) => void;
-  sendMessage: () => void;
-  chatMode: ChatMode;
-  setChatMode: (v: ChatMode) => void;
-  isAnalyzing: boolean;
-  doSelfie: (image: Blob) => void;
-  doVoice: (audio: Blob, filename: string) => void;
-  doHomework: (image: Blob) => void;
+  messages: ChatMsg[]; inputText: string; setInputText: (v: string) => void;
+  sendMessage: () => void; chatMode: ChatMode; setChatMode: (v: ChatMode) => void;
+  isAnalyzing: boolean; doSelfie: (image: Blob) => void;
+  doVoice: (audio: Blob, filename: string) => void; doHomework: (image: Blob) => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const modes: readonly ChatMode[] = ["ข้อความ", "เซลฟี่", "เสียงพูด", "รูปการบ้าน"];
+  const modes: { mode: ChatMode; Icon: typeof IconText; label: string }[] = [
+    { mode: "ข้อความ", Icon: IconText, label: "ข้อความ" },
+    { mode: "เซลฟี่", Icon: IconCamera, label: "เซลฟี่" },
+    { mode: "เสียงพูด", Icon: IconMic, label: "เสียง" },
+    { mode: "รูปการบ้าน", Icon: IconImage, label: "การบ้าน" },
+  ];
   const { recording, seconds, start, stop } = useRecorder(doVoice);
 
-  // Keep the newest message in view as the conversation grows.
   useEffect(() => {
     const el = chatBodyRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -1024,26 +1307,56 @@ function ChatView({
   const onImagePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) (chatMode === "เซลฟี่" ? doSelfie : doHomework)(file);
-    e.target.value = ""; // allow re-picking the same file
+    e.target.value = "";
+  };
+
+  const playTTS = async (text: string) => {
+    try {
+      const blob = await api.speak(text);
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play();
+      audio.onended = () => URL.revokeObjectURL(url);
+    } catch {
+      toast("อ่านออกเสียงไม่สำเร็จ");
+    }
+  };
+
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]" style={{ maxHeight: "calc(100vh - 120px)" }}>
+    <div className="flex flex-col h-[calc(100vh-110px)]" style={{ maxHeight: "calc(100vh - 110px)" }}>
+      {/* Transparency banner */}
+      {isAnalyzing && TRANSPARENCY[chatMode] && (
+        <div className="mb-3 px-4 py-2 rounded-xl text-xs animate-fade-in" style={{
+          backgroundColor: "rgba(45,106,111,0.06)",
+          border: "1.5px solid rgba(45,106,111,0.15)",
+          color: "#2D6A6F",
+          fontFamily: "'Space Mono', monospace",
+        }}>
+          {TRANSPARENCY[chatMode]}
+        </div>
+      )}
+
       {/* Mode tabs */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap">
         {modes.map((m) => (
           <button
-            key={m}
-            onClick={() => setChatMode(m)}
-            className="px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.97]"
+            key={m.mode}
+            onClick={() => setChatMode(m.mode)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.97]"
             style={{
-              backgroundColor: chatMode === m ? "#2D6A6F" : "rgba(255,255,255,0.8)",
-              color: chatMode === m ? "#fff" : "#666",
-              border: chatMode === m ? "none" : "2px solid #e0d8cc",
+              backgroundColor: chatMode === m.mode ? "#2D6A6F" : "rgba(255,255,255,0.8)",
+              color: chatMode === m.mode ? "#fff" : "#666",
+              border: chatMode === m.mode ? "none" : "1.5px solid #e0d8cc",
               fontFamily: "'Noto Sans Thai', sans-serif",
             }}
           >
-            {m}
+            <m.Icon size={14} color={chatMode === m.mode ? "#fff" : "#888"} />
+            {m.label}
           </button>
         ))}
       </div>
@@ -1051,31 +1364,56 @@ function ChatView({
       {/* Chat body */}
       <div
         ref={chatBodyRef}
-        className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4"
+        className="flex-1 overflow-y-auto space-y-3 pr-2 pb-4"
         style={{ scrollbarWidth: "thin" }}
       >
         {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className="max-w-[75%] px-5 py-3 rounded-2xl text-sm leading-relaxed"
-              style={{
-                backgroundColor: msg.role === "user" ? "#2D6A6F" : "rgba(255,255,255,0.95)",
-                color: msg.role === "user" ? "#fff" : "#1a1a1a",
-                border: msg.role === "bot" ? "2px solid #e0d8cc" : "none",
-                fontFamily: "'Noto Sans Thai', sans-serif",
-                borderBottomRightRadius: msg.role === "user" ? "6px" : "24px",
-                borderBottomLeftRadius: msg.role === "bot" ? "6px" : "24px",
-              }}
-            >
-              {msg.text}
+          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} msg-enter`} style={{ animationDelay: `${Math.max(0, i - messages.length + 3) * 0.05}s` }}>
+            <div className="max-w-[80%] md:max-w-[70%]">
+              <div
+                className="px-4 py-3 rounded-2xl text-sm leading-relaxed"
+                style={{
+                  backgroundColor: msg.role === "user" ? "#2D6A6F" : "rgba(255,255,255,0.95)",
+                  color: msg.role === "user" ? "#fff" : "#1a1a1a",
+                  border: msg.role === "bot" ? "1.5px solid #e0d8cc" : "none",
+                  fontFamily: "'Noto Sans Thai', sans-serif",
+                  borderBottomRightRadius: msg.role === "user" ? "6px" : "20px",
+                  borderBottomLeftRadius: msg.role === "bot" ? "6px" : "20px",
+                }}
+              >
+                {msg.text}
+              </div>
+              <div className={`flex items-center gap-2 mt-1 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <span className="text-[10px]" style={{ color: "#aaa", fontFamily: "'Space Mono', monospace" }}>
+                  {formatTime(msg.timestamp)}
+                </span>
+                {msg.role === "bot" && msg.service && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
+                    backgroundColor: "rgba(45,106,111,0.06)",
+                    color: "#2D6A6F",
+                    fontFamily: "'Space Mono', monospace",
+                  }}>
+                    {msg.service}
+                  </span>
+                )}
+                {msg.role === "bot" && (
+                  <button
+                    onClick={() => playTTS(msg.text)}
+                    className="opacity-40 hover:opacity-80 transition-opacity"
+                    title="อ่านออกเสียง"
+                  >
+                    <IconVolume size={12} color="#2D6A6F" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
         {isAnalyzing && (
-          <div className="flex justify-start">
+          <div className="flex justify-start animate-fade-in">
             <div
               className="px-5 py-3 rounded-2xl"
-              style={{ backgroundColor: "rgba(255,255,255,0.95)", border: "2px solid #e0d8cc", fontFamily: "'Noto Sans Thai', sans-serif" }}
+              style={{ backgroundColor: "rgba(255,255,255,0.95)", border: "1.5px solid #e0d8cc" }}
             >
               <div className="flex gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "0ms" }} />
@@ -1087,15 +1425,13 @@ function ChatView({
         )}
       </div>
 
-      {/* Mode action */}
+      {/* Upload mode actions */}
       {(chatMode === "เซลฟี่" || chatMode === "รูปการบ้าน") && (
         <div className="mb-3">
           <input
             ref={imageInputRef}
             type="file"
             accept="image/*"
-            // "user" opens the front camera on mobile for selfies; homework
-            // photos use the rear one.
             capture={chatMode === "เซลฟี่" ? "user" : "environment"}
             onChange={onImagePicked}
             className="sr-only"
@@ -1104,10 +1440,10 @@ function ChatView({
           <button
             onClick={() => imageInputRef.current?.click()}
             disabled={isAnalyzing}
-            className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
             style={{ backgroundColor: "#C41E3A", fontFamily: "'Noto Sans Thai', sans-serif" }}
           >
-            {chatMode === "เซลฟี่" ? "📷 ถ่ายเซลฟี่วิเคราะห์" : "📸 อัปโหลดรูปการบ้าน"}
+            {chatMode === "เซลฟี่" ? <><IconCamera size={16} /> ถ่ายเซลฟี่วิเคราะห์</> : <><IconImage size={16} /> อัปโหลดรูปการบ้าน</>}
           </button>
         </div>
       )}
@@ -1118,22 +1454,23 @@ function ChatView({
             onClick={recording ? stop : start}
             disabled={isAnalyzing}
             aria-pressed={recording}
-            className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50 ${recording ? "animate-recording-pulse" : ""}`}
             style={{
               backgroundColor: recording ? "#1a1a1a" : "#C41E3A",
               fontFamily: "'Noto Sans Thai', sans-serif",
             }}
           >
-            {recording ? "⏹ หยุดและส่ง" : "🎙 เริ่มอัดเสียง"}
+            {recording ? <><IconStop size={14} color="#fff" /> หยุดและส่ง</> : <><IconMic size={14} /> เริ่มอัดเสียง</>}
           </button>
           {recording && (
             <span
-              className="text-sm font-semibold"
+              className="text-sm font-semibold flex items-center gap-1.5"
               style={{ color: "#C41E3A", fontFamily: "'Space Mono', monospace" }}
               role="status"
               aria-live="polite"
             >
-              ● {String(Math.floor(seconds / 60)).padStart(2, "0")}:
+              <span className="w-2 h-2 rounded-full bg-[#C41E3A] animate-pulse" />
+              {String(Math.floor(seconds / 60)).padStart(2, "0")}:
               {String(seconds % 60).padStart(2, "0")}
             </span>
           )}
@@ -1151,54 +1488,35 @@ function ChatView({
           className="flex-1 px-5 py-3 rounded-2xl outline-none text-sm"
           style={{
             backgroundColor: "rgba(255,255,255,0.9)",
-            border: "2px solid #e0d8cc",
+            border: "1.5px solid #e0d8cc",
             fontFamily: "'Noto Sans Thai', sans-serif",
             color: "#1a1a1a",
           }}
         />
         <button
           onClick={sendMessage}
-          className="px-6 py-3 rounded-2xl text-white font-bold text-sm transition-all duration-150 active:scale-[0.97]"
+          disabled={isAnalyzing || !inputText.trim()}
+          className="px-5 py-3 rounded-2xl text-white font-bold text-sm transition-all duration-150 active:scale-[0.97] disabled:opacity-50 flex items-center gap-2"
           style={{ backgroundColor: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}
         >
-          ส่ง
+          <IconSend size={16} />
+          <span className="hidden md:inline">ส่ง</span>
         </button>
       </div>
     </div>
   );
 }
 
-/* ============ TREND VIEW ============ */
+/* ================================================================
+   TREND VIEW
+   ================================================================ */
 const DAY_LABELS_TH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
-/** Bar height per mood, so a stressed day reads visually lower than a calm one. */
+
 const MOOD_HEIGHT: Record<string, number> = {
-  stressed: 45,
-  sad: 52,
-  tired: 60,
-  neutral: 70,
-  calm: 88,
-  positive: 100,
-};
-const MOOD_COLOR: Record<string, string> = {
-  stressed: "#C41E3A",
-  sad: "#6a7080",
-  tired: "#888888",
-  neutral: "#d4cfc5",
-  calm: "#2D6A6F",
-  positive: "#2D6A6F",
+  stressed: 35, sad: 45, tired: 55, neutral: 65, calm: 80, positive: 95,
 };
 
-function TrendView({
-  mood,
-  trend,
-  error,
-}: {
-  mood: string;
-  trend: TrendResult | null;
-  error: string | null;
-}) {
-  // The backend returns only days that have a reading; pad to a full week so
-  // the chart keeps a stable shape.
+function TrendView({ mood, trend, error }: { mood: string; trend: TrendResult | null; error: string | null }) {
   const weekData = (() => {
     const byDate = new Map((trend?.days ?? []).map((d) => [d.date, d.mood as string]));
     const out: { day: string; mood: string | null; date: string }[] = [];
@@ -1213,64 +1531,101 @@ function TrendView({
 
   const hasData = (trend?.messages ?? 0) > 0;
 
+  const dominantMood = trend?.dominant_mood ?? mood;
+  const dm = MOOD[dominantMood] || MOOD.neutral;
+
+  const [chartRef, chartInView] = useInView<HTMLDivElement>();
+  const [statsRef, statsInView] = useInView<HTMLDivElement>();
+  const activeDays = useCountUp(trend?.active_days ?? 0, 700, statsInView);
+  const totalMessages = useCountUp(trend?.messages ?? 0, 900, statsInView);
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
-        แนวโน้มอารมณ์ของฉัน
-      </h2>
+    <div className="space-y-6 view-transition">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
+          แนวโน้มอารมณ์ของฉัน
+        </h2>
+        {hasData && <MoodBadge mood={dominantMood} />}
+      </div>
 
       {error && (
-        <div className="p-4 rounded-2xl" style={{ backgroundColor: "rgba(196,30,58,0.08)", border: "2px solid #C41E3A" }}>
+        <div className="p-4 rounded-xl flex items-center gap-2" style={{ backgroundColor: "rgba(196,30,58,0.06)", border: "1.5px solid rgba(196,30,58,0.2)" }}>
+          <IconAlert size={16} color="#C41E3A" />
           <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#C41E3A" }}>
             {error}
           </p>
         </div>
       )}
 
-      {/* Weekly mood chart */}
-      <div className="p-6 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.9)", border: "2px solid #e0d8cc" }}>
-        <p className="text-xs font-bold mb-4" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
+      {/* Weekly chart */}
+      <div ref={chartRef} className={`glass-card p-6 transition-all duration-600 ${chartInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+        <p className="text-xs font-bold mb-4 flex items-center gap-2" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
+          <IconTrend size={14} color="#2D6A6F" />
           สภาวะอารมณ์ 7 วันล่าสุด
         </p>
         {!hasData && !error && (
-          <p className="text-sm mb-4" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-            ยังไม่มีข้อมูลนะ ลองคุยกับกระจกในหน้าแชทก่อน แล้วกราฟจะเริ่มขึ้นที่นี่
-          </p>
+          <div className="text-center py-8">
+            <IconChat size={32} color="#ccc" />
+            <p className="text-sm mt-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
+              ยังไม่มีข้อมูลนะ ลองคุยกับกระจกในหน้าแชทก่อน
+            </p>
+            <p className="text-xs mt-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#aaa" }}>
+              แล้วกราฟจะเริ่มขึ้นที่นี่
+            </p>
+          </div>
         )}
-        <div className="flex items-end gap-3 h-40">
-          {weekData.map((d) => (
-            <div key={d.date} className="flex-1 flex flex-col items-center gap-2">
-              <span className="text-2xl">{d.mood ? EMO[d.mood]?.emoji : "·"}</span>
-              <div
-                className="w-full rounded-t-lg transition-all duration-500"
-                style={{
-                  height: d.mood ? `${MOOD_HEIGHT[d.mood] ?? 70}%` : "6%",
-                  backgroundColor: d.mood ? (MOOD_COLOR[d.mood] ?? "#d4cfc5") : "#ece7de",
-                }}
-                title={d.mood ? `${d.date}: ${EMO[d.mood]?.label}` : `${d.date}: ไม่มีข้อมูล`}
-              />
-              <span className="text-xs font-semibold" style={{ color: "#666", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-                {d.day}
-              </span>
+        <div className="flex items-end gap-2 md:gap-3 h-44">
+          {weekData.map((d, i) => {
+            const m = d.mood ? MOOD[d.mood] : null;
+            const h = d.mood ? (MOOD_HEIGHT[d.mood] ?? 65) : 5;
+            return (
+              <div key={d.date} className="flex-1 flex flex-col items-center gap-2">
+                {m && (
+                  <span className="text-[10px] font-semibold" style={{ color: m.color, fontFamily: "'Noto Sans Thai', sans-serif" }}>
+                    {m.label}
+                  </span>
+                )}
+                <div
+                  className="w-full rounded-t-lg animate-bar-grow"
+                  style={{
+                    height: `${h}%`,
+                    backgroundColor: m ? m.color : "#ece7de",
+                    opacity: m ? 0.7 : 0.3,
+                    animationDelay: `${i * 0.08}s`,
+                  }}
+                  title={m ? `${d.date}: ${m.label}` : `${d.date}: ไม่มีข้อมูล`}
+                />
+                <span className="text-xs font-semibold" style={{ color: "#666", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+                  {d.day}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Mood legend */}
+        <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t" style={{ borderColor: "#e0d8cc" }}>
+          {Object.entries(MOOD).map(([key, m]) => (
+            <div key={key} className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: m.color, opacity: 0.7 }} />
+              <span className="text-[10px]" style={{ color: "#888", fontFamily: "'Noto Sans Thai', sans-serif" }}>{m.label}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div ref={statsRef} className={`grid grid-cols-3 gap-3 md:gap-4 transition-all duration-500 ${statsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
         {[
-          { label: "วันใช้งาน", value: `${trend?.active_days ?? 0} วัน`, icon: "📅" },
-          { label: "แชททั้งหมด", value: `${trend?.messages ?? 0} ข้อความ`, icon: "💬" },
-          {
-            label: "สภาวะหลัก",
-            value: EMO[trend?.dominant_mood ?? mood]?.label ?? "ปกติ",
-            icon: EMO[trend?.dominant_mood ?? mood]?.emoji ?? "😐",
-          },
+          { label: "วันใช้งาน", value: `${activeDays} วัน`, Icon: IconCalendar, color: "#2D6A6F" },
+          { label: "แชททั้งหมด", value: `${totalMessages} ข้อความ`, Icon: IconMessages, color: "#8b7355" },
+          { label: "สภาวะหลัก", value: dm.label, Icon: IconHeart, color: dm.color },
         ].map((stat, i) => (
-          <div key={i} className="p-4 rounded-2xl text-center" style={{ backgroundColor: "rgba(255,255,255,0.9)", border: "2px solid #e0d8cc" }}>
-            <span className="text-2xl block mb-1">{stat.icon}</span>
-            <p className="text-lg font-bold" style={{ color: "#1a1a1a", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+          <div key={i} className="glass-card p-4 text-center hover-lift">
+            <div className="w-8 h-8 rounded-lg mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: `${stat.color}10` }}>
+              <stat.Icon size={16} color={stat.color} />
+            </div>
+            <p className="text-base md:text-lg font-bold" style={{ color: "#1a1a1a", fontFamily: "'Noto Sans Thai', sans-serif" }}>
               {stat.value}
             </p>
             <p className="text-xs" style={{ color: "#888", fontFamily: "'Noto Sans Thai', sans-serif" }}>
@@ -1280,25 +1635,43 @@ function TrendView({
         ))}
       </div>
 
-      {/* Chart graph image */}
-      <div className="rounded-2xl overflow-hidden" style={{ border: "2px solid #e0d8cc" }}>
-        <img src={IMG.chartGraph} alt="" className="w-full h-48 object-cover opacity-80" />
-      </div>
+      {/* Weekly summary */}
+      {hasData && (
+        <div className="glass-card p-5">
+          <p className="text-sm font-bold mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+            สรุปสัปดาห์นี้
+          </p>
+          <p className="text-sm leading-relaxed" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
+            สัปดาห์นี้คุณใช้งานกระจกมาทั้งหมด {trend?.messages ?? 0} ข้อความ
+            ใน {trend?.active_days ?? 0} วัน
+            {dominantMood && ` สภาวะอารมณ์หลักของคุณคือ "${dm.label}"`}
+            {dominantMood === "stressed" || dominantMood === "sad"
+              ? " อย่าลืมพักผ่อนให้เพียงพอ และหากต้องการความช่วยเหลือ สามารถติดต่อสายด่วนสุขภาพจิต 1323 ได้ตลอด 24 ชั่วโมง"
+              : dominantMood === "positive" || dominantMood === "calm"
+                ? " ดีใจที่คุณอยู่ในสภาวะที่ดี ขอให้รักษาความรู้สึกนี้ไว้นะ"
+                : " ลองคุยกับกระจกเพิ่มเติมเพื่อสำรวจอารมณ์ให้ลึกขึ้น"}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ============ SCHOOL VIEW ============ */
+/* ================================================================
+   SCHOOL VIEW
+   ================================================================ */
 function SchoolView({ school, error }: { school: SchoolResult | null; error: string | null }) {
   const pct = (v: number) => `${Math.round(v * 100)}%`;
-  const stats = [
-    { label: "นักเรียนที่ใช้งาน", value: `${school?.users ?? 0} คน`, color: "#2D6A6F" },
-    { label: "สภาวะเครียดเฉลี่ย", value: pct(school?.stress_ratio ?? 0), color: "#C41E3A" },
-    { label: "การวิเคราะห์ทั้งหมด", value: `${school?.readings ?? 0} ครั้ง`, color: "#2D6A6F" },
-    { label: "ใช้แชทเป็นประจำ", value: pct(school?.regular_ratio ?? 0), color: "#2D6A6F" },
-  ];
+  const total = school?.readings ?? 0;
+  const distribution = school?.distribution ?? {};
+
+  const [statsGridRef, statsGridInView] = useInView<HTMLDivElement>();
+  const [distRef, distInView] = useInView<HTMLDivElement>();
+  const userCount = useCountUp(school?.users ?? 0, 800, statsGridInView);
+  const readingCount = useCountUp(school?.readings ?? 0, 1000, statsGridInView);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 view-transition">
       <h2 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
         ภาพรวมโรงเรียน
       </h2>
@@ -1306,23 +1679,27 @@ function SchoolView({ school, error }: { school: SchoolResult | null; error: str
         ข้อมูลแบบไม่ระบุตัวตน รวมจากนักเรียนทั้งหมดในสถาบัน
       </p>
 
-      {/* School image */}
-      <div className="rounded-2xl overflow-hidden" style={{ border: "2px solid #e0d8cc" }}>
-        <img src={IMG.schoolBuilding} alt="" className="w-full h-48 object-cover opacity-70" />
-      </div>
-
       {error && (
-        <div className="p-4 rounded-2xl" style={{ backgroundColor: "rgba(196,30,58,0.08)", border: "2px solid #C41E3A" }}>
-          <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#C41E3A" }}>
-            {error}
-          </p>
+        <div className="p-4 rounded-xl flex items-center gap-2" style={{ backgroundColor: "rgba(196,30,58,0.06)", border: "1.5px solid rgba(196,30,58,0.2)" }}>
+          <IconAlert size={16} color="#C41E3A" />
+          <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#C41E3A" }}>{error}</p>
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
-        {stats.map((stat, i) => (
-          <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.9)", border: "2px solid #e0d8cc" }}>
+      {/* Stats grid */}
+      <div ref={statsGridRef} className={`grid grid-cols-2 gap-4 transition-all duration-500 ${statsGridInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+        {[
+          { label: "นักเรียนที่ใช้งาน", value: `${userCount} คน`, Icon: IconUsers, color: "#2D6A6F" },
+          { label: "สภาวะเครียดเฉลี่ย", value: pct(school?.stress_ratio ?? 0), Icon: IconActivity, color: "#C41E3A" },
+          { label: "การวิเคราะห์ทั้งหมด", value: `${readingCount} ครั้ง`, Icon: IconMessages, color: "#2D6A6F" },
+          { label: "ใช้แชทเป็นประจำ", value: pct(school?.regular_ratio ?? 0), Icon: IconHeart, color: "#2D8F5C" },
+        ].map((stat, i) => (
+          <div key={i} className="glass-card p-5 hover-lift">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${stat.color}10` }}>
+                <stat.Icon size={16} color={stat.color} />
+              </div>
+            </div>
             <p className="text-2xl font-black" style={{ color: stat.color, fontFamily: "'Noto Sans Thai', sans-serif" }}>
               {stat.value}
             </p>
@@ -1333,8 +1710,47 @@ function SchoolView({ school, error }: { school: SchoolResult | null; error: str
         ))}
       </div>
 
+      {/* Mood distribution bars */}
+      {total > 0 && (
+        <div ref={distRef} className={`glass-card p-5 transition-all duration-500 delay-100 ${distInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+          <p className="text-sm font-bold mb-4" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+            การกระจายตัวของสภาวะอารมณ์
+          </p>
+          <div className="space-y-3">
+            {Object.entries(distribution).sort((a, b) => b[1] - a[1]).map(([moodKey, count]) => {
+              const m = MOOD[moodKey] || MOOD.neutral;
+              const ratio = total > 0 ? (count / total) * 100 : 0;
+              return (
+                <div key={moodKey}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-semibold" style={{ color: m.color, fontFamily: "'Noto Sans Thai', sans-serif" }}>
+                      {m.label}
+                    </span>
+                    <span className="text-xs" style={{ color: "#888", fontFamily: "'Space Mono', monospace" }}>
+                      {count} ({Math.round(ratio)}%)
+                    </span>
+                  </div>
+                  <div className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: "#f0ebe3" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${ratio}%`, backgroundColor: m.color, opacity: 0.65 }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* School image */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: "1.5px solid #e0d8cc" }}>
+        <img src={IMG.schoolBuilding} alt="" className="w-full h-40 object-cover opacity-60" />
+      </div>
+
       {/* Disclaimer */}
-      <div className="p-4 rounded-2xl" style={{ backgroundColor: "rgba(255,181,167,0.15)", border: "2px solid #FFB5A7" }}>
+      <div className="p-4 rounded-xl flex items-start gap-2" style={{ backgroundColor: "rgba(255,181,167,0.1)", border: "1.5px solid rgba(255,181,167,0.3)" }}>
+        <IconLock size={14} color="#888" />
         <p className="text-xs" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
           ข้อมูลทั้งหมดไม่ระบุตัวตน (anonymized) และไม่สามารถย้อนกลับไปถึงบุคคลใดบุคคลหนึ่งได้
         </p>
@@ -1343,11 +1759,14 @@ function SchoolView({ school, error }: { school: SchoolResult | null; error: str
   );
 }
 
-/* ============ SAFETY VIEW ============ */
+/* ================================================================
+   SAFETY VIEW
+   ================================================================ */
 function SafetyView({ crisis }: { crisis: boolean }) {
   const [lineNotify, setLineNotify] = useState(false);
   const [busy, setBusy] = useState(false);
   const userId = getUserId();
+  const [cardsRef, cardsInView] = useInView<HTMLDivElement>();
 
   const exportData = async () => {
     setBusy(true);
@@ -1382,59 +1801,105 @@ function SafetyView({ crisis }: { crisis: boolean }) {
     }
   };
 
+  const privacyItems = [
+    {
+      title: "ความโปร่งใส",
+      desc: "ภาพและเสียงถูกส่งไปวิเคราะห์ที่ AI for Thai / Pathumma ผ่าน HTTPS แล้วทิ้งทันที ไม่มีการเก็บไฟล์ไว้บนเซิร์ฟเวอร์ ส่วนที่บันทึกไว้คือผลอารมณ์และข้อความสนทนาเท่านั้น",
+      Icon: IconEye,
+      color: "#2D6A6F",
+    },
+    {
+      title: "การควบคุมข้อมูล",
+      desc: "คุณสามารถส่งออกหรือลบข้อมูลทั้งหมดของคุณได้ทุกเมื่อจากหน้านี้",
+      Icon: IconDownload,
+      color: "#8b7355",
+    },
+    {
+      title: "ไม่ใช่การวินิจฉัย",
+      desc: "กระจกสะท้อนใจไม่ใช่เครื่องมือทางการแพทย์ ไม่สามารถวินิจฉัยโรคหรือภาวะทางจิตเวชได้",
+      Icon: IconAlert,
+      color: "#C41E3A",
+    },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 view-transition">
       <h2 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
         ความปลอดภัย & ข้อมูล
       </h2>
 
-      {/* Raised when the backend flags a crisis signal in a message. */}
+      {/* Crisis alert */}
       {crisis && (
         <div
-          className="p-5 rounded-2xl"
-          style={{ backgroundColor: "rgba(196,30,58,0.1)", border: "2px solid #C41E3A" }}
+          className="p-5 rounded-2xl animate-scale-in"
+          style={{ backgroundColor: "rgba(196,30,58,0.08)", border: "2px solid #C41E3A" }}
           role="alert"
         >
-          <p className="font-bold mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#C41E3A" }}>
-            กระจกเป็นห่วงคุณนะ
-          </p>
-          <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <IconHeart size={20} color="#C41E3A" />
+            <p className="font-bold" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#C41E3A" }}>
+              กระจกเป็นห่วงคุณนะ
+            </p>
+          </div>
+          <p className="text-sm mb-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
             ถ้ากำลังรู้สึกอยากทำร้ายตัวเอง โปรดติดต่อคนที่ช่วยได้ทันที
           </p>
-          <p className="text-sm mt-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-            สายด่วนสุขภาพจิต <a href="tel:1323" className="font-bold underline" style={{ color: "#C41E3A" }}>1323</a>
-            {" · "}เหตุฉุกเฉิน <a href="tel:1669" className="font-bold underline" style={{ color: "#C41E3A" }}>1669</a>
-          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <a
+              href="tel:1323"
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-bold text-sm"
+              style={{ backgroundColor: "#C41E3A", fontFamily: "'Noto Sans Thai', sans-serif" }}
+            >
+              <IconPhone size={16} />
+              สายด่วนสุขภาพจิต 1323
+            </a>
+            <a
+              href="tel:1669"
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm"
+              style={{ backgroundColor: "rgba(196,30,58,0.08)", color: "#C41E3A", fontFamily: "'Noto Sans Thai', sans-serif", border: "1.5px solid #C41E3A" }}
+            >
+              <IconPhone size={16} />
+              เหตุฉุกเฉิน 1669
+            </a>
+          </div>
         </div>
       )}
 
-      {/* Shield image */}
-      <div className="rounded-2xl overflow-hidden" style={{ border: "2px solid #e0d8cc", maxWidth: "200px" }}>
-        <img src={IMG.shieldLock} alt="" className="w-full h-auto opacity-70" />
-      </div>
+      {/* Helpline card (always visible) */}
+      {!crisis && (
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <IconPhone size={16} color="#2D6A6F" />
+            <p className="font-bold text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#2D6A6F" }}>
+              สายด่วนสุขภาพจิต
+            </p>
+          </div>
+          <p className="text-sm mb-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
+            หากต้องการความช่วยเหลือ โทรได้ตลอด 24 ชั่วโมง ฟรี ไม่เสียค่าใช้จ่าย
+          </p>
+          <a
+            href="tel:1323"
+            className="inline-flex items-center gap-1.5 text-sm font-bold"
+            style={{ color: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}
+          >
+            <IconPhone size={14} />
+            1323
+          </a>
+        </div>
+      )}
 
-      {/* Privacy info cards */}
-      <div className="space-y-4">
-        {[
-          {
-            title: "ความโปร่งใส",
-            desc: "ภาพและเสียงถูกส่งไปวิเคราะห์ที่ AI for Thai / Pathumma ผ่าน HTTPS แล้วทิ้งทันที ไม่มีการเก็บไฟล์ไว้บนเซิร์ฟเวอร์ ส่วนที่บันทึกไว้คือผลอารมณ์และข้อความสนทนาเท่านั้น",
-            icon: "🔒",
-          },
-          {
-            title: "การควบคุมข้อมูล",
-            desc: "คุณสามารถส่งออกหรือลบข้อมูลทั้งหมดของคุณได้ทุกเมื่อจากหน้านี้",
-            icon: "🗑️",
-          },
-          {
-            title: "ไม่ใช่การวินิจฉัย",
-            desc: "กระจกสะท้อนใจไม่ใช่เครื่องมือทางการแพทย์ ไม่สามารถวินิจฉัยโรคหรือภาวะทางจิตเวชได้",
-            icon: "⚠️",
-          },
-        ].map((item, i) => (
-          <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.9)", border: "2px solid #e0d8cc" }}>
+      {/* Privacy cards */}
+      <div ref={cardsRef} className={`space-y-3 transition-all duration-500 ${cardsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+        {privacyItems.map((item, i) => (
+          <div
+            key={i}
+            className="glass-card p-5 hover-lift"
+            style={{ transitionDelay: `${i * 0.08}s` }}
+          >
             <div className="flex items-center gap-3 mb-2">
-              <span className="text-xl">{item.icon}</span>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${item.color}10` }}>
+                <item.Icon size={18} color={item.color} />
+              </div>
               <p className="font-bold" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
                 {item.title}
               </p>
@@ -1447,63 +1912,74 @@ function SafetyView({ crisis }: { crisis: boolean }) {
       </div>
 
       {/* LINE Notify toggle */}
-      <div className="p-5 rounded-2xl flex items-center justify-between" style={{ backgroundColor: "rgba(255,255,255,0.9)", border: "2px solid #e0d8cc" }}>
-        <div>
-          <p className="font-bold" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-            การแจ้งเตือนผ่าน LINE
-          </p>
-          <p className="text-xs mt-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-            รับการแจ้งเตือนเมื่อกระจกตรวจพบความกังวล
-          </p>
+      <div className="glass-card p-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "rgba(45,106,111,0.08)" }}>
+            <IconBell size={18} color="#2D6A6F" />
+          </div>
+          <div>
+            <p className="font-bold text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+              การแจ้งเตือนผ่าน LINE
+            </p>
+            <p className="text-xs mt-0.5" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
+              รับการแจ้งเตือนเมื่อกระจกตรวจพบความกังวล
+            </p>
+          </div>
         </div>
         <button
           onClick={() => {
             setLineNotify(!lineNotify);
             toast(lineNotify ? "ปิดการแจ้งเตือนผ่าน LINE แล้ว" : "เปิดการแจ้งเตือนผ่าน LINE แล้ว");
           }}
-          className="w-14 h-7 rounded-full transition-all duration-300 relative"
+          className="w-12 h-6 rounded-full transition-all duration-300 relative flex-shrink-0"
           style={{ backgroundColor: lineNotify ? "#2D6A6F" : "#ccc" }}
         >
           <div
-            className="w-5 h-5 rounded-full bg-white absolute top-1 transition-all duration-300"
-            style={{ left: lineNotify ? "32px" : "4px" }}
+            className="w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all duration-300 shadow-sm"
+            style={{ left: lineNotify ? "26px" : "2px" }}
           />
         </button>
       </div>
 
-      {/* Data export / delete */}
-      <button
-        onClick={exportData}
-        disabled={busy}
-        className="w-full py-3 rounded-2xl text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
-        style={{
-          backgroundColor: "rgba(255,255,255,0.9)",
-          border: "2px solid #e0d8cc",
-          color: "#2D6A6F",
-          fontFamily: "'Noto Sans Thai', sans-serif",
-        }}
-      >
-        ส่งออกข้อมูลทั้งหมดของฉัน
-      </button>
+      {/* Data controls */}
+      <div className="space-y-3">
+        <button
+          onClick={exportData}
+          disabled={busy}
+          className="w-full py-3 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2"
+          style={{
+            backgroundColor: "rgba(255,255,255,0.85)",
+            border: "1.5px solid #e0d8cc",
+            color: "#2D6A6F",
+            fontFamily: "'Noto Sans Thai', sans-serif",
+          }}
+        >
+          <IconDownload size={16} />
+          ส่งออกข้อมูลทั้งหมดของฉัน
+        </button>
 
-      <button
-        onClick={deleteData}
-        disabled={busy}
-        className="w-full py-3 rounded-2xl text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
-        style={{
-          backgroundColor: "rgba(255,255,255,0.9)",
-          border: "2px solid #C41E3A",
-          color: "#C41E3A",
-          fontFamily: "'Noto Sans Thai', sans-serif",
-        }}
-      >
-        ลบข้อมูลทั้งหมดของฉัน
-      </button>
+        <button
+          onClick={deleteData}
+          disabled={busy}
+          className="w-full py-3 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2"
+          style={{
+            backgroundColor: "rgba(255,255,255,0.85)",
+            border: "1.5px solid #C41E3A",
+            color: "#C41E3A",
+            fontFamily: "'Noto Sans Thai', sans-serif",
+          }}
+        >
+          <IconTrash size={16} />
+          ลบข้อมูลทั้งหมดของฉัน
+        </button>
+      </div>
     </div>
   );
 }
 
-/* ============ MAIN APP ============ */
+/* ================================================================
+   MAIN APP
+   ================================================================ */
 export default function App() {
   const [page, setPage] = useState<Page>("login");
   const [age, setAge] = useState("");
