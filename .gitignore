@@ -36,3 +36,14 @@ api/*.txt
 api/*.md
 api/*.json
 claude.md
+
+# Local SQLite store. Created at runtime; the deployed container keeps its own.
+api/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Frontend build tooling. The built output in api/app/frontend/ is committed so
+# the image needs no Node stage, but node_modules never is.
+node_modules/
+web/dist/

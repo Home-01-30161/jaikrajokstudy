@@ -1,14 +1,32 @@
-"""Web chat API endpoints for JaiKrajok frontend."""
+"""Web chat API endpoints for the JaiKrajok frontend.
+
+Covers the four chat modes the UI offers (text / selfie / voice / homework
+photo), plus the trend and school views. Every mode ends in the same place: a
+mood label the UI can render and an LLM reply written for that mood.
+"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
-from app.bots.conversation import handle_text
+from app import store
+from app.services import face, mood as mood_svc, ocr, pathumma, stt, tts
 from app.services.sentiment import analyze_sentiment
 
 router = APIRouter(tags=["web"])
+
+# Upload guard: the deployed container has a 2 GB memory limit and reads the
+# whole body into RAM, so oversized uploads are rejected before buffering.
+_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+_MAX_MESSAGE_CHARS = 2000
+
+CRISIS_KEYWORDS = ("ฆ่าตัวตาย", "อยากตาย", "ทำร้ายตัวเอง", "ไม่อยากอยู่")
+CRISIS_REPLY = (
+    "เราห่วงใยคุณมากนะ ตอนนี้คุณไม่ได้อยู่คนเดียว "
+    "โปรดติดต่อสายด่วนสุขภาพจิต 1323 (ฟรี 24 ชั่วโมง) "
+    "หรือคนที่ไว้ใจใกล้ตัวด้วยนะ"
+)
 
 
 class ChatRequest(BaseModel):
@@ -19,6 +37,11 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     emotion: str | None = None
+    mood: str = "neutral"
+    confidence: float | None = None
+    crisis: bool = False
+    service: str = "sentiment+llm"
+    degraded: list[str] = []
 
 
 class EmotionRequest(BaseModel):
@@ -29,6 +52,59 @@ class EmotionResponse(BaseModel):
     emotion: str
     polarity: str
     confidence: float
+    mood: str = "neutral"
+
+
+class AnalysisResponse(BaseModel):
+    """Shared shape for the three upload-driven modes."""
+
+    ok: bool
+    mood: str = "neutral"
+    reply: str
+    detail: str | None = None
+    transcript: str | None = None
+    service: str
+    error: str | None = None
+
+
+async def _read_upload(upload: UploadFile) -> bytes:
+    data = await upload.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
+        )
+    return data
+
+
+async def _mood_and_reply(user_id: str, text: str, *, source: str) -> tuple[str, str, float | None, list[str]]:
+    """Sentiment -> mood -> mood-aware LLM reply. Returns (mood, reply, confidence, degraded)."""
+    degraded: list[str] = []
+
+    sentiment_result = await analyze_sentiment(text)
+    polarity = score = None
+    if sentiment_result.ok and sentiment_result.sentiment:
+        polarity = sentiment_result.sentiment.polarity
+        score = sentiment_result.sentiment.score
+    else:
+        degraded.append("sentiment")
+
+    detected = mood_svc.classify(text, polarity, score)
+
+    llm = await pathumma.generate_reply(text, emotion_hint=mood_svc.MOOD_LABELS_TH.get(detected))
+    if llm.ok and llm.text:
+        reply = llm.text
+    else:
+        degraded.append("llm")
+        reply = (
+            "กระจกยังตอบไม่ได้ตอนนี้ (ระบบ AI ขัดข้องชั่วคราว) "
+            "แต่เราอ่านข้อความของคุณแล้วนะ ลองส่งอีกครั้งในอีกสักครู่"
+        )
+
+    store.record_mood(user_id, detected, source=source, confidence=score)
+    return detected, reply, score, degraded
 
 
 # The reverse proxy strips /api before the request reaches this container
@@ -36,20 +112,34 @@ class EmotionResponse(BaseModel):
 # Public URL: https://team07.aiforthai.in.th/api/chat/send
 @router.post("/chat/send")
 async def send_message(req: ChatRequest) -> ChatResponse:
-    """Handle web chat message and return AI response with emotion."""
-    if not req.message.strip():
+    """Text mode: sentiment analysis + mood-aware LLM reply."""
+    text = req.message.strip()
+    if not text:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-    
-    # Get sentiment first
-    sentiment_result = await analyze_sentiment(req.message)
-    emotion = None
-    if sentiment_result.ok and sentiment_result.sentiment:
-        emotion = sentiment_result.sentiment.label
-    
-    # Generate reply using same conversation handler as LINE bot
-    reply = await handle_text(req.user_id, req.message)
-    
-    return ChatResponse(reply=reply, emotion=emotion)
+    if len(text) > _MAX_MESSAGE_CHARS:
+        raise HTTPException(
+            status_code=413, detail=f"Message too long (max {_MAX_MESSAGE_CHARS} chars)"
+        )
+
+    # Crisis language short-circuits the LLM: a generated reply is not safe here.
+    if any(k in text for k in CRISIS_KEYWORDS):
+        store.record_mood(req.user_id, "sad", source="crisis")
+        return ChatResponse(
+            reply=CRISIS_REPLY, emotion="negative", mood="sad", crisis=True, service="safety"
+        )
+
+    detected, reply, score, degraded = await _mood_and_reply(
+        req.user_id, text, source="text"
+    )
+    return ChatResponse(
+        reply=reply,
+        emotion="negative" if detected in ("stressed", "sad") else "positive"
+        if detected == "positive"
+        else "neutral",
+        mood=detected,
+        confidence=score,
+        degraded=degraded,
+    )
 
 
 @router.post("/emotion/analyze")
@@ -59,16 +149,189 @@ async def analyze_emotion(req: EmotionRequest) -> EmotionResponse:
         raise HTTPException(status_code=400, detail="Text cannot be empty")
     
     result = await analyze_sentiment(req.text)
-    
+
     if not result.ok or not result.sentiment:
         return EmotionResponse(
             emotion="neutral",
-            polarity="neutral", 
-            confidence=0.5
+            polarity="neutral",
+            confidence=0.5,
+            mood=mood_svc.classify(req.text, None, None),
         )
-    
+
     return EmotionResponse(
         emotion=result.sentiment.label,
         polarity=result.sentiment.polarity,
-        confidence=result.sentiment.score
+        confidence=result.sentiment.score,
+        mood=mood_svc.classify(
+            req.text, result.sentiment.polarity, result.sentiment.score
+        ),
     )
+
+
+@router.post("/selfie/analyze")
+async def analyze_selfie(
+    file: UploadFile = File(...),
+    user_id: str = Form("web-anon"),
+) -> AnalysisResponse:
+    """Selfie mode: face detection.
+
+    The AI for Thai face API reports bounding boxes and mask status, not
+    expression, so this reports presence honestly instead of guessing a mood
+    from it. Mood still comes from what the student tells us.
+    """
+    data = await _read_upload(file)
+    result = await face.analyze_image(data)
+
+    if not result.ok:
+        return AnalysisResponse(
+            ok=False,
+            reply="กระจกยังวิเคราะห์ภาพไม่ได้ตอนนี้ ลองอีกครั้งได้นะ",
+            service="face",
+            error=result.error,
+        )
+
+    objects = result.raw.get("objects") or []
+    count = len(objects) if isinstance(objects, list) else 0
+    if count == 0:
+        return AnalysisResponse(
+            ok=True,
+            reply="กระจกยังไม่เห็นใบหน้าในภาพนี้ ลองถ่ายให้เห็นหน้าชัด ๆ ในที่สว่างอีกครั้งนะ",
+            detail="ไม่พบใบหน้าในภาพ",
+            service="face",
+        )
+
+    scores = []
+    for o in objects if isinstance(objects, list) else []:
+        if isinstance(o, dict):
+            try:
+                scores.append(float(o.get("score", 0)))
+            except (TypeError, ValueError):
+                pass
+    best = max(scores) if scores else None
+    detail = f"ตรวจพบใบหน้า {count} ใบหน้า"
+    if best is not None:
+        detail += f" (ความมั่นใจ {best:.0%})"
+
+    return AnalysisResponse(
+        ok=True,
+        reply=(
+            f"{detail}\n\n"
+            "กระจกอ่านได้แค่ว่ามีใบหน้าอยู่ในภาพนะ ยังอ่านอารมณ์จากสีหน้าไม่ได้ "
+            "ถ้าอยากให้เข้าใจความรู้สึกจริง ๆ เล่าเป็นข้อความหรือพูดมาได้เลย"
+        ),
+        detail=detail,
+        service="face",
+    )
+
+
+@router.post("/voice/transcribe")
+async def transcribe_voice(
+    file: UploadFile = File(...),
+    user_id: str = Form("web-anon"),
+) -> AnalysisResponse:
+    """Voice mode: speech-to-text, then the same mood + reply path as text."""
+    data = await _read_upload(file)
+    result = await stt.transcribe(data)
+
+    if not result.ok or not (result.text or "").strip():
+        return AnalysisResponse(
+            ok=False,
+            reply="กระจกยังฟังเสียงนี้ไม่ออก ลองอัดใหม่ในที่เงียบ ๆ หรือพิมพ์มาก็ได้นะ",
+            service="stt",
+            error=result.error or "empty transcript",
+        )
+
+    transcript = result.text.strip()
+    if any(k in transcript for k in CRISIS_KEYWORDS):
+        store.record_mood(user_id, "sad", source="crisis")
+        return AnalysisResponse(
+            ok=True, mood="sad", reply=CRISIS_REPLY, transcript=transcript, service="safety"
+        )
+
+    detected, reply, _, _ = await _mood_and_reply(user_id, transcript, source="voice")
+    return AnalysisResponse(
+        ok=True, mood=detected, reply=reply, transcript=transcript, service="stt+llm"
+    )
+
+
+@router.post("/homework/ocr")
+async def homework_ocr(
+    file: UploadFile = File(...),
+    user_id: str = Form("web-anon"),
+) -> AnalysisResponse:
+    """Homework mode: OCR the photo, then let the LLM help with what it read."""
+    data = await _read_upload(file)
+    result = await ocr.extract_text(data)
+
+    if not result.ok or not (result.text or "").strip():
+        return AnalysisResponse(
+            ok=False,
+            reply="กระจกยังอ่านตัวหนังสือในภาพนี้ไม่ออก ลองถ่ายให้ชัดและตรงขึ้นอีกครั้งนะ",
+            service="ocr",
+            error=result.error or "no text found",
+        )
+
+    extracted = result.text.strip()
+    llm = await pathumma.generate_reply(
+        f"นักเรียนส่งรูปการบ้านมา ข้อความที่อ่านได้จากภาพคือ:\n{extracted}\n\n"
+        "ช่วยอธิบายหรือแนะนำวิธีทำอย่างเป็นขั้นตอน โดยไม่เฉลยคำตอบตรง ๆ ทันที"
+    )
+    reply = (
+        llm.text
+        if llm.ok and llm.text
+        else "กระจกอ่านข้อความจากภาพได้แล้ว แต่ระบบ AI ยังตอบไม่ได้ตอนนี้ ลองอีกครั้งนะ"
+    )
+
+    store.record_mood(user_id, "neutral", source="homework")
+    return AnalysisResponse(
+        ok=True,
+        mood="neutral",
+        reply=reply,
+        detail=extracted,
+        transcript=extracted,
+        service="ocr+llm",
+    )
+
+
+@router.post("/tts/speak")
+async def speak(req: EmotionRequest):
+    """Read a reply aloud. Returns WAV audio."""
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+
+    result = await tts.synthesize(text)
+    if not result.ok or not result.data:
+        raise HTTPException(status_code=502, detail=result.error or "TTS failed")
+    return Response(content=result.data, media_type="audio/wav")
+
+
+@router.get("/trend/{user_id}")
+async def trend(user_id: str) -> dict:
+    """Per-user mood history for the trend view."""
+    data = store.user_trend(user_id)
+    data["labels"] = mood_svc.MOOD_LABELS_TH
+    return data
+
+
+@router.get("/school/overview")
+async def school() -> dict:
+    """Anonymous aggregate stats for the school view."""
+    return store.school_overview()
+
+
+@router.get("/data/{user_id}/export")
+async def export_data(user_id: str) -> dict:
+    """PDPA data-access: everything stored under this id.
+
+    The id is a browser-generated random string, not a credential, so this is
+    not an authorization boundary. It stays usable because ids are unguessable
+    UUIDs and nothing sensitive beyond the user's own chat text is stored.
+    """
+    return store.export_user(user_id)
+
+
+@router.delete("/data/{user_id}")
+async def delete_data(user_id: str) -> dict:
+    """PDPA erasure: drop every reading and message for this id."""
+    return {"deleted": store.delete_user(user_id)}
