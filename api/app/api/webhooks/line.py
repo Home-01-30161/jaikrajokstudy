@@ -25,23 +25,32 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["line"])
 
-# TEMPORARY: Disable SSL verification for aiohttp (MSYS2 Python workaround)
-_original_tcp_connector_init = aiohttp.TCPConnector.__init__
+# Local shells with a broken CA bundle (MSYS2 Python) cannot verify certs, so
+# INSECURE_TLS=1 opts out. It defaults to false, so the deployed container always
+# verifies: replies to LINE users must not accept a forged certificate.
+if get_settings().insecure_tls:
+    logger.warning(
+        "INSECURE_TLS is on - outbound TLS certificates are NOT verified. "
+        "Local development only."
+    )
 
-def _patched_tcp_connector_init(self, *args, **kwargs):
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    kwargs['ssl'] = ssl_context
-    _original_tcp_connector_init(self, *args, **kwargs)
+    _original_tcp_connector_init = aiohttp.TCPConnector.__init__
 
-aiohttp.TCPConnector.__init__ = _patched_tcp_connector_init
+    def _patched_tcp_connector_init(self, *args, **kwargs):
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        kwargs["ssl"] = ssl_context
+        _original_tcp_connector_init(self, *args, **kwargs)
+
+    aiohttp.TCPConnector.__init__ = _patched_tcp_connector_init
 
 
 async def _show_loading(user_id: str, token: str) -> None:
     """Show typing indicator in LINE chat."""
     try:
-        async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+        verify = not get_settings().insecure_tls
+        async with httpx.AsyncClient(verify=verify, timeout=10.0) as client:
             resp = await client.post(
                 "https://api.line.me/v2/bot/chat/loading/start",
                 headers={

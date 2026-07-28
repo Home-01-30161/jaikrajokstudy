@@ -1,4 +1,4 @@
-﻿"""AI for Thai Text-to-Speech client."""
+﻿"""Text-to-Speech client: TokenMind ptm-tts-1 with AI for Thai Vaja9 fallback."""
 
 from __future__ import annotations
 
@@ -14,33 +14,97 @@ _MAX_TTS_CHARS = 300
 
 
 async def synthesize(text: str, *, speaker: int = 0) -> ServiceResult:
-    """Convert Thai text to speech using AI for Thai TTS API.
+    """Convert Thai text to speech.
+
+    Prefers the TokenMind gateway (ptm-tts-1) and falls back to AI for Thai
+    Vaja9. The fallback is not decorative: as of the last check ptm-tts-1
+    returned HTTP 500 for every voice and response_format tried, so Vaja9 is
+    what actually produces audio today.
 
     Args:
         text: Thai text to synthesize (max 300 chars per request).
-        speaker: 0 = male, 1 = female.
+        speaker: 0 = male, 1 = female. Vaja9 only; ptm-tts-1 uses `voice`.
 
     Returns:
         ServiceResult with .data containing WAV audio bytes.
     """
     settings = get_settings()
-    if not settings.aiforthai_api_key:
-        return ServiceResult(service="tts", ok=False, error="Missing AIFORTHAI_API_KEY")
     if not text.strip():
         return ServiceResult(service="tts", ok=False, error="Empty text")
 
+    if settings.tokenmind_api_key:
+        result = await _synthesize_tokenmind(text, settings)
+        if result.ok:
+            return result
+        logger.warning("TokenMind TTS failed (%s); falling back to Vaja9", result.error)
+
+    if not settings.aiforthai_api_key:
+        return ServiceResult(
+            service="tts", ok=False, error="Missing TOKENMIND_API_KEY and AIFORTHAI_API_KEY"
+        )
+    return await _synthesize_vaja9(text, speaker, settings)
+
+
+async def _synthesize_tokenmind(text: str, settings) -> ServiceResult:
+    """OpenAI-compatible /audio/speech call (ptm-tts-1)."""
+    url = f"{settings.tokenmind_base_url.rstrip('/')}/audio/speech"
+    headers = {
+        "Authorization": f"Bearer {settings.tokenmind_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": settings.tokenmind_tts_model,
+        "input": text[:_MAX_TTS_CHARS],
+        "response_format": "wav",
+    }
+    if settings.tokenmind_tts_voice:
+        payload["voice"] = settings.tokenmind_tts_voice
+
+    try:
+        verify = not settings.insecure_tls
+        async with httpx.AsyncClient(timeout=60.0, verify=verify) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            if resp.status_code >= 400:
+                logger.warning(
+                    "TokenMind TTS HTTP %s: %s", resp.status_code, resp.text[:300]
+                )
+                return ServiceResult(
+                    service="tts", ok=False, error=f"HTTP {resp.status_code}"
+                )
+
+            audio = resp.content
+            # A JSON error body can still arrive with a 200, so require real audio.
+            if not audio or audio[:4] not in (b"RIFF", b"OggS", b"fLaC", b"ID3\x03"):
+                ctype = resp.headers.get("content-type", "")
+                if "json" in ctype or not audio:
+                    logger.warning("TokenMind TTS returned non-audio (%s)", ctype)
+                    return ServiceResult(
+                        service="tts", ok=False, error="response was not audio"
+                    )
+
+            return ServiceResult(service="tts", ok=True, data=audio)
+    except httpx.TimeoutException:
+        return ServiceResult(service="tts", ok=False, error="timeout")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("TokenMind TTS call failed")
+        return ServiceResult(service="tts", ok=False, error=str(exc))
+
+
+async def _synthesize_vaja9(text: str, speaker: int, settings) -> ServiceResult:
+    """Legacy AI for Thai Vaja9 fallback."""
     url = f"{settings.aiforthai_base_url.rstrip('/')}/vaja9/synth_audiovisual"
     headers = {"Apikey": settings.aiforthai_api_key, "X-lib": "ai4thai-lib"}
 
     payload = {
-        "input_text": text[:300],
+        "input_text": text[:_MAX_TTS_CHARS],
         "speaker": speaker,
         "phrase_break": 0,
         "audiovisual": 0,
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        verify = not settings.insecure_tls
+        async with httpx.AsyncClient(timeout=30.0, verify=verify) as client:
             resp = await client.post(url, json=payload, headers=headers)
             try:
                 raw = resp.json()

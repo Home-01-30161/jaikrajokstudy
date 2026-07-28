@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import httpx
 
 from app.config import get_settings
@@ -19,20 +21,103 @@ SYSTEM_PROMPT = (
 
 PATHUMMA_TEXTQA_URL = "https://api.aiforthai.in.th/textqa/completion"
 
+# thaillm-8b is a reasoning model: it wraps its scratchpad in <think>...</think>
+# before the real answer. That must never reach a student, and an unclosed block
+# means the token budget ran out mid-thought, leaving no answer at all.
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_reasoning(text: str) -> str:
+    text = _THINK_RE.sub("", text)
+    # Unclosed <think> (hit max_tokens): nothing usable follows, so drop it.
+    if "<think>" in text.lower():
+        text = re.split(r"<think>", text, flags=re.IGNORECASE)[0]
+    return text.strip()
+
 
 async def generate_reply(user_text: str, *, emotion_hint: str | None = None) -> ServiceResult:
-    """Call Pathumma Text QA API (single-turn)."""
+    """Generate a reply, preferring the TokenMind gateway (thaillm-8b).
+
+    Falls back to the legacy AI for Thai /textqa/completion endpoint so a
+    gateway outage degrades instead of breaking the bot.
+    """
     settings = get_settings()
-    if not settings.aiforthai_api_key:
-        return ServiceResult(
-            service="pathumma",
-            ok=False,
-            error="Missing AIFORTHAI_API_KEY",
-        )
 
     prompt = user_text
     if emotion_hint:
         prompt = f"(อารมณ์โดยประมาณ: {emotion_hint})\nคำถาม/ข้อความของผู้เรียน: {user_text}"
+
+    if settings.tokenmind_api_key:
+        result = await _generate_tokenmind(prompt, settings)
+        if result.ok:
+            return result
+        logger.warning("TokenMind LLM failed (%s); falling back to textqa", result.error)
+
+    if not settings.aiforthai_api_key:
+        return ServiceResult(
+            service="pathumma",
+            ok=False,
+            error="Missing TOKENMIND_API_KEY and AIFORTHAI_API_KEY",
+        )
+    return await _generate_textqa(prompt, settings)
+
+
+async def _generate_tokenmind(prompt: str, settings) -> ServiceResult:
+    """OpenAI-compatible /chat/completions call against the TokenMind gateway."""
+    url = f"{settings.tokenmind_base_url.rstrip('/')}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings.tokenmind_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": settings.tokenmind_llm_model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        # Generous budget: the reasoning block is billed too, and a small cap
+        # truncates mid-<think> and yields an empty answer.
+        "max_tokens": 1024,
+        "temperature": 0.4,
+    }
+    try:
+        verify = not settings.insecure_tls
+        async with httpx.AsyncClient(timeout=90.0, verify=verify) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            try:
+                raw = resp.json()
+            except Exception:
+                raw = {"text": resp.text}
+
+            if resp.status_code >= 400:
+                logger.warning("TokenMind HTTP %s: %s", resp.status_code, resp.text[:300])
+                return ServiceResult(
+                    service="pathumma",
+                    ok=False,
+                    error=f"HTTP {resp.status_code}",
+                    raw=raw if isinstance(raw, dict) else {"body": str(raw)},
+                )
+
+            text = _strip_reasoning(_extract_text(raw if isinstance(raw, dict) else {}))
+            if not text:
+                return ServiceResult(
+                    service="pathumma", ok=False, error="empty reply after stripping reasoning"
+                )
+            return ServiceResult(
+                service="pathumma",
+                ok=True,
+                text=text,
+                raw=raw if isinstance(raw, dict) else {},
+            )
+    except httpx.TimeoutException:
+        return ServiceResult(service="pathumma", ok=False, error="timeout")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("TokenMind call failed")
+        return ServiceResult(service="pathumma", ok=False, error=str(exc))
+
+
+async def _generate_textqa(prompt: str, settings) -> ServiceResult:
+    """Legacy AI for Thai Text QA fallback."""
 
     headers = {
         "Apikey": settings.aiforthai_api_key,

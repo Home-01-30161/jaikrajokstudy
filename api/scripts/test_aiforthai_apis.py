@@ -42,10 +42,15 @@ async def main() -> None:
     # reports accurately on the server, where CI writes only APP_* into .env.
     from app.config import get_settings
 
-    key_set = bool(get_settings().aiforthai_api_key)
-    print(f"AIFORTHAI_API_KEY resolved by app: {key_set}")
+    settings = get_settings()
+    key_set = bool(settings.aiforthai_api_key)
+    tm_set = bool(settings.tokenmind_api_key)
+    print(f"AIFORTHAI_API_KEY resolved by app: {key_set}  (sentiment/face/OCR/TTS)")
+    print(f"TOKENMIND_API_KEY resolved by app: {tm_set}  (LLM/ASR)")
     if not key_set:
         print("  -> set APP_AIFORTHAI_API_KEY in GitLab CI/CD Variables")
+    if not tm_set:
+        print("  -> set APP_TOKENMIND_API_KEY in GitLab CI/CD Variables")
     print()
 
     # --- Pathumma ---
@@ -53,6 +58,10 @@ async def main() -> None:
     r = await pathumma.generate_reply("อธิบายสั้น ๆ ว่า photosynthesis คืออะไร")
     print("  ok:", r.ok)
     print("  text:", (r.text or r.error or "")[:400])
+    # thaillm-8b is a reasoning model; its scratchpad must never reach a user.
+    if r.ok and r.text and "<think>" in r.text.lower():
+        print("  !! reasoning block leaked into reply")
+        FAILURES.append("pathumma: <think> leaked into user-visible text")
     record("pathumma", r)
     print()
 

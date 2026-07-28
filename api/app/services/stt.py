@@ -23,14 +23,73 @@ def _scrub(text: str, secret: str) -> str:
 
 
 async def transcribe(audio_bytes: bytes) -> ServiceResult:
-    """Transcribe Thai speech audio to text using AI for Thai STT API.
+    """Transcribe Thai speech to text.
 
-    Accepts WAV audio bytes and returns the transcribed text.
+    Prefers the TokenMind gateway (ptm-asr-1); falls back to the legacy AI for
+    Thai /partii-webapi endpoint, whose quota may be zero on some keys.
     """
     settings = get_settings()
-    if not settings.aiforthai_api_key:
-        return ServiceResult(service="stt", ok=False, error="Missing AIFORTHAI_API_KEY")
 
+    if settings.tokenmind_api_key:
+        result = await _transcribe_tokenmind(audio_bytes, settings)
+        if result.ok:
+            return result
+        logger.warning("TokenMind ASR failed (%s); falling back to partii", result.error)
+
+    if not settings.aiforthai_api_key:
+        return ServiceResult(
+            service="stt", ok=False, error="Missing TOKENMIND_API_KEY and AIFORTHAI_API_KEY"
+        )
+    return await _transcribe_partii(audio_bytes, settings)
+
+
+async def _transcribe_tokenmind(audio_bytes: bytes, settings) -> ServiceResult:
+    """OpenAI-compatible /audio/transcriptions call (ptm-asr-1)."""
+    url = f"{settings.tokenmind_base_url.rstrip('/')}/audio/transcriptions"
+    headers = {"Authorization": f"Bearer {settings.tokenmind_api_key}"}
+    files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
+    try:
+        verify = not settings.insecure_tls
+        async with httpx.AsyncClient(timeout=120.0, verify=verify) as client:
+            resp = await client.post(
+                url, headers=headers, files=files, data={"model": settings.tokenmind_asr_model}
+            )
+            try:
+                raw = resp.json()
+            except Exception:
+                raw = {"text": resp.text}
+
+            if resp.status_code >= 400:
+                logger.warning(
+                    "TokenMind ASR HTTP %s: %s",
+                    resp.status_code,
+                    _scrub(resp.text[:300], settings.tokenmind_api_key),
+                )
+                return ServiceResult(
+                    service="stt",
+                    ok=False,
+                    error=f"HTTP {resp.status_code}",
+                    raw=raw if isinstance(raw, dict) else {},
+                )
+
+            text = raw.get("text") if isinstance(raw, dict) else None
+            if not (isinstance(text, str) and text.strip()):
+                return ServiceResult(service="stt", ok=False, error="empty transcript")
+            return ServiceResult(
+                service="stt",
+                ok=True,
+                text=text.strip(),
+                raw=raw if isinstance(raw, dict) else {},
+            )
+    except httpx.TimeoutException:
+        return ServiceResult(service="stt", ok=False, error="timeout")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("TokenMind ASR call failed")
+        return ServiceResult(service="stt", ok=False, error=str(exc))
+
+
+async def _transcribe_partii(audio_bytes: bytes, settings) -> ServiceResult:
+    """Legacy AI for Thai Partii fallback."""
     url = f"{settings.aiforthai_base_url.rstrip('/')}/partii-webapi"
     headers = {
         "Apikey": settings.aiforthai_api_key,
