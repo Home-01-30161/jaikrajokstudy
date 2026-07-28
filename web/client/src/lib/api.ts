@@ -62,6 +62,16 @@ export interface ExportResult {
   note: string;
 }
 
+/** Shape of GET /health. Used by the home page status panel. */
+export interface HealthResult {
+  status: string;
+  app: string;
+  team: string;
+  env: string;
+  line_configured: boolean;
+  aiforthai_key_set: boolean;
+}
+
 /** Thrown for any non-2xx response so callers can show one consistent message. */
 export class ApiError extends Error {
   status: number;
@@ -144,6 +154,8 @@ export const api = {
     request<TrendResult>(`/trend/${encodeURIComponent(userId)}`, { method: "GET" }),
 
   school: () => request<SchoolResult>("/school/overview", { method: "GET" }),
+
+  health: () => request<HealthResult>("/health", { method: "GET" }),
 
   /** PDPA: hand back everything stored for this id. */
   exportData: (userId: string) =>

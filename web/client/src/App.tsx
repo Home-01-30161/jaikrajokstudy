@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import { api, ApiError, type Mood, type SchoolResult, type TrendResult } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  type HealthResult,
+  type Mood,
+  type SchoolResult,
+  type TrendResult,
+} from "@/lib/api";
 import { useInView, useCountUp, createRipple } from "@/lib/animations";
 
 /* ================================================================
@@ -391,6 +398,7 @@ interface ChatMsg {
 function GridBg() {
   return (
     <div
+      aria-hidden="true"
       className="fixed inset-0 z-0 pointer-events-none"
       style={{
         background: `
@@ -407,6 +415,7 @@ function GridBg() {
 function HalftoneBg() {
   return (
     <div
+      aria-hidden="true"
       className="fixed inset-0 z-0 pointer-events-none opacity-[0.05]"
       style={{
         backgroundImage: `radial-gradient(circle, #1a1a1a 1px, transparent 1px)`,
@@ -419,7 +428,7 @@ function HalftoneBg() {
 function CheckerStrip() {
   const squares = Array.from({ length: 24 }, (_, i) => i);
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 h-8 flex overflow-hidden" style={{ background: "#1a1a1a" }}>
+    <div aria-hidden="true" className="fixed top-0 left-0 right-0 z-50 h-8 flex overflow-hidden" style={{ background: "#1a1a1a" }}>
       {squares.map((i) => (
         <div
           key={i}
@@ -994,19 +1003,33 @@ function AppShell() {
       <GridBg />
       <HalftoneBg />
 
+      {/* Skip link: the sidebar has five nav items before the content, which a
+          keyboard user otherwise has to tab through on every view. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-10 focus:left-4 focus:z-[70] focus:px-4 focus:py-2 focus:rounded-xl"
+        style={{ backgroundColor: "#1a1a1a", color: "#FFB5A7", fontFamily: "'Noto Sans Thai', sans-serif" }}
+      >
+        ข้ามไปเนื้อหาหลัก
+      </a>
+
       {/* Mobile hamburger button */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
         className="fixed top-9 left-3 z-[60] p-2 rounded-xl lg:hidden"
         style={{ backgroundColor: "rgba(26,26,26,0.85)", color: "#FFB5A7" }}
-        aria-label="เปิดเมนู"
+        aria-label={sidebarOpen ? "ปิดเมนู" : "เปิดเมนู"}
+        aria-expanded={sidebarOpen}
+        aria-controls="sidebar-nav"
       >
         {sidebarOpen ? <IconX size={20} /> : <IconMenu size={20} />}
       </button>
 
-      {/* Sidebar overlay for mobile */}
+      {/* Sidebar overlay for mobile. aria-hidden because the same dismissal is
+          available from the labelled close button above. */}
       {sidebarOpen && (
         <div
+          aria-hidden="true"
           className="fixed inset-0 z-40 bg-black/30 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -1033,14 +1056,15 @@ function AppShell() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-1.5">
+        <nav id="sidebar-nav" aria-label="เมนูหลัก" className="flex-1 space-y-1.5">
           {navItems.map((item) => {
             const isActive = currentView === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => navigateTo(item.id)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all duration-200"
+                aria-current={isActive ? "page" : undefined}
+                className="relative w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all duration-200 focus-ring-inset overflow-hidden"
                 style={{
                   backgroundColor: isActive ? "#FFB5A7" : "transparent",
                   color: isActive ? "#1a1a1a" : "rgba(255,255,255,0.65)",
@@ -1049,6 +1073,16 @@ function AppShell() {
                   fontSize: "14px",
                 }}
               >
+                {/* Active state is carried by background colour and weight as
+                    well as this bar, so it does not rely on colour alone. */}
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 bottom-0 w-[3px] transition-transform duration-300"
+                  style={{
+                    background: "#C41E3A",
+                    transform: isActive ? "scaleY(1)" : "scaleY(0)",
+                  }}
+                />
                 <item.Icon size={18} color={isActive ? "#1a1a1a" : "rgba(255,255,255,0.55)"} />
                 {item.label}
               </button>
@@ -1085,8 +1119,9 @@ function AppShell() {
           </div>
         </div>
 
-        {/* Content area */}
-        <div className="px-4 md:px-8 pb-8">
+        {/* Content area. main + a heading-level h1 in the sidebar gives the page
+            one landmark to jump to, which the skip link below targets. */}
+        <main id="main-content" className="px-4 md:px-8 pb-8">
           {currentView === "home" && (
             <HomeView mood={mood} setMood={setMood} age={age} trend={trend} onNavigate={navigateTo} />
           )}
@@ -1107,7 +1142,7 @@ function AppShell() {
           {currentView === "trend" && <TrendView mood={mood} trend={trend} error={dataError} />}
           {currentView === "school" && <SchoolView school={school} error={dataError} />}
           {currentView === "safety" && <SafetyView crisis={crisisRaised} />}
-        </div>
+        </main>
       </div>
     </div>
   );
@@ -1144,66 +1179,171 @@ function HomeView({ mood, setMood, age, trend, onNavigate }: {
   const msgCount = useCountUp(trend?.messages ?? 0, 800, heroInView);
   const dayCount = useCountUp(trend?.active_days ?? 0, 600, heroInView);
 
+  // The status panel used to hardcode every service as connected, which was a
+  // false claim: TTS in particular can be down while the rest works. /health
+  // reports what the container actually resolved, so read it instead.
+  const [health, setHealth] = useState<HealthResult | null>(null);
+  const [healthFailed, setHealthFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .health()
+      .then((h) => alive && setHealth(h))
+      .catch(() => alive && setHealthFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <div className="space-y-6 view-transition">
       {/* Hero greeting */}
       <div
         ref={heroRef}
-        className={`p-6 rounded-2xl relative overflow-hidden transition-all duration-700 ${heroInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
+        className={`p-7 md:p-9 rounded-[24px] relative overflow-hidden transition-all duration-700 ${heroInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
         style={{
-          background: "linear-gradient(135deg, #2D6A6F 0%, #3a8a90 50%, #2D6A6F 100%)",
-          border: "none",
+          background: "linear-gradient(135deg, #1f4d51 0%, #2D6A6F 45%, #3a8a90 100%)",
+          boxShadow: "var(--shadow-lg)",
         }}
       >
-        <div className="absolute inset-0 opacity-10"
+        {/* Decorative layers: a dot field plus two soft light pools that give the
+            flat gradient some depth without adding a raster asset. */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-10"
           style={{
             backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)",
             backgroundSize: "16px 16px",
-          }} />
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -top-24 -right-16 w-72 h-72 rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(255,181,167,0.32), transparent 68%)" }}
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -bottom-28 -left-10 w-64 h-64 rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.16), transparent 70%)" }}
+        />
+
         <div className="relative z-10">
-          <p className="text-sm font-medium mb-1" style={{ color: "rgba(255,255,255,0.7)", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+          <p
+            className="text-[11px] font-bold uppercase tracking-[0.18em] mb-3"
+            style={{ color: "rgba(255,181,167,0.95)", fontFamily: "'Space Mono', monospace" }}
+          >
             {greeting}
           </p>
-          <h2 className="text-2xl md:text-3xl font-black mb-2" style={{ fontFamily: "'Playfair Display', serif", color: "#fff" }}>
+          <h2
+            className="text-3xl md:text-[2.75rem] font-black leading-[1.1] mb-3"
+            style={{ fontFamily: "'Playfair Display', serif", color: "#fff" }}
+          >
             กระจกสะท้อนใจ
           </h2>
-          <p className="text-sm" style={{ color: "rgba(255,255,255,0.8)", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-            พื้นที่ปลอดภัยที่เข้าใจอารมณ์ของคุณ
+          <p
+            className="text-sm md:text-base max-w-md leading-relaxed"
+            style={{ color: "rgba(255,255,255,0.82)", fontFamily: "'Noto Sans Thai', sans-serif" }}
+          >
+            พื้นที่ปลอดภัยที่รับฟังและเข้าใจอารมณ์ของคุณ ไม่ตัดสิน ไม่บันทึกข้อความ
           </p>
-          <div className="mt-4 flex items-center gap-3">
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
             <MoodBadge mood={mood} animate={heroInView} />
-            <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "'Space Mono', monospace" }}>
-              {msgCount} ข้อความ - {dayCount} วันใช้งาน
-            </span>
+            {[
+              { value: msgCount, unit: "ข้อความ" },
+              { value: dayCount, unit: "วันใช้งาน" },
+            ].map((s) => (
+              <div
+                key={s.unit}
+                className="px-3.5 py-2 rounded-xl flex items-baseline gap-1.5"
+                style={{
+                  background: "rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                }}
+              >
+                <span
+                  className="text-lg font-black leading-none"
+                  style={{ color: "#fff", fontFamily: "'Space Mono', monospace" }}
+                >
+                  {s.value}
+                </span>
+                <span
+                  className="text-[11px]"
+                  style={{ color: "rgba(255,255,255,0.7)", fontFamily: "'Noto Sans Thai', sans-serif" }}
+                >
+                  {s.unit}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Mood picker */}
-      <div>
-        <h3 className="text-lg font-bold mb-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-          วันนี้รู้สึกยังไง?
-        </h3>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 stagger-children">
-          {moods.map(([key, m]) => (
-            <button
-              key={key}
-              onClick={() => setMood(key)}
-              className="p-3 rounded-xl transition-all duration-200 active:scale-[0.95] hover-lift text-center"
-              style={{
-                backgroundColor: mood === key ? m.bgColor : "rgba(255,255,255,0.8)",
-                border: mood === key ? `2px solid ${m.color}` : "2px solid #e0d8cc",
-                fontFamily: "'Noto Sans Thai', sans-serif",
-              }}
-            >
-              <span className="text-lg font-mono font-bold block mb-1" style={{ color: m.color }}>{m.icon}</span>
-              <span className="text-xs font-semibold" style={{ color: mood === key ? m.color : "#666" }}>
-                {m.label}
-              </span>
-            </button>
-          ))}
+      {/* Mood picker. radiogroup rather than plain buttons: exactly one value is
+          selected at a time, so screen readers should announce it that way. */}
+      <section>
+        <div className="flex items-baseline justify-between mb-3">
+          <h3
+            className="text-lg font-bold"
+            style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
+          >
+            วันนี้รู้สึกยังไง?
+          </h3>
+          <span
+            className="text-[11px]"
+            style={{ fontFamily: "'Space Mono', monospace", color: "#a09585" }}
+          >
+            เลือกได้ 1 อย่าง
+          </span>
         </div>
-      </div>
+        <div
+          role="radiogroup"
+          aria-label="เลือกอารมณ์ของวันนี้"
+          className="grid grid-cols-3 md:grid-cols-6 gap-3 stagger-children"
+        >
+          {moods.map(([key, m]) => {
+            const active = mood === key;
+            return (
+              <button
+                key={key}
+                role="radio"
+                aria-checked={active}
+                onClick={() => setMood(key)}
+                className="relative p-3.5 rounded-2xl transition-all duration-200 active:scale-[0.95] text-center overflow-hidden"
+                style={{
+                  backgroundColor: active ? m.bgColor : "#fff",
+                  border: active ? `2px solid ${m.color}` : "1.5px solid var(--rule)",
+                  boxShadow: active ? `0 6px 18px ${m.bgColor}` : "var(--shadow-sm)",
+                  transform: active ? "translateY(-2px)" : undefined,
+                  fontFamily: "'Noto Sans Thai', sans-serif",
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="text-lg font-mono font-bold block mb-1"
+                  style={{ color: m.color }}
+                >
+                  {m.icon}
+                </span>
+                <span
+                  className="text-xs font-semibold"
+                  style={{ color: active ? m.color : "#666" }}
+                >
+                  {m.label}
+                </span>
+                {active && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-0 right-0 bottom-0 h-[3px]"
+                    style={{ backgroundColor: m.color }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Quick actions */}
       <div
@@ -1214,20 +1354,38 @@ function HomeView({ mood, setMood, age, trend, onNavigate }: {
           <button
             key={action.label}
             onClick={(e) => { createRipple(e); onNavigate(action.view); }}
-            className="glass-card p-5 text-left hover-lift transition-all duration-200 active:scale-[0.98]"
+            className="surface surface-interactive accent-rule group p-5 pl-6 text-left transition-all duration-200 active:scale-[0.98]"
             style={{ transitionDelay: `${idx * 0.08}s` }}
           >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${action.color}15` }}>
+            <div className="flex items-center gap-3 mb-2.5">
+              <div
+                className="w-11 h-11 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                style={{ backgroundColor: `${action.color}14` }}
+              >
                 <action.Icon size={20} color={action.color} />
               </div>
-              <p className="font-bold text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+              <p
+                className="font-bold text-sm"
+                style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
+              >
                 {action.label}
               </p>
             </div>
-            <p className="text-xs" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
+            <p
+              className="text-xs leading-relaxed"
+              style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}
+            >
               {action.desc}
             </p>
+            <span
+              className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold transition-transform duration-300 group-hover:translate-x-1"
+              style={{ color: action.color, fontFamily: "'Space Mono', monospace" }}
+            >
+              เปิด
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke={action.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
           </button>
         ))}
       </div>
@@ -1237,41 +1395,78 @@ function HomeView({ mood, setMood, age, trend, onNavigate }: {
         ref={tipsRef}
         className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-all duration-500 delay-100 ${tipsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}
       >
-        <div className="glass-card p-5">
+        <div className="surface accent-rule p-5 pl-6">
           <div className="flex items-center gap-2 mb-3">
             <IconHeart size={16} color="#C41E3A" />
             <p className="text-xs font-bold" style={{ color: "#C41E3A", fontFamily: "'Space Mono', monospace" }}>
               เคล็ดลับวันนี้
             </p>
           </div>
-          <p className="text-sm leading-relaxed" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#444" }}>
+          <p
+            className="text-sm leading-relaxed"
+            style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#444" }}
+          >
             {todayTip}
           </p>
         </div>
 
-        <div className="glass-card p-5">
+        <div className="surface p-5">
           <div className="flex items-center gap-2 mb-3">
             <IconActivity size={16} color="#2D6A6F" />
             <p className="text-xs font-bold" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
               สถานะระบบ
             </p>
           </div>
-          <div className="space-y-2">
-            {[
-              { name: "Pathumma LLM", ok: true },
-              { name: "Sentiment API", ok: true },
-              { name: "Face Detection", ok: true },
-              { name: "Text-to-Speech", ok: true },
-            ].map((s) => (
-              <div key={s.name} className="flex items-center justify-between">
-                <span className="text-xs" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>{s.name}</span>
-                <span className="text-xs font-bold flex items-center gap-1" style={{ color: s.ok ? "#2D8F5C" : "#C41E3A" }}>
-                  <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: s.ok ? "#2D8F5C" : "#C41E3A" }} />
-                  {s.ok ? "เชื่อมต่อ" : "ขัดข้อง"}
-                </span>
-              </div>
-            ))}
-          </div>
+
+          {!health && !healthFailed && (
+            <div className="space-y-2.5" aria-hidden="true">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="skeleton h-4" style={{ width: `${88 - i * 12}%` }} />
+              ))}
+            </div>
+          )}
+
+          {healthFailed && (
+            <p className="text-xs" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#a09585" }}>
+              ตรวจสอบสถานะไม่สำเร็จ ลองรีเฟรชหน้านี้อีกครั้ง
+            </p>
+          )}
+
+          {health && (
+            <div className="space-y-2">
+              {[
+                { name: "เซิร์ฟเวอร์", ok: health.status === "ok" },
+                { name: "AI for Thai", ok: health.aiforthai_key_set },
+                { name: "LINE", ok: health.line_configured },
+              ].map((s) => (
+                <div key={s.name} className="flex items-center justify-between">
+                  <span
+                    className="text-xs"
+                    style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}
+                  >
+                    {s.name}
+                  </span>
+                  <span
+                    className="text-xs font-bold flex items-center gap-1.5"
+                    style={{ color: s.ok ? "#2D8F5C" : "#C41E3A" }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="w-2 h-2 rounded-full inline-block"
+                      style={{ backgroundColor: s.ok ? "#2D8F5C" : "#C41E3A" }}
+                    />
+                    {s.ok ? "พร้อมใช้งาน" : "ยังไม่พร้อม"}
+                  </span>
+                </div>
+              ))}
+              <p
+                className="text-[10px] pt-1.5"
+                style={{ fontFamily: "'Space Mono', monospace", color: "#b5aa9a" }}
+              >
+                {health.team} / {health.env}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1341,29 +1536,37 @@ function ChatView({
         </div>
       )}
 
-      {/* Mode tabs */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {modes.map((m) => (
-          <button
-            key={m.mode}
-            onClick={() => setChatMode(m.mode)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.97]"
-            style={{
-              backgroundColor: chatMode === m.mode ? "#2D6A6F" : "rgba(255,255,255,0.8)",
-              color: chatMode === m.mode ? "#fff" : "#666",
-              border: chatMode === m.mode ? "none" : "1.5px solid #e0d8cc",
-              fontFamily: "'Noto Sans Thai', sans-serif",
-            }}
-          >
-            <m.Icon size={14} color={chatMode === m.mode ? "#fff" : "#888"} />
-            {m.label}
-          </button>
-        ))}
+      {/* Mode tabs. Sizing is fixed per state so switching modes does not reflow
+          the row: the active pill only changes colour, never width. */}
+      <div className="flex gap-2 mb-4 flex-wrap" role="group" aria-label="เลือกวิธีคุย">
+        {modes.map((m) => {
+          const active = chatMode === m.mode;
+          return (
+            <button
+              key={m.mode}
+              onClick={() => setChatMode(m.mode)}
+              aria-pressed={active}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97]"
+              style={{
+                backgroundColor: active ? "#2D6A6F" : "#fff",
+                color: active ? "#fff" : "#666",
+                border: active ? "1.5px solid #2D6A6F" : "1.5px solid var(--rule)",
+                boxShadow: active ? "0 4px 14px rgba(45,106,111,0.25)" : "var(--shadow-sm)",
+                fontFamily: "'Noto Sans Thai', sans-serif",
+              }}
+            >
+              <m.Icon size={14} color={active ? "#fff" : "#888"} />
+              {m.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Chat body */}
       <div
         ref={chatBodyRef}
+        role="log"
+        aria-label="บทสนทนา"
         className="flex-1 overflow-y-auto space-y-3 pr-2 pb-4"
         style={{ scrollbarWidth: "thin" }}
       >
@@ -1371,11 +1574,18 @@ function ChatView({
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} msg-enter`} style={{ animationDelay: `${Math.max(0, i - messages.length + 3) * 0.05}s` }}>
             <div className="max-w-[80%] md:max-w-[70%]">
               <div
-                className="px-4 py-3 rounded-2xl text-sm leading-relaxed"
+                className="px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words"
                 style={{
-                  backgroundColor: msg.role === "user" ? "#2D6A6F" : "rgba(255,255,255,0.95)",
+                  background:
+                    msg.role === "user"
+                      ? "linear-gradient(135deg, #2D6A6F, #256064)"
+                      : "#fff",
                   color: msg.role === "user" ? "#fff" : "#1a1a1a",
-                  border: msg.role === "bot" ? "1.5px solid #e0d8cc" : "none",
+                  border: msg.role === "bot" ? "1.5px solid var(--rule)" : "none",
+                  boxShadow:
+                    msg.role === "user"
+                      ? "0 4px 14px rgba(45,106,111,0.22)"
+                      : "var(--shadow-sm)",
                   fontFamily: "'Noto Sans Thai', sans-serif",
                   borderBottomRightRadius: msg.role === "user" ? "6px" : "20px",
                   borderBottomLeftRadius: msg.role === "bot" ? "6px" : "20px",
@@ -1401,6 +1611,7 @@ function ChatView({
                     onClick={() => playTTS(msg.text)}
                     className="opacity-40 hover:opacity-80 transition-opacity"
                     title="อ่านออกเสียง"
+                    aria-label="อ่านข้อความนี้ออกเสียง"
                   >
                     <IconVolume size={12} color="#2D6A6F" />
                   </button>
@@ -1409,17 +1620,32 @@ function ChatView({
             </div>
           </div>
         ))}
+        {/* Pending reply. role=status announces it once to screen readers; the
+            dots themselves are decorative and stay hidden from the tree. */}
         {isAnalyzing && (
-          <div className="flex justify-start animate-fade-in">
+          <div className="flex justify-start animate-fade-in" role="status" aria-live="polite">
+            <span className="sr-only">กระจกกำลังคิดคำตอบ</span>
             <div
-              className="px-5 py-3 rounded-2xl"
-              style={{ backgroundColor: "rgba(255,255,255,0.95)", border: "1.5px solid #e0d8cc" }}
+              className="px-5 py-3.5 rounded-2xl flex items-center gap-2.5"
+              style={{
+                backgroundColor: "#fff",
+                border: "1.5px solid var(--rule)",
+                borderBottomLeftRadius: "6px",
+                boxShadow: "var(--shadow-sm)",
+              }}
             >
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5" aria-hidden="true">
                 <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "0ms" }} />
                 <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "150ms" }} />
                 <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "300ms" }} />
               </div>
+              <span
+                aria-hidden="true"
+                className="text-[11px]"
+                style={{ color: "#9d9384", fontFamily: "'Space Mono', monospace" }}
+              >
+                กำลังคิด
+              </span>
             </div>
           </div>
         )}
@@ -1477,18 +1703,22 @@ function ChatView({
         </div>
       )}
 
-      {/* Input area */}
-      <div className="flex gap-3 pt-3 border-t" style={{ borderColor: "#e0d8cc" }}>
+      {/* Input area. outline-none is safe here because index.css restores a
+          :focus-visible ring globally; without that this control had no keyboard
+          focus indicator at all. */}
+      <div className="flex gap-3 pt-3 border-t" style={{ borderColor: "var(--rule)" }}>
         <input
           type="text"
           placeholder="พิมพ์ข้อความที่นี่..."
+          aria-label="ข้อความที่จะส่ง"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          className="flex-1 px-5 py-3 rounded-2xl outline-none text-sm"
+          className="flex-1 px-5 py-3 rounded-2xl outline-none text-sm transition-shadow duration-200"
           style={{
-            backgroundColor: "rgba(255,255,255,0.9)",
-            border: "1.5px solid #e0d8cc",
+            backgroundColor: "#fff",
+            border: "1.5px solid var(--rule)",
+            boxShadow: "var(--shadow-sm)",
             fontFamily: "'Noto Sans Thai', sans-serif",
             color: "#1a1a1a",
           }}
@@ -1558,7 +1788,7 @@ function TrendView({ mood, trend, error }: { mood: string; trend: TrendResult | 
       )}
 
       {/* Weekly chart */}
-      <div ref={chartRef} className={`glass-card p-6 transition-all duration-600 ${chartInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+      <div ref={chartRef} className={`surface p-6 transition-all duration-600 ${chartInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
         <p className="text-xs font-bold mb-4 flex items-center gap-2" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
           <IconTrend size={14} color="#2D6A6F" />
           สภาวะอารมณ์ 7 วันล่าสุด
@@ -1574,40 +1804,56 @@ function TrendView({ mood, trend, error }: { mood: string; trend: TrendResult | 
             </p>
           </div>
         )}
-        <div className="flex items-end gap-2 md:gap-3 h-44">
+        {/* Bars carry their value in colour and height only, so each one also
+            gets a text label in the accessibility tree. Previously the value
+            lived in a title attribute, which keyboard and screen reader users
+            never receive (WCAG 1.1.1 / 1.4.1). */}
+        <ul className="flex items-end gap-2 md:gap-3 h-44 list-none m-0 p-0">
           {weekData.map((d, i) => {
             const m = d.mood ? MOOD[d.mood] : null;
             const h = d.mood ? (MOOD_HEIGHT[d.mood] ?? 65) : 5;
             return (
-              <div key={d.date} className="flex-1 flex flex-col items-center gap-2">
+              <li key={d.date} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+                <span className="sr-only">
+                  {d.date}: {m ? m.label : "ไม่มีข้อมูล"}
+                </span>
                 {m && (
-                  <span className="text-[10px] font-semibold" style={{ color: m.color, fontFamily: "'Noto Sans Thai', sans-serif" }}>
+                  <span
+                    aria-hidden="true"
+                    className="text-[10px] font-semibold"
+                    style={{ color: m.color, fontFamily: "'Noto Sans Thai', sans-serif" }}
+                  >
                     {m.label}
                   </span>
                 )}
                 <div
-                  className="w-full rounded-t-lg animate-bar-grow"
+                  aria-hidden="true"
+                  className="w-full rounded-t-xl animate-bar-grow relative overflow-hidden"
                   style={{
                     height: `${h}%`,
-                    backgroundColor: m ? m.color : "#ece7de",
-                    opacity: m ? 0.7 : 0.3,
+                    background: m
+                      ? `linear-gradient(180deg, ${m.color}, ${m.color}99)`
+                      : "repeating-linear-gradient(45deg, #ece7de, #ece7de 4px, #f6f2ea 4px, #f6f2ea 8px)",
                     animationDelay: `${i * 0.08}s`,
                   }}
-                  title={m ? `${d.date}: ${m.label}` : `${d.date}: ไม่มีข้อมูล`}
                 />
-                <span className="text-xs font-semibold" style={{ color: "#666", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+                <span
+                  aria-hidden="true"
+                  className="text-xs font-semibold"
+                  style={{ color: "#666", fontFamily: "'Noto Sans Thai', sans-serif" }}
+                >
                   {d.day}
                 </span>
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
 
         {/* Mood legend */}
-        <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t" style={{ borderColor: "#e0d8cc" }}>
+        <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t" style={{ borderColor: "var(--rule)" }}>
           {Object.entries(MOOD).map(([key, m]) => (
             <div key={key} className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: m.color, opacity: 0.7 }} />
+              <span aria-hidden="true" className="w-3 h-3 rounded-sm" style={{ backgroundColor: m.color }} />
               <span className="text-[10px]" style={{ color: "#888", fontFamily: "'Noto Sans Thai', sans-serif" }}>{m.label}</span>
             </div>
           ))}
@@ -1621,7 +1867,7 @@ function TrendView({ mood, trend, error }: { mood: string; trend: TrendResult | 
           { label: "แชททั้งหมด", value: `${totalMessages} ข้อความ`, Icon: IconMessages, color: "#8b7355" },
           { label: "สภาวะหลัก", value: dm.label, Icon: IconHeart, color: dm.color },
         ].map((stat, i) => (
-          <div key={i} className="glass-card p-4 text-center hover-lift">
+          <div key={i} className="surface surface-interactive p-4 text-center">
             <div className="w-8 h-8 rounded-lg mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: `${stat.color}10` }}>
               <stat.Icon size={16} color={stat.color} />
             </div>
@@ -1637,7 +1883,7 @@ function TrendView({ mood, trend, error }: { mood: string; trend: TrendResult | 
 
       {/* Weekly summary */}
       {hasData && (
-        <div className="glass-card p-5">
+        <div className="surface p-5">
           <p className="text-sm font-bold mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
             สรุปสัปดาห์นี้
           </p>
@@ -1694,7 +1940,7 @@ function SchoolView({ school, error }: { school: SchoolResult | null; error: str
           { label: "การวิเคราะห์ทั้งหมด", value: `${readingCount} ครั้ง`, Icon: IconMessages, color: "#2D6A6F" },
           { label: "ใช้แชทเป็นประจำ", value: pct(school?.regular_ratio ?? 0), Icon: IconHeart, color: "#2D8F5C" },
         ].map((stat, i) => (
-          <div key={i} className="glass-card p-5 hover-lift">
+          <div key={i} className="surface surface-interactive p-5">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${stat.color}10` }}>
                 <stat.Icon size={16} color={stat.color} />
@@ -1712,7 +1958,7 @@ function SchoolView({ school, error }: { school: SchoolResult | null; error: str
 
       {/* Mood distribution bars */}
       {total > 0 && (
-        <div ref={distRef} className={`glass-card p-5 transition-all duration-500 delay-100 ${distInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+        <div ref={distRef} className={`surface p-5 transition-all duration-500 delay-100 ${distInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
           <p className="text-sm font-bold mb-4" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
             การกระจายตัวของสภาวะอารมณ์
           </p>
@@ -1730,10 +1976,13 @@ function SchoolView({ school, error }: { school: SchoolResult | null; error: str
                       {count} ({Math.round(ratio)}%)
                     </span>
                   </div>
-                  <div className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: "#f0ebe3" }}>
+                  <div aria-hidden="true" className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: "#f0ebe3" }}>
                     <div
                       className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${ratio}%`, backgroundColor: m.color, opacity: 0.65 }}
+                      style={{
+                        width: distInView ? `${ratio}%` : "0%",
+                        background: `linear-gradient(90deg, ${m.color}, ${m.color}bb)`,
+                      }}
                     />
                   </div>
                 </div>
@@ -1743,8 +1992,22 @@ function SchoolView({ school, error }: { school: SchoolResult | null; error: str
         </div>
       )}
 
+      {/* Empty state. Without this the page just ended after the zeroed stat
+          cards, which reads as a loading failure rather than "no data yet". */}
+      {total === 0 && !error && (
+        <div className="surface p-8 text-center">
+          <IconSchool size={28} color="#ccc" />
+          <p className="text-sm mt-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
+            ยังไม่มีข้อมูลรวมของโรงเรียน
+          </p>
+          <p className="text-xs mt-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#aaa" }}>
+            เมื่อมีนักเรียนเริ่มใช้งาน สถิติแบบไม่ระบุตัวตนจะแสดงที่นี่
+          </p>
+        </div>
+      )}
+
       {/* School image */}
-      <div className="rounded-2xl overflow-hidden" style={{ border: "1.5px solid #e0d8cc" }}>
+      <div aria-hidden="true" className="rounded-2xl overflow-hidden" style={{ border: "1.5px solid var(--rule)" }}>
         <img src={IMG.schoolBuilding} alt="" className="w-full h-40 object-cover opacity-60" />
       </div>
 
@@ -1762,8 +2025,16 @@ function SchoolView({ school, error }: { school: SchoolResult | null; error: str
 /* ================================================================
    SAFETY VIEW
    ================================================================ */
+const NOTIFY_KEY = "jaikrajok_line_notify";
+
 function SafetyView({ crisis }: { crisis: boolean }) {
-  const [lineNotify, setLineNotify] = useState(false);
+  const [lineNotify, setLineNotify] = useState(() => {
+    try {
+      return localStorage.getItem(NOTIFY_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [busy, setBusy] = useState(false);
   const userId = getUserId();
   const [cardsRef, cardsInView] = useInView<HTMLDivElement>();
@@ -1789,7 +2060,7 @@ function SafetyView({ crisis }: { crisis: boolean }) {
   };
 
   const deleteData = async () => {
-    if (!window.confirm("ลบประวัติอารมณ์และการสนทนาทั้งหมดของคุณ? การกระทำนี้ย้อนกลับไม่ได้")) return;
+    if (!window.confirm("ลบประวัติอารมณ์และสถิติการใช้งานทั้งหมดของคุณ? การกระทำนี้ย้อนกลับไม่ได้")) return;
     setBusy(true);
     try {
       await api.deleteData(userId);
@@ -1804,7 +2075,9 @@ function SafetyView({ crisis }: { crisis: boolean }) {
   const privacyItems = [
     {
       title: "ความโปร่งใส",
-      desc: "ภาพและเสียงถูกส่งไปวิเคราะห์ที่ AI for Thai / Pathumma ผ่าน HTTPS แล้วทิ้งทันที ไม่มีการเก็บไฟล์ไว้บนเซิร์ฟเวอร์ ส่วนที่บันทึกไว้คือผลอารมณ์และข้อความสนทนาเท่านั้น",
+      // Matches what the store actually writes: mood_events plus message_counts.
+      // The previous copy claimed chat text was saved, which it never is.
+      desc: "ภาพ เสียง และข้อความถูกส่งไปวิเคราะห์ที่ AI for Thai / Pathumma ผ่าน HTTPS แล้วทิ้งทันที ไม่มีการเก็บไฟล์หรือเนื้อหาข้อความไว้บนเซิร์ฟเวอร์ ส่วนที่บันทึกไว้คือผลอารมณ์และจำนวนครั้งที่ใช้งานเท่านั้น",
       Icon: IconEye,
       color: "#2D6A6F",
     },
@@ -1867,7 +2140,7 @@ function SafetyView({ crisis }: { crisis: boolean }) {
 
       {/* Helpline card (always visible) */}
       {!crisis && (
-        <div className="glass-card p-5">
+        <div className="surface p-5">
           <div className="flex items-center gap-2 mb-2">
             <IconPhone size={16} color="#2D6A6F" />
             <p className="font-bold text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#2D6A6F" }}>
@@ -1893,7 +2166,7 @@ function SafetyView({ crisis }: { crisis: boolean }) {
         {privacyItems.map((item, i) => (
           <div
             key={i}
-            className="glass-card p-5 hover-lift"
+            className="surface surface-interactive p-5"
             style={{ transitionDelay: `${i * 0.08}s` }}
           >
             <div className="flex items-center gap-3 mb-2">
@@ -1912,7 +2185,7 @@ function SafetyView({ crisis }: { crisis: boolean }) {
       </div>
 
       {/* LINE Notify toggle */}
-      <div className="glass-card p-5 flex items-center justify-between">
+      <div className="surface p-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "rgba(45,106,111,0.08)" }}>
             <IconBell size={18} color="#2D6A6F" />
@@ -1922,19 +2195,31 @@ function SafetyView({ crisis }: { crisis: boolean }) {
               การแจ้งเตือนผ่าน LINE
             </p>
             <p className="text-xs mt-0.5" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-              รับการแจ้งเตือนเมื่อกระจกตรวจพบความกังวล
+              บันทึกไว้บนอุปกรณ์นี้เท่านั้น ต้องเพิ่มบอทใน LINE ก่อนจึงจะได้รับแจ้งเตือน
             </p>
           </div>
         </div>
         <button
+          role="switch"
+          aria-checked={lineNotify}
+          aria-label="การแจ้งเตือนผ่าน LINE"
           onClick={() => {
-            setLineNotify(!lineNotify);
-            toast(lineNotify ? "ปิดการแจ้งเตือนผ่าน LINE แล้ว" : "เปิดการแจ้งเตือนผ่าน LINE แล้ว");
+            const next = !lineNotify;
+            setLineNotify(next);
+            // No server-side preference exists yet, so the choice is kept on the
+            // device. Without this it silently reset on every reload.
+            try {
+              localStorage.setItem(NOTIFY_KEY, next ? "1" : "0");
+            } catch {
+              /* private mode: the toggle still works for this session */
+            }
+            toast(next ? "เปิดการแจ้งเตือนผ่าน LINE แล้ว" : "ปิดการแจ้งเตือนผ่าน LINE แล้ว");
           }}
           className="w-12 h-6 rounded-full transition-all duration-300 relative flex-shrink-0"
           style={{ backgroundColor: lineNotify ? "#2D6A6F" : "#ccc" }}
         >
           <div
+            aria-hidden="true"
             className="w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all duration-300 shadow-sm"
             style={{ left: lineNotify ? "26px" : "2px" }}
           />
@@ -1946,25 +2231,29 @@ function SafetyView({ crisis }: { crisis: boolean }) {
         <button
           onClick={exportData}
           disabled={busy}
-          className="w-full py-3 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2"
+          aria-busy={busy}
+          className="w-full py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2"
           style={{
-            backgroundColor: "rgba(255,255,255,0.85)",
-            border: "1.5px solid #e0d8cc",
+            backgroundColor: "#fff",
+            border: "1.5px solid var(--rule)",
+            boxShadow: "var(--shadow-sm)",
             color: "#2D6A6F",
             fontFamily: "'Noto Sans Thai', sans-serif",
           }}
         >
           <IconDownload size={16} />
-          ส่งออกข้อมูลทั้งหมดของฉัน
+          {busy ? "กำลังดำเนินการ..." : "ส่งออกข้อมูลทั้งหมดของฉัน"}
         </button>
 
         <button
           onClick={deleteData}
           disabled={busy}
-          className="w-full py-3 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2"
+          aria-busy={busy}
+          className="w-full py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2"
           style={{
-            backgroundColor: "rgba(255,255,255,0.85)",
+            backgroundColor: "#fff",
             border: "1.5px solid #C41E3A",
+            boxShadow: "var(--shadow-sm)",
             color: "#C41E3A",
             fontFamily: "'Noto Sans Thai', sans-serif",
           }}
