@@ -73,6 +73,16 @@ class Settings(BaseSettings):
         default="ptm-tts-1",
         validation_alias=AliasChoices("TOKENMIND_TTS_MODEL", "APP_TOKENMIND_TTS_MODEL"),
     )
+    # Off by default: ptm-tts-1 returns HTTP 500 for every request, including
+    # ones with the required `input` field omitted, so the fault is upstream of
+    # request validation. Trying it first only adds latency, so TTS goes
+    # straight to Vaja9. Flip this to 1 once the gateway serves audio.
+    tokenmind_tts_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "TOKENMIND_TTS_ENABLED", "APP_TOKENMIND_TTS_ENABLED"
+        ),
+    )
     # Left empty by default: the gateway exposes no /v1/voices route, so no
     # valid voice id is known. Set it once the organizers publish one.
     tokenmind_tts_voice: str = Field(

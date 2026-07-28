@@ -1,4 +1,4 @@
-﻿"""Text-to-Speech client: TokenMind ptm-tts-1 with AI for Thai Vaja9 fallback."""
+﻿"""Text-to-Speech client: AI for Thai Vaja9, with optional TokenMind ptm-tts-1."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ _MAX_TTS_CHARS = 300
 async def synthesize(text: str, *, speaker: int = 0) -> ServiceResult:
     """Convert Thai text to speech.
 
-    Prefers the TokenMind gateway (ptm-tts-1) and falls back to AI for Thai
-    Vaja9. The fallback is not decorative: as of the last check ptm-tts-1
-    returned HTTP 500 for every voice and response_format tried, so Vaja9 is
-    what actually produces audio today.
+    Uses AI for Thai Vaja9. The TokenMind gateway also lists ptm-tts-1, but it
+    answers HTTP 500 for every request, so it is tried first only when
+    TOKENMIND_TTS_ENABLED is set; otherwise it would add a guaranteed-failing
+    round-trip to each reply.
 
     Args:
         text: Thai text to synthesize (max 300 chars per request).
@@ -32,7 +32,7 @@ async def synthesize(text: str, *, speaker: int = 0) -> ServiceResult:
     if not text.strip():
         return ServiceResult(service="tts", ok=False, error="Empty text")
 
-    if settings.tokenmind_api_key:
+    if settings.tokenmind_tts_enabled and settings.tokenmind_api_key:
         result = await _synthesize_tokenmind(text, settings)
         if result.ok:
             return result
@@ -40,7 +40,7 @@ async def synthesize(text: str, *, speaker: int = 0) -> ServiceResult:
 
     if not settings.aiforthai_api_key:
         return ServiceResult(
-            service="tts", ok=False, error="Missing TOKENMIND_API_KEY and AIFORTHAI_API_KEY"
+            service="tts", ok=False, error="Missing AIFORTHAI_API_KEY"
         )
     return await _synthesize_vaja9(text, speaker, settings)
 
