@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import ssl
 
@@ -46,8 +47,15 @@ if get_settings().insecure_tls:
     aiohttp.TCPConnector.__init__ = _patched_tcp_connector_init
 
 
+_LOADING_SECONDS = 60
+
+
 async def _show_loading(user_id: str, token: str) -> None:
-    """Show typing indicator in LINE chat."""
+    """Show the typing indicator in a 1:1 LINE chat.
+
+    Never raises: the indicator is cosmetic, so a failure here must not cost the
+    user their reply.
+    """
     try:
         verify = not get_settings().insecure_tls
         async with httpx.AsyncClient(verify=verify, timeout=10.0) as client:
@@ -57,9 +65,14 @@ async def _show_loading(user_id: str, token: str) -> None:
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
                 },
-                json={"chatId": user_id, "loadingSeconds": 60},
+                json={"chatId": user_id, "loadingSeconds": _LOADING_SECONDS},
             )
-            if resp.status_code != 202:
+            if resp.status_code == 202:
+                # Logged at info so the container log can distinguish "we never
+                # asked" from "LINE accepted it but the user saw nothing", which
+                # happens when the chat screen is not open (LINE drops it).
+                logger.info("Loading animation accepted by LINE (202)")
+            else:
                 logger.warning(
                     "Loading animation returned %s: %s",
                     resp.status_code, resp.text[:200],
@@ -111,12 +124,24 @@ async def line_webhook(
                 event.message, TextMessageContent
             ):
                 user_id = event.source.user_id if event.source else "unknown"
+                source_type = getattr(event.source, "type", None) if event.source else None
 
-                # Show typing indicator while processing
-                if user_id and user_id != "unknown":
-                    await _show_loading(user_id, settings.line_channel_access_token)
-
-                reply = await handle_text(user_id or "unknown", event.message.text)
+                # The loading indicator only exists for 1:1 chats, so group and
+                # room events skip it. It runs alongside handle_text rather than
+                # before it: awaiting it first would add its round-trip to every
+                # reply, and the LLM leg already takes seconds.
+                show_loading = (
+                    user_id
+                    and user_id != "unknown"
+                    and source_type not in ("group", "room")
+                )
+                if show_loading:
+                    reply, _ = await asyncio.gather(
+                        handle_text(user_id, event.message.text),
+                        _show_loading(user_id, settings.line_channel_access_token),
+                    )
+                else:
+                    reply = await handle_text(user_id or "unknown", event.message.text)
                 await api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
