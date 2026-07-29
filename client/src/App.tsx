@@ -1034,12 +1034,12 @@ function AppShell() {
                   onClick={() => setCurrentView(item.id)}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all duration-200"
                   style={{
-                    backgroundColor: currentView === item.id ? "#FFB5A7" : "transparent",
-                    color: currentView === item.id ? "#1a1a1a" : "rgba(255,255,255,0.7)",
+                    backgroundColor: currentView === item.id ? "#FFB5A7" : "rgba(255,255,255,0.08)",
+                    color: currentView === item.id ? "#1a1a1a" : "rgba(255,255,255,0.9)",
                     fontFamily: "'Noto Sans Thai', sans-serif",
-                    fontWeight: currentView === item.id ? 700 : 400,
+                    fontWeight: currentView === item.id ? 700 : 500,
                     fontSize: "14px",
-                    border: currentView === item.id ? "none" : "1px solid rgba(255,255,255,0.07)",
+                    border: currentView === item.id ? "none" : "1px solid rgba(255,255,255,0.2)",
                   }}
                 >
                   <div className="w-7 h-7 rounded-xl overflow-hidden flex-shrink-0">
@@ -1047,7 +1047,7 @@ function AppShell() {
                       src={item.img}
                       alt=""
                       className="w-full h-full object-cover"
-                      style={{ filter: currentView === item.id ? "none" : "grayscale(1) brightness(0.7)" }}
+                      style={{ filter: currentView === item.id ? "none" : "grayscale(0.5) brightness(0.9)" }}
                     />
                   </div>
                   {item.label}
@@ -1056,8 +1056,8 @@ function AppShell() {
             </nav>
 
             <div className="mt-auto px-1">
-              <div className="p-3 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
-                <p className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.45)", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+              <div className="p-3 rounded-2xl" style={{ backgroundColor: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)" }}>
+                <p className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.7)", fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: 600 }}>
                   สภาวะล่าสุด
                 </p>
                 <p className="text-sm font-bold flex items-center gap-2" style={{ color: "#FFB5A7", fontFamily: "'Noto Sans Thai', sans-serif" }}>
@@ -1337,16 +1337,16 @@ function HomeView({
             <button
               key={item.id}
               onClick={() => tryMode(item.id)}
-              className="p-5 rounded-2xl text-left bg-white border border-[#c8bfb2] shadow-sm hover:border-[#2D6A6F] hover:shadow-md transition-all hover:-translate-y-1 shadow-xs group"
+              className="p-5 rounded-2xl text-left bg-white border-2 border-[#2D6A6F] shadow-md hover:shadow-lg hover:border-[#FFB5A7] transition-all hover:-translate-y-1 group"
             >
               <span className="text-3xl block mb-2">{item.icon}</span>
               <h4 className="font-bold text-base mb-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
                 {item.title}
               </h4>
-              <p className="text-xs text-gray-500 mb-3 leading-normal" style={{ fontFamily: "'Noto Sans Thai', sans-serif" }}>
+              <p className="text-xs text-gray-700 mb-3 leading-normal" style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: 500 }}>
                 {item.desc}
               </p>
-              <span className="text-xs font-bold text-[#2D6A6F] group-hover:underline" style={{ fontFamily: "'Space Mono', monospace" }}>
+              <span className="text-xs font-bold text-[#2D6A6F] group-hover:text-[#FFB5A7] group-hover:underline" style={{ fontFamily: "'Space Mono', monospace" }}>
                 ลองเลย ↗
               </span>
             </button>
@@ -1499,10 +1499,11 @@ function ChatView({
                 </div>
               ) : (
                 <div
-                  className="max-w-[80%] px-5 py-3 rounded-2xl text-sm leading-relaxed relative group"
+                  className="max-w-[80%] px-5 py-3 rounded-2xl text-sm leading-relaxed relative group shadow-sm"
                   style={{
-                    backgroundColor: msg.role === "user" ? "#2D6A6F" : "#f5f0e8",
+                    backgroundColor: msg.role === "user" ? "#2D6A6F" : "#ffffff",
                     color: msg.role === "user" ? "#ffffff" : "#1a1a1a",
+                    border: msg.role === "user" ? "none" : "1px solid #e0d8cc",
                     borderBottomRightRadius: msg.role === "user" ? "4px" : "20px",
                     borderBottomLeftRadius: msg.role === "bot" ? "4px" : "20px",
                     fontFamily: "'Noto Sans Thai', sans-serif",
@@ -1527,11 +1528,11 @@ function ChatView({
 
           {isAnalyzing && (
             <div className="flex justify-start">
-              <div className="px-5 py-3 rounded-2xl bg-[#f5f0e8] border border-gray-300">
+              <div className="px-5 py-3 rounded-2xl bg-white border-2 border-[#2D6A6F] shadow-md">
                 <div className="flex gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <div className="w-3 h-3 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <div className="w-3 h-3 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <div className="w-3 h-3 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "300ms" }} />
                 </div>
               </div>
             </div>
@@ -1539,25 +1540,25 @@ function ChatView({
         </div>
 
         {/* INPUT TOOLBAR */}
-        <div className="p-4 border-t border-[#e0d8cc] bg-white space-y-3">
+        <div className="p-4 border-t-2 border-[#2D6A6F] bg-white space-y-3 shadow-md">
           <div className="flex items-center gap-2">
             <button
               onClick={handleSelfie}
-              className="p-2.5 rounded-full border border-gray-300 hover:border-[#2D6A6F] hover:bg-[#E3EAE0] transition-all text-sm"
+              className="p-2.5 rounded-full border-2 border-[#2D6A6F] bg-[#E3EAE0] hover:bg-[#2D6A6F] hover:text-white transition-all text-sm font-bold"
               title="ถ่ายเซลฟี่"
             >
               📷
             </button>
             <button
               onClick={handleVoice}
-              className="p-2.5 rounded-full border border-gray-300 hover:border-[#2D6A6F] hover:bg-[#E3EAE0] transition-all text-sm"
+              className="p-2.5 rounded-full border-2 border-[#2D6A6F] bg-[#E3EAE0] hover:bg-[#2D6A6F] hover:text-white transition-all text-sm font-bold"
               title="พูดระบาย"
             >
               🎤
             </button>
             <button
               onClick={handleHomeworkPhoto}
-              className="p-2.5 rounded-full border border-gray-300 hover:border-[#2D6A6F] hover:bg-[#E3EAE0] transition-all text-sm"
+              className="p-2.5 rounded-full border-2 border-[#2D6A6F] bg-[#E3EAE0] hover:bg-[#2D6A6F] hover:text-white transition-all text-sm font-bold"
               title="แนบรูปการบ้าน"
             >
               🖼️
@@ -1774,14 +1775,14 @@ function TrendView({
           <div className="flex gap-2 pt-4 border-t border-[#e0d8cc] mt-auto">
             <button
               onClick={onExport}
-              className="flex-1 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-xs font-bold text-gray-700"
+              className="flex-1 py-2.5 rounded-xl border-2 border-[#2D6A6F] bg-[#E3EAE0] text-[#2D6A6F] hover:bg-[#2D6A6F] hover:text-white text-xs font-bold transition-all"
               style={{ fontFamily: "'Noto Sans Thai', sans-serif" }}
             >
               📥 ส่งออกข้อมูลของฉัน
             </button>
             <button
               onClick={onClearAll}
-              className="px-4 py-2.5 rounded-xl border border-[#E05555] text-[#E05555] hover:bg-[#F1DEE3] text-xs font-bold"
+              className="px-4 py-2.5 rounded-xl border-2 border-[#E05555] text-white bg-[#E05555] hover:bg-[#C41E3A] text-xs font-bold transition-all"
               style={{ fontFamily: "'Noto Sans Thai', sans-serif" }}
             >
               🗑️ ลบข้อมูลทั้งหมด
@@ -1809,11 +1810,11 @@ function SchoolView() {
           { num: "58%", label: "อยู่ในเกณฑ์ปกติ-ผ่อนคลาย" },
           { num: "9", label: "กรณีที่ส่งต่อครูที่ปรึกษา" },
         ].map((stat, i) => (
-          <div key={i} className="p-5 rounded-3xl bg-white border border-[#c8bfb2] shadow-md">
-            <span className="text-3xl font-black block" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
+          <div key={i} className="p-5 rounded-3xl bg-white border-2 border-[#2D6A6F] shadow-md">
+            <span className="text-3xl font-black block" style={{ fontFamily: "'Playfair Display', serif", color: "#2D6A6F" }}>
               {stat.num}
             </span>
-            <span className="text-xs text-gray-600 mt-1 block" style={{ fontFamily: "'Noto Sans Thai', sans-serif" }}>
+            <span className="text-xs text-gray-700 mt-1 block font-semibold" style={{ fontFamily: "'Noto Sans Thai', sans-serif" }}>
               {stat.label}
             </span>
           </div>
@@ -1851,11 +1852,11 @@ function SchoolView() {
           { title: "แพ็กเกจโรงเรียน", desc: "ค่าบริการรายเดือนสำหรับภาพรวมสถิติระดับสถาบัน ไม่ระบุตัวตนนักเรียน" },
           { title: "บริการวิเคราะห์ข้อมูล", desc: "สำหรับหน่วยงานด้านการศึกษาที่ต้องการข้อมูลเชิงลึกระดับภาพรวม" },
         ].map((plan, i) => (
-          <div key={i} className="p-5 rounded-3xl bg-white border border-[#c8bfb2] shadow-md">
-            <h5 className="font-bold text-sm mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+          <div key={i} className="p-5 rounded-3xl bg-white border-2 border-[#2D6A6F] shadow-md">
+            <h5 className="font-bold text-sm mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#2D6A6F" }}>
               {plan.title}
             </h5>
-            <p className="text-xs text-gray-600 leading-relaxed" style={{ fontFamily: "'Noto Sans Thai', sans-serif" }}>
+            <p className="text-xs text-gray-700 leading-relaxed font-medium" style={{ fontFamily: "'Noto Sans Thai', sans-serif" }}>
               {plan.desc}
             </p>
           </div>
@@ -1891,9 +1892,9 @@ function SafetyView({
             onClick={() => setSubTab(t.id)}
             className="px-5 py-2.5 rounded-full text-xs font-bold transition-all active:scale-[0.97] whitespace-nowrap"
             style={{
-              backgroundColor: subTab === t.id ? "#1a1a1a" : "#ffffff",
+              backgroundColor: subTab === t.id ? "#2D6A6F" : "#ffffff",
               color: subTab === t.id ? "#ffffff" : "#1a1a1a",
-              border: subTab === t.id ? "none" : "1.5px solid #e0d8cc",
+              border: subTab === t.id ? "2px solid #2D6A6F" : "2px solid #e0d8cc",
               fontFamily: "'Noto Sans Thai', sans-serif",
             }}
           >
