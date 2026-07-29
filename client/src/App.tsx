@@ -1,18 +1,33 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
+import { gsap } from "gsap";
 
 /* ============ IMAGE PATHS ============ */
 const IMG = {
-  loginCollage: "/collage/login_collage_ffaf73f0.png",
-  handPen: "/collage/hand_pen_b35a681f.png",
-  origamiStars: "/collage/origami_stars_0584c42e.png",
-  megaphone: "/collage/megaphone_halftone_f526c4ce.png",
-  booksStack: "/collage/books_stack_435c2b81.png",
-  chatBubbles: "/collage/chat_bubbles_77801543.png",
-  chartGraph: "/collage/chart_graph_a92a34b6.png",
-  schoolBuilding: "/collage/school_building_8cd04dbb.png",
-  shieldLock: "/collage/shield_lock_6bc87c75.png",
+    loginCollage: "/collage/login_collage_ffaf73f0.png",
+    grid: "/collage/grid.png",
+    handPen: "/collage/hand_pen_b35a681f.png",
+    origamiStars: "/collage/origami_stars_0584c42e.png",
+    megaphone: "/collage/megaphone_halftone_f526c4ce.png",
+    booksStack: "/collage/books_stack_435c2b81.png",
+    chatBubbles: "/collage/chat_bubbles_77801543.png",
+    chartGraph: "/collage/chart_graph_a92a34b6.png",
+    schoolBuilding: "/collage/school_building_8cd04dbb.png",
+    shieldLock: "/collage/shield_lock_6bc87c75.png",
+    hand: "/collage/hand.png",
+    booksStackNoBg: "/collage/books_stack_435c2b81-removebg-preview.png",
+    chartGraphNoBg: "/collage/chart_graph_a92a34b6-removebg-preview.png",
+    chatBubblesNoBg: "/collage/chat_bubbles_77801543-removebg-preview.png",
+    origamiStarsNoBg: "/collage/origami_stars_0584c42e-removebg-preview.png",
+    schoolBuildingNoBg: "/collage/school_building_8cd04dbb-removebg-preview.png",
+    shieldLockNoBg: "/collage/shield_lock_6bc87c75-removebg-preview.png",
+    amplifier: "/collage/amplifier.png",
+    bulb: "/collage/bulb.png",
+    dots: "/collage/dots.png",
+    glasses: "/collage/glasses.png",
+    redstar: "/collage/redstar.png",
+    star: "/collage/star.png",
 };
 
 /* ============ DESIGN TOKENS ============ */
@@ -347,7 +362,7 @@ function TealBtn({ children, onClick, disabled = false, fullWidth = false }: {
       className={`px-8 py-3.5 rounded-full font-bold text-white transition-all active:scale-[0.97] ${fullWidth ? "w-full" : ""}`}
       style={{
         backgroundColor: disabled ? "#a0b8bb" : T.teal,
-        fontFamily: "'IBM Plex Sans Thai', sans-serif",
+        fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
         fontSize: "15px",
         cursor: disabled ? "default" : "pointer",
         boxShadow: disabled ? "none" : "0 2px 14px rgba(45,106,111,0.28)",
@@ -370,7 +385,7 @@ function SalmonBtn({ children, onClick, fullWidth = false }: {
       className={`px-8 py-3.5 rounded-full font-bold text-white transition-all active:scale-[0.97] ${fullWidth ? "w-full" : ""}`}
       style={{
         backgroundColor: T.red,
-        fontFamily: "'IBM Plex Sans Thai', sans-serif",
+        fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
         fontSize: "15px",
         boxShadow: "0 2px 14px rgba(196,30,58,0.3)",
       }}
@@ -386,47 +401,48 @@ function LoginPage({ onNext }: { onNext: () => void }) {
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
 
+  useEffect(() => {
+    // Title screen stagger in
+    gsap.fromTo(".login-img", { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power3.out" });
+    gsap.fromTo(".login-form", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)", delay: 0.3 });
+  }, []);
+
   return (
     <div className="relative min-h-screen overflow-hidden" style={{ backgroundColor: T.black }}>
       <CheckerStrip className="fixed top-0 left-0 right-0 z-50" />
       
-      {/* LEFT: graph paper + collage */}
+      {/* LEFT: collage only (no grid) */}
       <div
-        className="absolute left-0 top-0 bottom-0"
+        className="absolute left-0 top-0 bottom-0 z-0 login-img"
         style={{
-          width: "53%",
-          background: `
-            linear-gradient(${T.gridLine} 1px, transparent 1px),
-            linear-gradient(90deg, ${T.gridLine} 1px, transparent 1px)
-          `,
-          backgroundSize: "28px 28px",
+          width: "55%",
           backgroundColor: T.cream,
         }}
       >
-        <HalftoneField className="top-0 left-0 bottom-0" style={{ width: "40%" }} />
         <img
           src={IMG.loginCollage}
           alt=""
           className="absolute inset-0 w-full h-full object-cover object-left-top"
           style={{ mixBlendMode: "multiply", opacity: 0.88 }}
         />
-        <RedDotCross className="top-16 right-12 z-10" />
         
-        {/* Black curved divider sweeping right */}
-        <div className="absolute inset-y-0 right-0" style={{ width: "22%" }}>
-          <svg viewBox="0 0 120 100" preserveAspectRatio="none" className="w-full h-full">
+        {/* Black curved divider sweeping right fully connected */}
+        <div className="absolute inset-y-0 right-0 z-10" style={{ width: "25%" }}>
+          <svg viewBox="0 0 120 100" preserveAspectRatio="none" className="w-full h-full block">
             <path d="M120,0 C60,20 20,50 20,100 L120,100 Z" fill={T.black} />
           </svg>
         </div>
       </div>
 
       {/* RIGHT: black panel with form card */}
-      <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8" style={{ width: "47%", backgroundColor: T.black }}>
+      <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-10 pointer-events-none" style={{ width: "45%" }}>
         {/* Hand-pen collage */}
-        <div className="fixed bottom-0 right-0 z-40 pointer-events-none" style={{ width: "200px" }}>
-          <img src={IMG.handPen} alt="" className="w-full h-auto" style={{ mixBlendMode: "multiply" }} />
+        <div className="fixed bottom-[-150px] right-[-150px] z-40 pointer-events-none" style={{ width: "1200px" }}>
+          <img src={IMG.hand} alt="" className="w-full h-auto" />
         </div>
-
+      </div>
+      
+      <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-30 login-form" style={{ width: "50%" }}>
         {/* Form card */}
         <div
           style={{
@@ -437,11 +453,10 @@ function LoginPage({ onNext }: { onNext: () => void }) {
             padding: "36px 32px",
             boxShadow: "0 12px 60px rgba(0,0,0,0.4)",
             position: "relative",
-            zIndex: 10,
           }}
         >
-          <p className="text-xl font-semibold mb-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: T.black }}>Welcome To</p>
-          <h1 className="text-5xl font-black mb-6" style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.red, lineHeight: 1.1 }}>JaiKraJok</h1>
+          <p className="text-xl font-semibold mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>Welcome To</p>
+          <h1 className="text-5xl font-black mb-6" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red, lineHeight: 1.1 }}>JaiKraJok</h1>
 
           <div
             className="flex mb-5 rounded-2xl overflow-hidden"
@@ -453,7 +468,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
               style={{
                 background: mode === "login" ? T.white : "transparent",
                 color: T.black,
-                fontFamily: "'Noto Sans Thai', sans-serif",
+                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
                 borderRight: "1.5px solid rgba(26,26,26,0.12)",
               }}
             >
@@ -465,14 +480,14 @@ function LoginPage({ onNext }: { onNext: () => void }) {
               style={{
                 background: mode === "signup" ? T.white : "transparent",
                 color: T.black,
-                fontFamily: "'Noto Sans Thai', sans-serif",
+                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
               }}
             >
               Sign Up
             </button>
           </div>
 
-          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.red }}>
+          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red }}>
             Email
           </label>
           <input
@@ -484,11 +499,11 @@ function LoginPage({ onNext }: { onNext: () => void }) {
               backgroundColor: "rgba(255,255,255,0.8)",
               border: "1px solid rgba(0,0,0,0.05)",
               color: T.black,
-              fontFamily: "'Noto Sans Thai', sans-serif",
+              fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
             }}
           />
 
-          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.red }}>
+          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red }}>
             Password
           </label>
           <input
@@ -500,7 +515,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
               backgroundColor: "rgba(255,255,255,0.8)",
               border: "1px solid rgba(0,0,0,0.05)",
               color: T.black,
-              fontFamily: "'Noto Sans Thai', sans-serif",
+              fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
             }}
           />
 
@@ -510,16 +525,16 @@ function LoginPage({ onNext }: { onNext: () => void }) {
               onNext();
             }}
             className="w-full py-3.5 rounded-full font-bold text-white text-base mb-3 transition-all active:scale-[0.97]"
-            style={{ backgroundColor: T.red, fontFamily: "'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
+            style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
           >
             {mode === "login" ? "Log In" : "Sign Up"}
           </button>
 
-          <div className="text-center text-xs mb-3" style={{ color: "rgba(26,26,26,0.6)", fontFamily: "'Noto Sans Thai', sans-serif" }}>or</div>
+          <div className="text-center text-xs mb-3" style={{ color: "rgba(26,26,26,0.6)", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>or</div>
 
           <button
             className="w-full py-3 rounded-full font-bold text-base mb-3 transition-all active:scale-[0.97] bg-white flex items-center justify-center"
-            style={{ color: T.black, fontFamily: "'Noto Sans Thai', sans-serif" }}
+            style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
           >
             Sign Up
           </button>
@@ -527,7 +542,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           <button
             onClick={() => toast("ฟีเจอร์ Google Login กำลังพัฒนา")}
             className="w-full py-3 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] flex items-center justify-center gap-2"
-            style={{ backgroundColor: T.red, fontFamily: "'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
+            style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
           >
             Log In With Google
             <svg width="16" height="16" viewBox="0 0 48 48">
@@ -545,17 +560,20 @@ function LoginPage({ onNext }: { onNext: () => void }) {
 
 function OnbWelcome({ onNext }: { onNext: () => void }) {
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#F5EFE6" }}>
-      <div className="relative mx-auto" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
-        <div className="w-10 h-3.5 rounded-full mb-6" style={{ border: '1px solid #2D6A6F' }} />
-        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+        <img src={IMG.origamiStarsNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
+        <img src={IMG.hand} className="absolute bottom-[-100px] right-[-100px] w-[800px] h-auto pointer-events-none z-20" alt="" />
+        <img src={IMG.redstar} className="absolute top-16 right-24 w-16 h-auto pointer-events-none z-0" alt="" />
+        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
           ยินดีต้อนรับสู่ JaiKraJok
         </h2>
-        <p className="text-base mb-12" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#4a4a4a" }}>
+        <p className="text-base mb-12" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
           พื้นที่ปลอดภัยสำหรับแชร์ความรู้สึกของคุณ เราพร้อมรับฟังและเคียงข้างเสมอ
         </p>
         <button onClick={onNext} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
-          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Noto Sans Thai', sans-serif" }}>เริ่มกันเลย</span>
+          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>เริ่มกันเลย</span>
         </button>
       </div>
     </div>
@@ -564,13 +582,15 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
 
 function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => void; onNext: () => void }) {
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#F5EFE6" }}>
-      <div className="relative mx-auto" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
-        <div className="w-10 h-3.5 rounded-full mb-6" style={{ border: '1px solid #2D6A6F' }} />
-        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+        <img src={IMG.booksStackNoBg} className="absolute bottom-0 left-0 w-80 h-auto pointer-events-none z-0" alt="" />
+        <img src={IMG.glasses} className="absolute top-4 right-10 w-96 h-auto pointer-events-none z-0 opacity-80" alt="" />
+        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
           คุณอายุเท่าไหร่?
         </h2>
-        <p className="text-base mb-10" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#4a4a4a" }}>
+        <p className="text-base mb-10" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
           เพื่อประสบการณ์ที่เหมาะสมกับคุณ
         </p>
         <input
@@ -579,10 +599,10 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
           onChange={(e) => setAge(e.target.value)}
           placeholder="ระบุอายุของคุณ"
           className="w-full px-5 py-4 rounded-2xl mb-10 outline-none focus:ring-2 text-lg text-center"
-          style={{ backgroundColor: "#EBE5DC", border: "2px solid #1a1a1a", fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#1a1a1a" }}
+          style={{ backgroundColor: "#EBE5DC", border: "2px solid #1a1a1a", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
         />
         <button onClick={() => { if (!age || parseInt(age) <= 0) return; onNext(); }} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
-          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Noto Sans Thai', sans-serif" }}>ถัดไป</span>
+          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>ถัดไป</span>
         </button>
       </div>
     </div>
@@ -591,13 +611,15 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
 
 function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmail }: any) {
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#F5EFE6" }}>
-      <div className="relative mx-auto" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
-        <div className="w-10 h-3.5 rounded-full mb-6" style={{ border: '1px solid #2D6A6F' }} />
-        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+        <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0" alt="" />
+        <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0 " alt="" />
+        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
           ขอความยินยอมจากผู้ปกครอง
         </h2>
-        <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#4a4a4a" }}>
+        <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
           เนื่องจากคุณอายุต่ำกว่า 13 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณ
         </p>
         {!approved ? (
@@ -608,18 +630,18 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
               value={guardianEmail}
               onChange={(e) => setGuardianEmail(e.target.value)}
               className="w-full px-5 py-4 rounded-2xl outline-none focus:ring-2 text-base"
-              style={{ backgroundColor: "#EBE5DC", border: "2px solid #1a1a1a", color: "#1a1a1a", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}
+              style={{ backgroundColor: "#EBE5DC", border: "2px solid #1a1a1a", color: "#1a1a1a", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
             />
-            <button onClick={onSend} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]" style={{ backgroundColor: "#1a1a1a", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+            <button onClick={onSend} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]" style={{ backgroundColor: "#1a1a1a", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
               ส่งคำขอความยินยอม
             </button>
           </div>
         ) : (
           <div className="flex flex-col gap-6">
-            <div className="p-5 rounded-2xl text-center" style={{ backgroundColor: "#E8F5E9", border: "2px solid #4CAF50", color: "#2E7D32", fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: "bold" }}>
+            <div className="p-5 rounded-2xl text-center" style={{ backgroundColor: "#E8F5E9", border: "2px solid #4CAF50", color: "#2E7D32", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", fontWeight: "bold" }}>
               ✓ ได้รับความยินยอมแล้ว
             </div>
-            <button onClick={onNext} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+            <button onClick={onNext} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
               ถัดไป
             </button>
           </div>
@@ -631,10 +653,12 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
 
 function PrivacyPage({ onNext }: { onNext: () => void }) {
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#F5EFE6" }}>
-      <div className="relative mx-auto" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
-        <div className="w-10 h-3.5 rounded-full mb-6" style={{ border: '1px solid #2D6A6F' }} />
-        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+        <img src={IMG.chartGraphNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
+        <img src={IMG.dots} className="absolute top-16 right-16 w-32 h-auto pointer-events-none z-0 " alt="" />
+        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
           นโยบายความเป็นส่วนตัว
         </h2>
         <div
@@ -644,7 +668,7 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
             border: "2px solid #1a1a1a",
             height: "220px",
             color: "#4a4a4a",
-            fontFamily: "'IBM Plex Sans Thai', sans-serif",
+            fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
           }}
         >
           <p className="mb-4">เราให้ความสำคัญกับความเป็นส่วนตัวของคุณ ข้อมูลทั้งหมดที่คุณแชร์ใน JaiKraJok จะถูกเก็บรักษาเป็นความลับและปลอดภัย</p>
@@ -653,7 +677,7 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
           <p>3. คุณสามารถขอลบข้อมูลของคุณได้ตลอดเวลาผ่านเมนูตั้งค่า</p>
         </div>
         <button onClick={onNext} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
-          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Noto Sans Thai', sans-serif" }}>ยอมรับและเข้าสู่ระบบ</span>
+          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>ยอมรับและเข้าสู่ระบบ</span>
         </button>
       </div>
     </div>
@@ -810,12 +834,12 @@ function AppShell() {
     }, 300);
   };
 
-  const navItems: { id: AppView; label: string; emoji: string }[] = [
-    { id: "home", label: "หน้าหลัก", emoji: "🏠" },
-    { id: "chat", label: "แชท", emoji: "💬" },
-    { id: "trend", label: "แนวโน้มของฉัน", emoji: "📈" },
-    { id: "school", label: "ภาพรวมโรงเรียน", emoji: "🏫" },
-    { id: "safety", label: "ความปลอดภัย & ข้อมูล", emoji: "🛡️" },
+  const navItems: { id: AppView; label: string; iconSrc: string }[] = [
+    { id: "home", label: "หน้าหลัก", iconSrc: IMG.redstar },
+    { id: "chat", label: "แชท", iconSrc: IMG.chatBubblesNoBg },
+    { id: "trend", label: "แนวโน้มของฉัน", iconSrc: IMG.chartGraphNoBg },
+    { id: "school", label: "ภาพรวมโรงเรียน", iconSrc: IMG.schoolBuildingNoBg },
+    { id: "safety", label: "ความปลอดภัย & ข้อมูล", iconSrc: IMG.shieldLockNoBg },
   ];
 
   const pageLabel: Record<AppView, string> = {
@@ -842,7 +866,7 @@ function AppShell() {
           className="flex items-center justify-center px-6 flex-shrink-0"
           style={{
             background: T.salmon,
-            fontFamily: "'IBM Plex Sans Thai', sans-serif",
+            fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
             fontWeight: 700,
             fontSize: "13px",
             color: T.black,
@@ -870,10 +894,10 @@ function AppShell() {
             {/* Curved right edge mask */}
             <div
               className="absolute right-0 top-0 bottom-0 pointer-events-none"
-              style={{ width: "36px", zIndex: 1 }}
+              style={{ width: "32px", zIndex: 1 }}
             >
-              <svg viewBox="0 0 36 100" preserveAspectRatio="none" className="w-full h-full">
-                <path d="M0,0 L0,100 C24,100 36,80 36,50 C36,20 24,0 0,0 Z" fill={T.cream} />
+              <svg viewBox="0 0 32 100" preserveAspectRatio="none" className="w-full h-full block">
+                <path d="M32,0 L32,100 C20,80 0,60 0,35 C0,20 12,8 32,0 Z" fill={T.cream} />
               </svg>
             </div>
 
@@ -899,18 +923,43 @@ function AppShell() {
                   return (
                     <button
                       key={item.id}
-                      onClick={() => setCurrentView(item.id)}
-                      className="w-full text-left px-3 py-2.5 rounded-xl transition-all duration-150 flex items-center gap-2.5"
+                      onClick={() => {
+                        setCurrentView(item.id);
+                        // GSAP pop animation on click
+                        const el = document.getElementById(`nav-icon-${item.id}`);
+                        if (el) gsap.fromTo(el, { scale: 0.7, rotate: -15 }, { scale: 1, rotate: 0, duration: 0.5, ease: "elastic.out(1.2, 0.5)" });
+                      }}
+                      onMouseEnter={(e) => {
+                        const el = e.currentTarget.querySelector(`#nav-icon-${item.id}`);
+                        if (el && !active) gsap.to(el, { scale: 1.2, rotate: 8, duration: 0.3, ease: "back.out(2)" });
+                      }}
+                      onMouseLeave={(e) => {
+                        const el = e.currentTarget.querySelector(`#nav-icon-${item.id}`);
+                        if (el && !active) gsap.to(el, { scale: 1, rotate: 0, duration: 0.25, ease: "power2.out" });
+                      }}
+                      className="w-full text-left px-3 py-2.5 rounded-xl transition-colors duration-150 flex items-center gap-3"
                       style={{
-                        backgroundColor: active ? "rgba(255,181,167,0.14)" : "transparent",
+                        backgroundColor: active ? "rgba(255,181,167,0.18)" : "transparent",
                         color: active ? T.salmon : "rgba(255,181,167,0.6)",
-                        fontFamily: "'IBM Plex Sans Thai', sans-serif",
+                        fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
                         fontWeight: active ? 700 : 500,
                         fontSize: "13px",
-                        border: active ? `1px solid rgba(255,181,167,0.25)` : "1px solid transparent",
+                        border: active ? `1px solid rgba(255,181,167,0.3)` : "1px solid transparent",
                       }}
                     >
-                      <span style={{ fontSize: "15px", flexShrink: 0 }}>{item.emoji}</span>
+                      <img
+                        id={`nav-icon-${item.id}`}
+                        src={item.iconSrc}
+                        alt=""
+                        style={{
+                          width: "22px",
+                          height: "22px",
+                          objectFit: "contain",
+                          flexShrink: 0,
+                          filter: active ? "none" : "brightness(0) invert(0.8) sepia(1) hue-rotate(300deg) saturate(0.5)",
+                          transition: "filter 0.2s",
+                        }}
+                      />
                       {item.label}
                     </button>
                   );
@@ -922,7 +971,7 @@ function AppShell() {
                 <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: "rgba(255,181,167,0.5)", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>
                   สภาวะล่าสุด
                 </p>
-                <p className="flex items-center gap-2" style={{ color: T.salmon, fontFamily: "'IBM Plex Sans Thai', sans-serif", fontSize: "13px", fontWeight: 600 }}>
+                <p className="flex items-center gap-2" style={{ color: T.salmon, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", fontSize: "13px", fontWeight: 600 }}>
                   <span>{EMO[mood]?.emoji}</span>
                   {EMO[mood]?.label || "ปกติ"}
                 </p>
@@ -947,74 +996,82 @@ function AppShell() {
 
           <div className="relative z-10 px-8 py-7">
             {currentView === "home" && (
-              <HomeView
-                mood={mood}
-                setMood={setMood}
-                onGoChat={() => setCurrentView("chat")}
-                onGoTrend={() => setCurrentView("trend")}
-                tryMode={tryMode}
-                lineNotify={lineNotify}
-                setLineNotify={setLineNotify}
-              />
+              <PageWrapper pageKey="home">
+                <HomeView
+                  mood={mood}
+                  setMood={setMood}
+                  onGoChat={() => setCurrentView("chat")}
+                  onGoTrend={() => setCurrentView("trend")}
+                  tryMode={tryMode}
+                  lineNotify={lineNotify}
+                  setLineNotify={setLineNotify}
+                />
+              </PageWrapper>
             )}
             {currentView === "chat" && (
-              <ChatView
-                messages={messages}
-                inputText={inputText}
-                setInputText={setInputText}
-                sendMessage={() => sendMessage()}
-                isAnalyzing={isAnalyzing}
-                handleSelfie={handleSelfie}
-                handleVoice={handleVoice}
-                handleHomeworkPhoto={handleHomeworkPhoto}
-                resetChat={resetChat}
-                speakText={speakText}
-                mood={mood}
-                concernStreak={concernStreak}
-                transparencyLogs={transparencyLogs}
-                onNotifyCounselor={() => {
-                  toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว ครูจะติดต่อกลับภายในวันนี้");
-                  setShowEscalationModal(false);
-                }}
-              />
+              <PageWrapper pageKey="chat">
+                <ChatView
+                  messages={messages}
+                  inputText={inputText}
+                  setInputText={setInputText}
+                  sendMessage={() => sendMessage()}
+                  isAnalyzing={isAnalyzing}
+                  handleSelfie={handleSelfie}
+                  handleVoice={handleVoice}
+                  handleHomeworkPhoto={handleHomeworkPhoto}
+                  resetChat={resetChat}
+                  speakText={speakText}
+                  mood={mood}
+                  concernStreak={concernStreak}
+                  transparencyLogs={transparencyLogs}
+                  onNotifyCounselor={() => {
+                    toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว ครูจะติดต่อกลับภายในวันนี้");
+                    setShowEscalationModal(false);
+                  }}
+                />
+              </PageWrapper>
             )}
             {currentView === "trend" && (
-              <TrendView
-                trendData={trendData}
-                logEntries={logEntries}
-                onDeleteEntry={(id) => { setLogEntries((prev) => prev.filter((e) => e.id !== id)); toast("ลบรายการแล้ว"); }}
-                onClearAll={() => {
-                  if (window.confirm("ยืนยันลบข้อมูลแนวโน้มอารมณ์ทั้งหมดของคุณ?")) {
-                    setTrendData([]); setLogEntries([]); setConcernStreak(0);
-                    toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
-                  }
-                }}
-                onExport={() => {
-                  const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries }, null, 2)], { type: "application/json" });
-                  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
-                  a.click(); URL.revokeObjectURL(a.href);
-                  toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
-                }}
-              />
+              <PageWrapper pageKey="trend">
+                <TrendView
+                  trendData={trendData}
+                  logEntries={logEntries}
+                  onDeleteEntry={(id) => { setLogEntries((prev) => prev.filter((e) => e.id !== id)); toast("ลบรายการแล้ว"); }}
+                  onClearAll={() => {
+                    if (window.confirm("ยืนยันลบข้อมูลแนวโน้มอารมณ์ทั้งหมดของคุณ?")) {
+                      setTrendData([]); setLogEntries([]); setConcernStreak(0);
+                      toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
+                    }
+                  }}
+                  onExport={() => {
+                    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries }, null, 2)], { type: "application/json" });
+                    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
+                    a.click(); URL.revokeObjectURL(a.href);
+                    toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
+                  }}
+                />
+              </PageWrapper>
             )}
-            {currentView === "school" && <SchoolView />}
+            {currentView === "school" && <PageWrapper pageKey="school"><SchoolView /></PageWrapper>}
             {currentView === "safety" && (
-              <SafetyView
-                age={age}
-                guardianConsent={guardianConsent}
-                onExport={() => {
-                  const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries }, null, 2)], { type: "application/json" });
-                  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
-                  a.click(); URL.revokeObjectURL(a.href);
-                  toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
-                }}
-                onClearAll={() => {
-                  if (window.confirm("ยืนยันลบข้อมูลทั้งหมดของคุณ?")) {
-                    setTrendData([]); setLogEntries([]);
-                    toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
-                  }
-                }}
-              />
+              <PageWrapper pageKey="safety">
+                <SafetyView
+                  age={age}
+                  guardianConsent={guardianConsent}
+                  onExport={() => {
+                    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries }, null, 2)], { type: "application/json" });
+                    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
+                    a.click(); URL.revokeObjectURL(a.href);
+                    toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
+                  }}
+                  onClearAll={() => {
+                    if (window.confirm("ยืนยันลบข้อมูลทั้งหมดของคุณ?")) {
+                      setTrendData([]); setLogEntries([]);
+                      toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
+                    }
+                  }}
+                />
+              </PageWrapper>
             )}
           </div>
         </div>
@@ -1025,31 +1082,31 @@ function AppShell() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" style={{ border: `2px solid ${T.salmon}` }}>
             <div className="text-4xl mb-3">🤝</div>
-            <h3 className="text-xl font-bold mb-2" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>
+            <h3 className="text-xl font-bold mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
               เราสังเกตว่าช่วงนี้ใจคุณหนักอยู่หลายครั้ง
             </h3>
-            <p className="text-sm text-gray-600 mb-6 leading-relaxed" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
               ไม่เป็นไรนะ ความรู้สึกแบบนี้ไม่ผิดเลย กระจกอยากชวนคุณลองพูดคุยกับคนที่ไว้ใจได้ สายด่วนสุขภาพจิต 1323
             </p>
             <div className="space-y-3">
               <button
                 onClick={() => { toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว"); setShowEscalationModal(false); }}
                 className="w-full py-3 rounded-2xl text-white font-bold transition-all active:scale-[0.97]"
-                style={{ backgroundColor: T.teal, fontFamily: "'IBM Plex Sans Thai', sans-serif" }}
+                style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
               >
                 แจ้งครูที่ปรึกษา
               </button>
               <a
                 href="tel:1323"
                 className="block text-center w-full py-3 rounded-2xl font-bold transition-all"
-                style={{ color: T.red, border: `2px solid ${T.red}`, fontFamily: "'IBM Plex Sans Thai', sans-serif" }}
+                style={{ color: T.red, border: `2px solid ${T.red}`, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
               >
                 📞 โทรสายด่วน 1323
               </a>
               <button
                 onClick={() => setShowEscalationModal(false)}
                 className="w-full py-2.5 rounded-2xl text-gray-500 font-medium text-sm hover:bg-gray-100"
-                style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}
+                style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
               >
                 ยังไม่พร้อมตอนนี้
               </button>
@@ -1081,42 +1138,45 @@ function HomeView({
     <div className="space-y-7 max-w-4xl">
       {/* HERO CARD */}
       <div
-        className="p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
+        className="p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden"
         style={{
-          background: T.white,
-          borderRadius: "20px",
-          border: "1.5px solid #E2D9C2",
-          boxShadow: "0 2px 18px rgba(26,26,26,0.07)",
+          background: "#fefdfa",
+          backgroundImage: "radial-gradient(#e0d6c8 1px, transparent 1px)",
+          backgroundSize: "20px 20px",
+          borderRadius: "16px",
+          border: "2px solid #DED3C1",
+          boxShadow: "4px 8px 0px rgba(222,211,193,0.4), 0 4px 24px rgba(0,0,0,0.06)",
         }}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5 z-10">
           <div
-            className="w-14 h-14 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
-            style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `2px solid ${T.teal}` }}
+            className="w-20 h-20 rounded-full flex items-center justify-center text-4xl flex-shrink-0 -mt-2 -ml-2 shadow-lg z-10 relative"
+            style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `3px solid ${T.white}` }}
           >
             {EMO[mood]?.emoji || "😌"}
+            <div className="absolute inset-0 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] pointer-events-none"></div>
           </div>
           <div>
-            <h2 className="text-xl font-bold" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>
+            <h2 className="text-2xl font-bold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
               {greeting}
             </h2>
-            <p className="text-sm mt-1" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#666" }}>
+            <p className="text-sm mt-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
               วันนี้อยากให้กระจกฟังอะไรบ้าง จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ
             </p>
           </div>
         </div>
-        <div className="flex gap-3 flex-shrink-0">
+        <div className="flex gap-3 flex-shrink-0 z-10">
           <button
             onClick={onGoChat}
-            className="px-5 py-2.5 rounded-full text-white font-bold text-sm transition-all active:scale-[0.97]"
-            style={{ backgroundColor: T.teal, fontFamily: "'IBM Plex Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(45,106,111,0.25)" }}
+            className="px-5 py-2.5 rounded-full text-white font-bold text-sm transition-all hover:scale-105 active:scale-95"
+            style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 4px 12px rgba(45,106,111,0.3)" }}
           >
             💬 เริ่มคุยกับกระจก
           </button>
           <button
             onClick={onGoTrend}
-            className="px-4 py-2.5 rounded-full font-semibold text-sm transition-all"
-            style={{ color: T.black, fontFamily: "'IBM Plex Sans Thai', sans-serif", backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}
+            className="px-4 py-2.5 rounded-full font-semibold text-sm transition-all hover:bg-gray-50 active:scale-95"
+            style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", backgroundColor: T.white, border: "2px solid #E2D9C2" }}
           >
             📈 ดูแนวโน้มของฉัน
           </button>
@@ -1125,93 +1185,154 @@ function HomeView({
 
       {/* QUICK MOOD PICKER */}
       <div>
-        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>
+        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
           วันนี้รู้สึกยังไง?
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-          {moods.map(([key, emo]) => (
+          {moods.map(([key, emo], idx) => {
+            const rotations = ["rotate-[-2deg]", "rotate-[1deg]", "rotate-[-1deg]", "rotate-[2deg]", "rotate-[0deg]", "rotate-[-3deg]"];
+            const rot = rotations[idx % rotations.length];
+            return (
             <button
               key={key}
               onClick={() => setMood(key)}
-              className="p-3.5 rounded-2xl text-center transition-all active:scale-[0.97]"
+              className={`p-4 rounded-xl text-center transition-all duration-300 transform hover:-translate-y-2 hover:shadow-xl active:scale-95 ${rot}`}
               style={{
                 backgroundColor: mood === key ? "#DCEAE8" : T.white,
-                border: mood === key ? `2.5px solid ${T.teal}` : "2px solid #EDE6D3",
-                fontFamily: "'IBM Plex Sans Thai', sans-serif",
+                border: mood === key ? `3px solid ${T.teal}` : "1px solid #EDE6D3",
+                boxShadow: mood === key ? "0 8px 0px rgba(45,106,111,0.2)" : "0 4px 10px rgba(0,0,0,0.05)",
+                fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
               }}
             >
-              <span className="text-3xl block mb-1.5">{emo.emoji}</span>
-              <span className="text-xs font-bold block" style={{ color: T.black }}>{emo.label}</span>
+              <span className="text-4xl block mb-2 drop-shadow-sm">{emo.emoji}</span>
+              <span className="text-[11px] font-bold block uppercase tracking-wide" style={{ color: mood === key ? T.teal : T.black }}>{emo.label}</span>
             </button>
-          ))}
+          )})}
         </div>
       </div>
 
       {/* 4 MODE CARDS */}
       <div>
-        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>
+        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
           วิธีระบายความรู้สึก · เลือกวิธีที่ถนัดได้เลย
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           {[
-            { id: "camera" as const, title: "ถ่ายเซลฟี่", desc: "อ่านสีหน้าและอารมณ์ผ่าน Face Recognition API", icon: "📷" },
-            { id: "keyboard" as const, title: "พิมพ์ความรู้สึก", desc: "วิเคราะห์น้ำเสียงข้อความด้วย Sentiment Analysis API", icon: "⌨️" },
-            { id: "mic" as const, title: "พูดระบาย", desc: "แปลงเสียงพูดเป็นข้อความผ่าน Speech-to-Text API", icon: "🎤" },
-            { id: "photo" as const, title: "ถ่ายรูปการบ้าน", desc: "อ่านและช่วยอธิบายเนื้อหาด้วย OCR API", icon: "🖼️" },
-          ].map((item) => (
+            { id: "camera" as const, title: "ถ่ายเซลฟี่", desc: "Face Recognition API", iconSrc: IMG.bulb, bg: "#FDF5E6", border: "#F0E1C8" },
+            { id: "keyboard" as const, title: "พิมพ์ความรู้สึก", desc: "Sentiment Analysis API", iconSrc: IMG.handPen, bg: "#F2F5E9", border: "#E0E8D3" },
+            { id: "mic" as const, title: "พูดระบาย", desc: "Speech-to-Text API", iconSrc: IMG.amplifier, bg: "#FFF0F4", border: "#F5DBE4" },
+            { id: "photo" as const, title: "ถ่ายรูปการบ้าน", desc: "OCR API", iconSrc: IMG.origamiStarsNoBg, bg: "#EBF3F5", border: "#D4E5E8" },
+          ].map((item, idx) => {
+            const rots = ["rotate-[1deg]", "rotate-[-1deg]", "rotate-[2deg]", "rotate-[-2deg]"];
+            const r = rots[idx % rots.length];
+            const cardId = `action-card-${item.id}`;
+            const imgId = `action-img-${item.id}`;
+            return (
             <button
               key={item.id}
-              onClick={() => tryMode(item.id)}
-              className="p-5 rounded-2xl text-left group transition-all hover:-translate-y-1 active:scale-[0.97]"
+              id={cardId}
+              onClick={(e) => {
+                tryMode(item.id);
+                // GSAP burst ripple on click
+                const rect = e.currentTarget.getBoundingClientRect();
+                const ripple = document.createElement("div");
+                ripple.style.cssText = `position:fixed;left:${rect.left + rect.width/2}px;top:${rect.top + rect.height/2}px;width:12px;height:12px;border-radius:50%;background:${item.border};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
+                document.body.appendChild(ripple);
+                gsap.fromTo(ripple,
+                  { scale: 0, opacity: 0.8 },
+                  { scale: 9, opacity: 0, duration: 0.7, ease: "expo.out", onComplete: () => ripple.remove() }
+                );
+                // GSAP pop the image
+                const imgEl = document.getElementById(imgId);
+                if (imgEl) gsap.fromTo(imgEl, { scale: 0.8, rotate: -10 }, { scale: 1, rotate: 0, duration: 0.6, ease: "elastic.out(1.3, 0.4)" });
+              }}
+              onMouseEnter={() => {
+                const imgEl = document.getElementById(imgId);
+                if (imgEl) gsap.to(imgEl, { y: -8, rotate: 5, duration: 0.4, ease: "power2.out" });
+                const card = document.getElementById(cardId);
+                if (card) gsap.to(card, { y: -6, duration: 0.3, ease: "power2.out" });
+              }}
+              onMouseLeave={() => {
+                const imgEl = document.getElementById(imgId);
+                if (imgEl) gsap.to(imgEl, { y: 0, rotate: 0, duration: 0.4, ease: "elastic.out(1, 0.5)" });
+                const card = document.getElementById(cardId);
+                if (card) gsap.to(card, { y: 0, duration: 0.35, ease: "power2.inOut" });
+              }}
+              className={`p-6 rounded-none text-center group transition-colors duration-200 ${r}`}
               style={{
-                backgroundColor: T.white,
-                border: `1.5px solid ${T.teal}`,
-                boxShadow: "0 2px 12px rgba(26,26,26,0.07)",
+                backgroundColor: item.bg,
+                border: `1px solid ${item.border}`,
+                boxShadow: `4px 4px 0px ${item.border}, 0 10px 20px rgba(0,0,0,0.05)`,
+                position: "relative",
+                willChange: "transform",
               }}
             >
-              <span className="text-3xl block mb-2">{item.icon}</span>
-              <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>
+              {/* Tape visual */}
+              <div className="absolute top-[-10px] left-1/2 -translate-x-1/2 w-12 h-6 bg-white/40 border border-white/60 shadow-sm rotate-[-2deg]" style={{backdropFilter: "blur(2px)"}}></div>
+              
+              <div className="bg-white rounded-sm aspect-square flex items-center justify-center mb-4 shadow-inner overflow-hidden" style={{ border: `1px solid ${item.border}` }}>
+                <img
+                  id={imgId}
+                  src={item.iconSrc}
+                  alt=""
+                  style={{
+                    width: "85%",
+                    height: "85%",
+                    objectFit: "contain",
+                    display: "block",
+                    willChange: "transform",
+                  }}
+                />
+              </div>
+              <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
                 {item.title}
               </h4>
-              <p className="text-xs mb-3 leading-normal" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#666" }}>
+              <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#888" }}>
                 {item.desc}
               </p>
-              <span className="text-xs font-bold" style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.teal }}>
-                ลองเลย ↗
-              </span>
             </button>
-          ))}
+          )})}
         </div>
       </div>
 
       {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
+      {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
       <div
-        className="p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4"
-        style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.05)" }}
+        className="p-6 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative mt-4"
+        style={{ 
+          backgroundColor: "#F9F8F5", 
+          border: "2px dashed #C8BEAC",
+          backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(200, 190, 172, 0.05) 10px, rgba(200, 190, 172, 0.05) 20px)"
+        }}
       >
+        {/* Pin visual */}
+        <div className="absolute top-3 right-5 w-3 h-3 rounded-full bg-[#A85F73] shadow-[0_2px_4px_rgba(0,0,0,0.3)] z-10">
+          <div className="w-1 h-1 bg-white/60 rounded-full absolute top-[1px] left-[1px]"></div>
+        </div>
+
         <div>
-          <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>
+          <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
             ช่องทางการเข้าถึง
           </h4>
-          <div className="flex gap-2 mt-2 flex-wrap">
-            <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: "#E3EAE0", color: "#3C5137", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+          <div className="flex gap-3 mt-3 flex-wrap">
+            <span className="px-4 py-1.5 text-[#00B900] text-xs font-bold rounded-sm border border-[#00B900] bg-white shadow-sm" style={{transform: "rotate(-1deg)"}}>
               💚 LINE Official Account
             </span>
-            <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: "#E7E3EF", color: "#423A56", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+            <span className="px-4 py-1.5 text-blue-600 text-xs font-bold rounded-sm border border-blue-600 bg-white shadow-sm" style={{transform: "rotate(1deg)"}}>
               🌐 Web Application (หน้านี้)
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>
+        <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-full border border-[#E2D9C2] shadow-sm z-10">
+          <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
             รับการแจ้งเตือนผ่าน LINE
           </span>
           <button
             onClick={() => { setLineNotify(!lineNotify); toast(lineNotify ? "ปิดการแจ้งเตือนผ่าน LINE แล้ว" : "เปิดการแจ้งเตือนผ่าน LINE แล้ว"); }}
-            className="w-12 h-6 rounded-full transition-all relative"
-            style={{ backgroundColor: lineNotify ? T.teal : "#ccc" }}
+            className="w-10 h-5 rounded-full flex items-center transition-colors px-0.5 relative"
+            style={{ backgroundColor: lineNotify ? "#00B900" : "#D1D5DB", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)" }}
           >
-            <div className="w-4 h-4 rounded-full bg-white absolute top-1 transition-all" style={{ left: lineNotify ? "26px" : "4px" }} />
+            <div className={`w-4 h-4 bg-white rounded-full shadow transition-all absolute top-0.5`} style={{ left: lineNotify ? "22px" : "2px" }} />
           </button>
         </div>
       </div>
@@ -1262,10 +1383,10 @@ function ChatView({
               {EMO[mood]?.emoji || "😌"}
             </div>
             <div>
-              <p className="font-bold text-sm" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>
+              <p className="font-bold text-sm" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
                 กระจกสะท้อนใจ
               </p>
-              <p className="text-xs flex items-center gap-1 font-semibold" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.teal }}>
+              <p className="text-xs flex items-center gap-1 font-semibold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>
                 <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: T.teal }} />
                 สภาวะล่าสุด: {EMO[mood]?.label || "ปกติ"}
               </p>
@@ -1291,7 +1412,7 @@ function ChatView({
               ) : msg.cardType === "emotion" && msg.emotionData ? (
                 <div
                   className="max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed"
-                  style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text, fontFamily: "'IBM Plex Sans Thai', sans-serif" }}
+                  style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
                 >
                   <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                     ผลการสะท้อนจากใบหน้า · {msg.emotionData.label}
@@ -1312,7 +1433,7 @@ function ChatView({
                     border: msg.role === "user" ? "none" : "1.5px solid #EDE6D3",
                     borderBottomRightRadius: msg.role === "user" ? "6px" : "20px",
                     borderBottomLeftRadius: msg.role === "bot" ? "6px" : "20px",
-                    fontFamily: "'IBM Plex Sans Thai', sans-serif",
+                    fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
                   }}
                 >
                   {msg.text}
@@ -1328,7 +1449,7 @@ function ChatView({
               <div className="px-5 py-3 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}` }}>
                 <div className="flex gap-1.5">
                   {[0, 150, 300].map((d) => (
-                    <div key={d} className="w-2.5 h-2.5 rounded-full animate-bounce" style={{ backgroundColor: T.teal, animationDelay: `${d}ms` }} />
+                    <div key={d} className="w-2.5 h-2.5 rounded-full " style={{ backgroundColor: T.teal, animationDelay: `${d}ms` }} />
                   ))}
                 </div>
               </div>
@@ -1365,7 +1486,7 @@ function ChatView({
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               className="flex-1 px-5 py-3 rounded-full outline-none text-sm"
-              style={{ backgroundColor: T.cream, border: "1.5px solid transparent", fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}
+              style={{ backgroundColor: T.cream, border: "1.5px solid transparent", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}
               onFocus={(e) => (e.target.style.borderColor = T.teal)}
               onBlur={(e) => (e.target.style.borderColor = "transparent")}
             />
@@ -1384,30 +1505,30 @@ function ChatView({
       <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 100px)", scrollbarWidth: "thin" }}>
         {/* Modes info */}
         <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-          <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>โหมดที่ใช้ได้</h4>
-          <p className="text-xs leading-relaxed" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#666" }}>
+          <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>โหมดที่ใช้ได้</h4>
+          <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
             Face Recognition · Sentiment Analysis · Speech-to-Text · OCR ถูกส่งต่อให้ Pathumma LLM สังเคราะห์คำแนะนำเฉพาะบุคคล
           </p>
         </div>
 
         {/* Concern card */}
         <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-          <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>สถานะการดูแล</h4>
+          <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>สถานะการดูแล</h4>
           {concernStreak >= 2 ? (
             <div className="p-3.5 rounded-xl space-y-2" style={{ backgroundColor: "#F1DEE3", border: "1.5px solid #A85F73" }}>
-              <p className="font-bold text-xs" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#6B3B49" }}>⚠️ สังเกตแนวโน้มเชิงลบต่อเนื่อง</p>
-              <p className="text-xs" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#6B3B49" }}>อยากชวนคุยกับครูที่ปรึกษาหรือสายด่วน 1323 ไหม</p>
+              <p className="font-bold text-xs" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#6B3B49" }}>⚠️ สังเกตแนวโน้มเชิงลบต่อเนื่อง</p>
+              <p className="text-xs" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#6B3B49" }}>อยากชวนคุยกับครูที่ปรึกษาหรือสายด่วน 1323 ไหม</p>
               <div className="flex gap-2 pt-1">
-                <button onClick={onNotifyCounselor} className="px-3 py-1.5 rounded-xl text-white text-xs font-bold" style={{ backgroundColor: T.teal, fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+                <button onClick={onNotifyCounselor} className="px-3 py-1.5 rounded-xl text-white text-xs font-bold" style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                   แจ้งครูที่ปรึกษา
                 </button>
-                <a href="tel:1323" className="px-3 py-1.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#6B3B49", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+                <a href="tel:1323" className="px-3 py-1.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#6B3B49", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                   โทร 1323
                 </a>
               </div>
             </div>
           ) : (
-            <p className="text-xs leading-relaxed" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: "#666" }}>
+            <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
               ยังไม่พบสัญญาณที่น่าเป็นห่วง ระบบจะแจ้งเตือนอัตโนมัติหากพบแนวโน้มต่อเนื่อง
             </p>
           )}
@@ -1415,7 +1536,7 @@ function ChatView({
 
         {/* Transparency logs */}
         <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-          <h4 className="font-bold text-sm mb-3" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>บันทึกความโปร่งใส</h4>
+          <h4 className="font-bold text-sm mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>บันทึกความโปร่งใส</h4>
           {transparencyLogs.length === 0 ? (
             <p className="text-xs text-gray-400" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>ยังไม่มีการเรียกใช้ API</p>
           ) : (
@@ -1447,7 +1568,7 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
         {/* SVG trend chart */}
         <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-base" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>แนวโน้มอารมณ์ในเซสชันนี้</h3>
+            <h3 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มอารมณ์ในเซสชันนี้</h3>
             <span className="text-xs font-mono text-gray-500">{trendData.length === 0 ? "ยังไม่มีข้อมูล" : `${trendData.length} จุดข้อมูล`}</span>
           </div>
           <div className="relative h-44 w-full my-2">
@@ -1482,13 +1603,13 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
 
         {/* Check-in history */}
         <div className="p-6 rounded-2xl flex flex-col" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-          <h3 className="font-bold text-base mb-3" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>ประวัติการเช็คอิน</h3>
+          <h3 className="font-bold text-base mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>ประวัติการเช็คอิน</h3>
           <div className="flex-1 overflow-y-auto max-h-48 space-y-2 pr-1" style={{ scrollbarWidth: "thin" }}>
             {logEntries.length === 0 ? (
-              <div className="text-center text-xs text-gray-400 py-8" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>ยังไม่มีประวัติการเช็คอินในเซสชันนี้</div>
+              <div className="text-center text-xs text-gray-400 py-8" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>ยังไม่มีประวัติการเช็คอินในเซสชันนี้</div>
             ) : (
               logEntries.map((e) => (
-                <div key={e.id} className="flex items-center justify-between p-3 rounded-xl text-xs" style={{ backgroundColor: T.cream, fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+                <div key={e.id} className="flex items-center justify-between p-3 rounded-xl text-xs" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                   <span className="font-semibold text-gray-800">{e.label} · {e.source}</span>
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-gray-400">{e.time}</span>
@@ -1499,10 +1620,10 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
             )}
           </div>
           <div className="flex gap-2 pt-4 mt-auto" style={{ borderTop: "1px solid #EDE6D3" }}>
-            <button onClick={onExport} className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all" style={{ border: `2px solid ${T.teal}`, color: T.teal, backgroundColor: "#E3EAE0", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+            <button onClick={onExport} className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all" style={{ border: `2px solid ${T.teal}`, color: T.teal, backgroundColor: "#E3EAE0", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
               📥 ส่งออกข้อมูลของฉัน
             </button>
-            <button onClick={onClearAll} className="px-4 py-2.5 rounded-xl text-white text-xs font-bold transition-all" style={{ backgroundColor: "#A85F73", border: "2px solid #A85F73", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+            <button onClick={onClearAll} className="px-4 py-2.5 rounded-xl text-white text-xs font-bold transition-all" style={{ backgroundColor: "#A85F73", border: "2px solid #A85F73", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
               🗑️ ลบข้อมูลทั้งหมด
             </button>
           </div>
@@ -1527,13 +1648,13 @@ function SchoolView() {
           { num: "9", label: "กรณีที่ส่งต่อครูที่ปรึกษา" },
         ].map((stat, i) => (
           <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
-            <span className="text-3xl font-black block" style={{ fontFamily: "'Taviraj', serif", color: T.teal }}>{stat.num}</span>
-            <span className="text-xs text-gray-700 mt-1 block font-semibold" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>{stat.label}</span>
+            <span className="text-3xl font-black block" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>{stat.num}</span>
+            <span className="text-xs text-gray-700 mt-1 block font-semibold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{stat.label}</span>
           </div>
         ))}
       </div>
       <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-        <h4 className="font-bold text-base mb-4" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>แนวโน้มรายสัปดาห์ (ระดับความเครียดเฉลี่ย)</h4>
+        <h4 className="font-bold text-base mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มรายสัปดาห์ (ระดับความเครียดเฉลี่ย)</h4>
         <div className="flex items-end gap-6 h-40 pt-4">
           {[["52%", "สัปดาห์ 1", T.teal], ["61%", "สัปดาห์ 2", T.teal], ["74%", "สัปดาห์ 3", "#A85F73"], ["66%", "สัปดาห์ 4", "#6F6389"], ["48%", "สัปดาห์นี้", T.teal]].map(([h, l, c], i) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
@@ -1550,8 +1671,8 @@ function SchoolView() {
           { title: "บริการวิเคราะห์ข้อมูล", desc: "สำหรับหน่วยงานด้านการศึกษาที่ต้องการข้อมูลเชิงลึกระดับภาพรวม" },
         ].map((plan, i) => (
           <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
-            <h5 className="font-bold text-sm mb-2" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.teal }}>{plan.title}</h5>
-            <p className="text-xs text-gray-700 leading-relaxed font-medium" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>{plan.desc}</p>
+            <h5 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>{plan.title}</h5>
+            <p className="text-xs text-gray-700 leading-relaxed font-medium" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{plan.desc}</p>
           </div>
         ))}
       </div>
@@ -1582,7 +1703,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
               backgroundColor: subTab === t.id ? T.teal : T.white,
               color: subTab === t.id ? T.white : T.black,
               border: subTab === t.id ? `2px solid ${T.teal}` : "2px solid #EDE6D3",
-              fontFamily: "'IBM Plex Sans Thai', sans-serif",
+              fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
             }}
           >
             {t.label}
@@ -1599,19 +1720,19 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
               { label: "เงื่อนไขการใช้งาน", value: "ยอมรับแล้ว" },
             ].map((item, i) => (
               <div key={i} className="p-4 rounded-xl" style={{ backgroundColor: "#E3EAE0", color: "#3C5137" }}>
-                <h5 className="font-bold text-xs mb-1" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>{item.label}</h5>
+                <h5 className="font-bold text-xs mb-1" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{item.label}</h5>
                 <p className="text-sm font-semibold">{item.value}</p>
               </div>
             ))}
           </div>
           <div className="p-6 rounded-2xl space-y-4" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
-            <h4 className="font-bold text-base" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.black }}>การควบคุมข้อมูลของฉัน</h4>
-            <p className="text-xs text-gray-600" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>คุณสามารถเข้าถึง ส่งออก หรือลบข้อมูลของตนเองได้ทุกเมื่อ</p>
+            <h4 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การควบคุมข้อมูลของฉัน</h4>
+            <p className="text-xs text-gray-600" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>คุณสามารถเข้าถึง ส่งออก หรือลบข้อมูลของตนเองได้ทุกเมื่อ</p>
             <div className="flex gap-3">
-              <button onClick={onExport} className="px-5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-xs font-bold" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+              <button onClick={onExport} className="px-5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-xs font-bold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                 📥 ส่งออกข้อมูลของฉัน
               </button>
-              <button onClick={onClearAll} className="px-5 py-2.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#A85F73", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+              <button onClick={onClearAll} className="px-5 py-2.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#A85F73", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                 🗑️ ลบข้อมูลทั้งหมด
               </button>
             </div>
@@ -1623,11 +1744,11 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
               { title: "ข้อกำหนดการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 13 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้งาน ผู้ใช้อายุต่ำกว่า 20 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนเก็บข้อมูล ระบบมีการจำกัดอัตราการใช้งาน" },
             ].map((acc, i) => (
               <details key={i} className="p-4 rounded-2xl group" style={{ backgroundColor: T.white, border: "1.5px solid #EDE6D3" }}>
-                <summary className="font-bold text-sm cursor-pointer list-none flex justify-between items-center" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+                <summary className="font-bold text-sm cursor-pointer list-none flex justify-between items-center" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                   <span>{acc.title}</span>
                   <span className="text-gray-400 font-mono text-base group-open:rotate-180 transition-transform">▼</span>
                 </summary>
-                <p className="text-xs text-gray-600 mt-3 pt-3 leading-relaxed" style={{ borderTop: "1px solid #f0f0f0", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>{acc.content}</p>
+                <p className="text-xs text-gray-600 mt-3 pt-3 leading-relaxed" style={{ borderTop: "1px solid #f0f0f0", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{acc.content}</p>
               </details>
             ))}
           </div>
@@ -1638,15 +1759,15 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
         <div className="space-y-4">
           <div className="p-6 rounded-2xl space-y-3" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
             {["👁️ ระบบแสดงข้อความแจ้งเตือนทุกครั้งที่กำลังวิเคราะห์ข้อมูล (Transparent AI)", "🩺 AI ไม่มีหน้าที่วินิจฉัยโรคซึมเศร้าหรือโรคทางจิตเวชไม่ว่ากรณีใดๆ", "👥 มี Human-in-the-loop — กรณีฉุกเฉินจะแจ้งเตือนไปยังผู้ดูแลระบบที่เป็นมนุษย์แบบไม่ระบุตัวตน", "💖 ผลลัพธ์จากการวิเคราะห์เป็นข้อเสนอแนะเชิงบวก ไม่ใช่การตัดสิน ตีตรา หรือประเมินค่า", "🛡️ มี Rate Limiting และระบบตรวจจับกรองเนื้อหาที่ไม่เหมาะสม เพื่อป้องกันการใช้งานในทางที่ผิด"].map((text, i) => (
-              <div key={i} className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>{text}</div>
+              <div key={i} className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{text}</div>
             ))}
           </div>
           <div className="p-6 rounded-2xl flex items-center justify-between gap-4" style={{ backgroundColor: T.black }}>
             <div>
-              <h4 className="font-bold text-lg mb-1" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif", color: T.salmon }}>📞 สายด่วนสุขภาพจิต 1323</h4>
-              <p className="text-xs text-gray-300" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>หากพบสัญญาณน่าเป็นห่วงต่อเนื่อง กระจกจะแนะนำให้ปรึกษาครูที่ปรึกษา ผู้ปกครอง หรือสายด่วนนี้</p>
+              <h4 className="font-bold text-lg mb-1" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.salmon }}>📞 สายด่วนสุขภาพจิต 1323</h4>
+              <p className="text-xs text-gray-300" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>หากพบสัญญาณน่าเป็นห่วงต่อเนื่อง กระจกจะแนะนำให้ปรึกษาครูที่ปรึกษา ผู้ปกครอง หรือสายด่วนนี้</p>
             </div>
-            <a href="tel:1323" className="px-6 py-3 rounded-full text-white font-bold text-sm shrink-0 transition-all" style={{ backgroundColor: T.red, fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
+            <a href="tel:1323" className="px-6 py-3 rounded-full text-white font-bold text-sm shrink-0 transition-all" style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
               โทร 1323
             </a>
           </div>
@@ -1664,8 +1785,8 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
             <div key={i} className="p-5 rounded-2xl flex items-center gap-4" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
               <span className="px-3 py-1 rounded-full text-xs font-mono font-bold text-white shrink-0" style={{ backgroundColor: T.teal }}>{item.layer}</span>
               <div>
-                <h5 className="font-bold text-sm text-gray-900" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>{item.title}</h5>
-                <p className="text-xs text-gray-600 mt-0.5" style={{ fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>{item.desc}</p>
+                <h5 className="font-bold text-sm text-gray-900" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{item.title}</h5>
+                <p className="text-xs text-gray-600 mt-0.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{item.desc}</p>
               </div>
             </div>
           ))}
@@ -1675,7 +1796,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
       {subTab === "limits" && (
         <div className="p-6 rounded-2xl space-y-3" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
           {["⚠️ การวิเคราะห์อารมณ์จากใบหน้าอาจคลาดเคลื่อนในสภาพแสงน้อย หรือเมื่อใส่หน้ากากอนามัย", "⚠️ การวิเคราะห์ความรู้สึกจากข้อความอาจไม่ครอบคลุมภาษาเฉพาะกลุ่มหรือภาษาถิ่นบางรูปแบบ", "⚠️ ระบบนี้เป็นเครื่องมือเสริม ไม่สามารถแทนที่การปรึกษาจิตแพทย์หรือนักจิตวิทยา", "⚠️ อาจยังไม่สามารถตรวจจับอารมณ์เชิงซ้อนที่เกิดจากหลายสาเหตุพร้อมกันได้อย่างแม่นยำ", "⚠️ ประสิทธิภาพขึ้นอยู่กับคุณภาพการเชื่อมต่ออินเทอร์เน็ต เนื่องจากเรียกใช้ API แบบเรียลไทม์"].map((text, i) => (
-            <div key={i} className="p-3.5 rounded-xl text-xs font-semibold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>{text}</div>
+            <div key={i} className="p-3.5 rounded-xl text-xs font-semibold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{text}</div>
           ))}
         </div>
       )}
@@ -1684,41 +1805,97 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
 }
 
 /* ============ MAIN APP ============ */
+// Page transition wipe effect wrapper
+const PageWrapper = ({ children, pageKey }: { children: React.ReactNode, pageKey: string }) => {
+  const elRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (elRef.current) {
+      gsap.fromTo(elRef.current,
+        { clipPath: "inset(0 100% 0 0)" },
+        { clipPath: "inset(0 0% 0 0)", duration: 0.6, ease: "power3.inOut" }
+      );
+    }
+  }, [pageKey]);
+  return <div ref={elRef} className="h-full w-full">{children}</div>;
+};
+
 export default function App() {
   const [page, setPage] = useState<Page>("login");
   const [age, setAge] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianApproved, setGuardianApproved] = useState(false);
 
+  // Global click ripple effect
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      // Don't ripple if clicking inside a modal or explicitly prevented
+      if ((e.target as HTMLElement).closest(".no-ripple")) return;
+      
+      const colors = ["#2D6A6F", "#1A1A1A", "#FFB5A7", "#A85F73", "#6C8C64"];
+      const col = colors[Math.floor(Math.random() * colors.length)];
+      const maxR = 40 + Math.random() * 60;
+      
+      const drop = document.createElement("div");
+      drop.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;width:12px;height:12px;border-radius:50%;background:${col};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
+      document.body.appendChild(drop);
+      
+      gsap.fromTo(drop,
+        { scale: 0, opacity: 0.35 },
+        { scale: maxR/6, opacity: 0, duration: 1.2, ease: "expo.out", onComplete: () => drop.remove() }
+      );
+      
+      // Some micro droplets
+      for(let i=0; i<3; i++) {
+        const micro = document.createElement("div");
+        const angle = Math.random() * Math.PI * 2;
+        const dist = maxR * (0.3 + Math.random() * 0.5);
+        const tx = Math.cos(angle) * dist;
+        const ty = Math.sin(angle) * dist;
+        micro.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;width:3px;height:3px;border-radius:50%;background:${col};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
+        document.body.appendChild(micro);
+        gsap.to(micro, {
+          x: tx, y: ty, scale: 0, opacity: 0, duration: 0.6 + Math.random()*0.4, ease: "power2.out",
+          onComplete: () => micro.remove()
+        });
+      }
+    };
+    document.addEventListener("click", handleGlobalClick);
+    return () => document.removeEventListener("click", handleGlobalClick);
+  }, []);
+
   return (
     <div className="font-sans">
       <Toaster richColors position="top-center" />
-      {page === "login" && <LoginPage onNext={() => setPage("onb1")} />}
-      {page === "onb1" && <OnbWelcome onNext={() => setPage("onb2")} />}
+      {page === "login" && <PageWrapper pageKey="login"><LoginPage onNext={() => setPage("onb1")} /></PageWrapper>}
+      {page === "onb1" && <PageWrapper pageKey="onb1"><OnbWelcome onNext={() => setPage("onb2")} /></PageWrapper>}
       {page === "onb2" && (
-        <OnbAge
-          age={age}
-          setAge={setAge}
-          onNext={() => {
-            const ageNum = parseInt(age);
-            setPage(ageNum < 13 ? "guardian" : "privacy");
-          }}
-        />
+        <PageWrapper pageKey="onb2">
+          <OnbAge
+            age={age}
+            setAge={setAge}
+            onNext={() => {
+              const ageNum = parseInt(age);
+              setPage(ageNum < 13 ? "guardian" : "privacy");
+            }}
+          />
+        </PageWrapper>
       )}
       {page === "guardian" && (
-        <GuardianPage
-          approved={guardianApproved}
-          onSend={() => {
-            if (!guardianEmail || !guardianEmail.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
-            setTimeout(() => setGuardianApproved(true), 1200);
-          }}
-          onNext={() => setPage("privacy")}
-          guardianEmail={guardianEmail}
-          setGuardianEmail={setGuardianEmail}
-        />
+        <PageWrapper pageKey="guardian">
+          <GuardianPage
+            approved={guardianApproved}
+            onSend={() => {
+              if (!guardianEmail || !guardianEmail.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
+              setTimeout(() => setGuardianApproved(true), 1200);
+            }}
+            onNext={() => setPage("privacy")}
+            guardianEmail={guardianEmail}
+            setGuardianEmail={setGuardianEmail}
+          />
+        </PageWrapper>
       )}
-      {page === "privacy" && <PrivacyPage onNext={() => setPage("app")} />}
-      {page === "app" && <AppShell />}
+      {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={() => setPage("app")} /></PageWrapper>}
+      {page === "app" && <PageWrapper pageKey="app"><AppShell /></PageWrapper>}
     </div>
   );
 }
