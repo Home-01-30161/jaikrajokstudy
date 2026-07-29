@@ -1,787 +1,649 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import {
-  api,
-  ApiError,
-  type HealthResult,
-  type Mood,
-  type SchoolResult,
-  type TrendResult,
-} from "@/lib/api";
-import { useInView, useCountUp, createRipple } from "@/lib/animations";
+import { gsap } from "gsap";
+import { api, type ChatResult, type AnalysisResult, type TrendResult, type SchoolResult, type ExportResult, type Mood } from "@/lib/api";
 
-/* ================================================================
-   LOCAL IDENTITY
-   ================================================================ */
-const USER_KEY = "jaikrajok_user_id";
-
-function getUserId(): string {
-  try {
-    let id = localStorage.getItem(USER_KEY);
-    if (!id) {
-      id = `web_${crypto.randomUUID()}`;
-      localStorage.setItem(USER_KEY, id);
-    }
-    return id;
-  } catch {
-    return "web-anon";
-  }
-}
-
-/* ================================================================
-   IMAGE PATHS
-   ================================================================ */
+/* ============ IMAGE PATHS ============ */
 const IMG = {
-  loginCollage: "/assets/login_collage.svg",
-  handPen: "/assets/hand_pen.svg",
-  glasses: "/assets/glasses_halftone.svg",
-  megaphone: "/assets/megaphone_halftone.svg",
-  origamiStars: "/assets/origami_stars.svg",
-  crumpledPaper: "/assets/crumpled_paper.svg",
-  halftoneDots: "/assets/halftone_dots.svg",
-  booksStack: "/assets/books_stack.svg",
-  chatBubbles: "/assets/chat_bubbles.svg",
-  chartGraph: "/assets/chart_graph.svg",
-  schoolBuilding: "/assets/school_building.svg",
-  shieldLock: "/assets/shield_lock.svg",
+    loginCollage: "/collage/login_collage_ffaf73f0.png",
+    grid: "/collage/grid.png",
+    handPen: "/collage/hand_pen_b35a681f.png",
+    origamiStars: "/collage/origami_stars_0584c42e.png",
+    megaphone: "/collage/megaphone_halftone_f526c4ce.png",
+    booksStack: "/collage/books_stack_435c2b81.png",
+    chatBubbles: "/collage/chat_bubbles_77801543.png",
+    chartGraph: "/collage/chart_graph_a92a34b6.png",
+    schoolBuilding: "/collage/school_building_8cd04dbb.png",
+    shieldLock: "/collage/shield_lock_6bc87c75.png",
+    hand: "/collage/hand.png",
+    booksStackNoBg: "/collage/books_stack_435c2b81-removebg-preview.png",
+    chartGraphNoBg: "/collage/chart_graph_a92a34b6-removebg-preview.png",
+    chatBubblesNoBg: "/collage/chat_bubbles_77801543-removebg-preview.png",
+    origamiStarsNoBg: "/collage/origami_stars_0584c42e-removebg-preview.png",
+    schoolBuildingNoBg: "/collage/school_building_8cd04dbb-removebg-preview.png",
+    shieldLockNoBg: "/collage/shield_lock_6bc87c75-removebg-preview.png",
+    amplifier: "/collage/amplifier.png",
+    bulb: "/collage/bulb.png",
+    dots: "/collage/dots.png",
+    glasses: "/collage/glasses.png",
+    redstar: "/collage/redstar.png",
+    star: "/collage/star.png",
 };
 
-/* ================================================================
-   SVG ICONS (replacing emoji)
-   ================================================================ */
-function IconHome({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  );
+/* ============ DESIGN TOKENS ============ */
+const T = {
+  cream: "#F3EEE1",
+  black: "#1A1A1A",
+  salmon: "#FFB5A7",
+  teal: "#2D6A6F",
+  red: "#C41E3A",
+  white: "#FFFFFF",
+  gridLine: "rgba(160,150,130,0.14)",
+};
+
+/* ============ EMOJI / MOOD DATA ============ */
+interface MoodInfo {
+  label: string;
+  emoji: string;
+  valence: number;
+  color: string;
+  bg: string;
+  text: string;
+  edge: string;
+  mid: string;
+  concern: boolean;
 }
 
-function IconChat({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  );
-}
+const EMO: Record<string, MoodInfo> = {
+  stressed: {
+    label: "เครียด / กังวล",
+    emoji: "😣",
+    valence: 0.18,
+    color: "#A85F73",
+    bg: "#F1DEE3",
+    text: "#6B3B49",
+    edge: "#A85F73",
+    mid: "#F1DEE3",
+    concern: true,
+  },
+  sad: {
+    label: "ท้อแท้ / เศร้า",
+    emoji: "😢",
+    valence: 0.28,
+    color: "#6F6389",
+    bg: "#E7E3EF",
+    text: "#423A56",
+    edge: "#6F6389",
+    mid: "#E7E3EF",
+    concern: true,
+  },
+  tired: {
+    label: "เหนื่อยล้า",
+    emoji: "😴",
+    valence: 0.35,
+    color: "#887F9E",
+    bg: "#E7E3EF",
+    text: "#423A56",
+    edge: "#6F6389",
+    mid: "#E7E3EF",
+    concern: false,
+  },
+  neutral: {
+    label: "ปกติ",
+    emoji: "😐",
+    valence: 0.55,
+    color: "#2F5D62",
+    bg: "#E3EAE0",
+    text: "#3C5137",
+    edge: "#6C8C64",
+    mid: "#E3EAE0",
+    concern: false,
+  },
+  calm: {
+    label: "ผ่อนคลาย",
+    emoji: "😌",
+    valence: 0.72,
+    color: "#2F5D62",
+    bg: "#E3EAE0",
+    text: "#3C5137",
+    edge: "#6C8C64",
+    mid: "#E3EAE0",
+    concern: false,
+  },
+  positive: {
+    label: "สดใส / มีความสุข",
+    emoji: "😊",
+    valence: 0.9,
+    color: "#2F5D62",
+    bg: "#E3EAE0",
+    text: "#3C5137",
+    edge: "#6C8C64",
+    mid: "#E3EAE0",
+    concern: false,
+  },
+};
 
-function IconTrend({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  );
-}
+const KEYWORDS: Record<string, string[]> = {
+  stressed: ["เครียด", "กังวล", "กลัว", "สอบ", "ทำไม่ทัน", "หนัก", "กดดัน", "วิตก", "แย่แล้ว", "ไม่ทัน"],
+  sad: ["เศร้า", "ท้อ", "ผิดหวัง", "ร้องไห้", "แย่", "เบื่อ", "หมดหวัง", "น้อยใจ"],
+  tired: ["เหนื่อย", "ง่วง", "หมดแรง", "ไม่มีแรง", "อ่อนเพลีย", "นอนไม่พอ", "ล้า", "หมดไฟ"],
+  positive: ["ดีใจ", "สนุก", "มีความสุข", "โล่งใจ", "ผ่านไปได้", "ภูมิใจ", "สำเร็จ", "ทำได้แล้ว"],
+  calm: ["สงบ", "โอเค", "ปกติ", "สบายใจ", "ผ่อนคลาย"],
+};
 
-function IconSchool({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 22V8l10-6 10 6v14" />
-      <path d="M6 12v6" /><path d="M10 12v6" /><path d="M14 12v6" /><path d="M18 12v6" />
-      <path d="M2 8h20" /><path d="M12 2v6" />
-    </svg>
-  );
-}
-
-function IconShield({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <path d="M9 12l2 2 4-4" />
-    </svg>
-  );
-}
-
-function IconSend({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-    </svg>
-  );
-}
-
-function IconMic({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" />
-      <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  );
-}
-
-function IconCamera({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-      <circle cx="12" cy="13" r="4" />
-    </svg>
-  );
-}
-
-function IconImage({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-      <circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
-    </svg>
-  );
-}
-
-function IconText({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" />
-      <line x1="12" y1="4" x2="12" y2="20" />
-    </svg>
-  );
-}
-
-function IconVolume({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-    </svg>
-  );
-}
-
-function IconDownload({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  );
-}
-
-function IconTrash({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-      <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
-}
-
-function IconMenu({ size = 24, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
-    </svg>
-  );
-}
-
-function IconX({ size = 24, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function IconCalendar({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-}
-
-function IconMessages({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <line x1="8" y1="9" x2="16" y2="9" /><line x1="8" y1="13" x2="13" y2="13" />
-    </svg>
-  );
-}
-
-function IconHeart({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-    </svg>
-  );
-}
-
-function IconStop({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
-      <rect x="4" y="4" width="16" height="16" rx="3" />
-    </svg>
-  );
-}
-
-function IconPhone({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  );
-}
-
-function IconLock({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-
-function IconEye({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function IconAlert({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-      <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-
-function IconUsers({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
-function IconActivity({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  );
-}
-
-function IconBell({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-    </svg>
-  );
-}
-
-/* ================================================================
-   MOOD SYSTEM (no emoji, text + color only)
-   ================================================================ */
-const MOOD: Record<string, { label: string; color: string; bgColor: string; icon: string }> = {
-  stressed: { label: "เครียด", color: "#C41E3A", bgColor: "rgba(196,30,58,0.08)", icon: "!!" },
-  tired:    { label: "เหนื่อย", color: "#8b7355", bgColor: "rgba(139,115,85,0.08)", icon: "~" },
-  neutral:  { label: "ปกติ", color: "#888888", bgColor: "rgba(136,136,136,0.08)", icon: "--" },
-  calm:     { label: "สงบ", color: "#2D6A6F", bgColor: "rgba(45,106,111,0.08)", icon: "~~" },
-  sad:      { label: "เศร้า", color: "#6a7080", bgColor: "rgba(106,112,128,0.08)", icon: ".." },
-  positive: { label: "สดใส", color: "#2D8F5C", bgColor: "rgba(45,143,92,0.08)", icon: "++" },
+const RESPONSES: Record<string, string[]> = {
+  stressed: [
+    "เข้าใจนะ ความกดดันแบบนี้เป็นเรื่องปกติมากสำหรับช่วงใกล้สอบ ลองพักสายตาสัก 5 นาที แล้วเลือกทำโจทย์ที่มั่นใจที่สุดก่อนได้ไหม กระจกอยู่เป็นเพื่อนด้วยนะ",
+    "ฟังดูหนักใจไม่น้อยเลย ลองหายใจเข้าลึกๆ ช้าๆ สัก 3 ครั้ง แล้วค่อยแบ่งงานเป็นชิ้นเล็กๆ ทีละอย่างนะ",
+  ],
+  sad: [
+    "ขอบคุณที่กล้าเล่าให้ฟังนะ ความรู้สึกแบบนี้ไม่ผิดเลย อยากให้รู้ว่ามีที่นี่ให้ระบายได้เสมอ",
+    "บางวันก็เป็นแบบนี้แหละ ให้ตัวเองได้เศร้าได้บ้างก็ได้ ลองเล่าเพิ่มได้ไหมว่าเกิดอะไรขึ้น",
+  ],
+  tired: [
+    "ร่างกายกำลังบอกว่าต้องการพักนะ ลองงีบสัก 20 นาที หรือลุกไปเดินยืดเส้นยืดสายก่อนได้ไหม",
+    "เหนื่อยล้าสะสมแบบนี้ ถ้าฝืนต่อไปสมองจะจำเนื้อหาได้ยากขึ้นนะ ลองพักจริงจังสักครู่กัน",
+  ],
+  neutral: [
+    "รับทราบนะ ถ้ามีอะไรอยากเล่าเพิ่มเติม หรืออยากให้ช่วยดูการบ้านก็บอกกระจกได้เลย",
+    "โอเคเลย กระจกอยู่ตรงนี้ พร้อมฟังทุกเรื่องไม่ว่าจะเรื่องเรียนหรือเรื่องทั่วไป",
+  ],
+  calm: [
+    "ดีใจที่วันนี้ใจสงบนะ รักษาจังหวะแบบนี้ไว้แล้วค่อยๆ ทบทวนบทเรียนไปทีละนิดได้เลย",
+    "สบายใจแบบนี้ดีมากเลย ถ้าพร้อมแล้วอยากให้กระจกช่วยทบทวนเรื่องไหนก่อนไหม",
+  ],
+  positive: [
+    "เก่งมากเลย! ความรู้สึกดีๆ แบบนี้ให้ตัวเองได้ภูมิใจไปกับมันเต็มที่นะ",
+    "สุดยอดเลย กระจกดีใจไปด้วยนะ ลองเก็บความรู้สึกนี้ไว้เป็นกำลังใจสำหรับตอนที่เหนื่อยด้วย",
+  ],
 };
 
 const TRANSPARENCY: Record<string, string> = {
-  "เซลฟี่": "กำลังตรวจจับใบหน้าจากภาพ (Face Detection API)",
-  "ข้อความ": "กำลังวิเคราะห์น้ำเสียงจากข้อความ (Sentiment Analysis + Pathumma LLM)",
-  "เสียงพูด": "กำลังแปลงเสียงพูดเป็นข้อความ (Speech-to-Text API)",
-  "รูปการบ้าน": "กำลังอ่านข้อความจากภาพ (OCR API)",
+  เซลฟี่: "กำลังวิเคราะห์อารมณ์จากใบหน้าของคุณ (Face Recognition API)",
+  ข้อความ: "กำลังวิเคราะห์น้ำเสียงจากข้อความ (Sentiment Analysis API)",
+  เสียงพูด: "กำลังแปลงเสียงพูดเป็นข้อความ (Speech-to-Text API)",
+  รูปการบ้าน: "กำลังอ่านข้อความจากภาพ (OCR API)",
 };
 
-const ERROR_REPLY =
-  "ขออภัยนะ ตอนนี้กระจกเชื่อมต่อระบบวิเคราะห์ไม่ได้ ลองอีกครั้งในอีกสักครู่ได้ไหม";
+const SELFIE_RESULTS = ["stressed", "tired", "neutral", "calm"];
+const SELFIE_NOTES: Record<string, string> = {
+  stressed: "สีหน้าดูเกร็งบริเวณคิ้วและรอบดวงตา มีสัญญาณของความเครียดสะสม",
+  tired: "สีหน้าดูเหนื่อยล้า มีร่องรอยของการพักผ่อนไม่เพียงพอ",
+  neutral: "สีหน้าอยู่ในเกณฑ์ปกติ ไม่พบสัญญาณผิดปกติชัดเจน",
+  calm: "สีหน้าดูผ่อนคลาย แววตาสดใส",
+};
 
-type Page = "login" | "onb1" | "onb2" | "onb3" | "guardian" | "guardianOk" | "privacy" | "app";
+type Page = "login" | "onb1" | "onb2" | "guardian" | "privacy" | "app";
 type AppView = "home" | "chat" | "trend" | "school" | "safety";
-type ChatMode = "ข้อความ" | "เซลฟี่" | "เสียงพูด" | "รูปการบ้าน";
-
-const MAX_RECORD_SECONDS = 60;
-
-/* ================================================================
-   TIME GREETING
-   ================================================================ */
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 6) return "ยังตื่นอยู่เหรอ";
-  if (h < 12) return "สวัสดีตอนเช้า";
-  if (h < 17) return "สวัสดีตอนบ่าย";
-  if (h < 21) return "สวัสดีตอนเย็น";
-  return "สวัสดีตอนค่ำ";
-}
-
-/* ================================================================
-   VOICE RECORDER HOOK
-   ================================================================ */
-function useRecorder(onComplete: (audio: Blob, filename: string) => void) {
-  const [recording, setRecording] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  const stop = useCallback(() => {
-    recorderRef.current?.state === "recording" && recorderRef.current.stop();
-  }, []);
-
-  const start = useCallback(async () => {
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      toast("เบราว์เซอร์นี้ไม่รองรับการอัดเสียง");
-      return;
-    }
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      toast("ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน");
-      return;
-    }
-
-    const rec = new MediaRecorder(stream);
-    recorderRef.current = rec;
-    chunksRef.current = [];
-
-    rec.ondataavailable = (e) => {
-      if (e.data.size) chunksRef.current.push(e.data);
-    };
-    rec.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      setRecording(false);
-      setSeconds(0);
-      const type = rec.mimeType || "audio/webm";
-      const blob = new Blob(chunksRef.current, { type });
-      chunksRef.current = [];
-      if (blob.size < 1024) {
-        toast("เสียงสั้นเกินไป ลองพูดอีกครั้งนะ");
-        return;
-      }
-      onComplete(blob, `voice.${type.includes("mp4") ? "mp4" : "webm"}`);
-    };
-
-    rec.start();
-    setRecording(true);
-    setSeconds(0);
-  }, [onComplete]);
-
-  useEffect(() => {
-    if (!recording) return;
-    const id = setInterval(() => {
-      setSeconds((s) => {
-        if (s + 1 >= MAX_RECORD_SECONDS) stop();
-        return s + 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [recording, stop]);
-
-  useEffect(() => () => {
-    const rec = recorderRef.current;
-    if (rec?.state === "recording") rec.stop();
-  }, []);
-
-  return { recording, seconds, start, stop };
-}
 
 interface ChatMsg {
-  role: "user" | "bot";
+  id: string;
+  role: "user" | "bot" | "system";
   text: string;
   timestamp: number;
-  service?: string;
+  cardType?: "emotion" | "ocr";
+  emotionData?: { label: string; note: string; color: string; bg: string; text: string };
+  ocrText?: string;
+  sourceTag?: string;
 }
 
-/* ================================================================
-   BACKGROUND DECORATIONS
-   ================================================================ */
-function GridBg() {
-  return (
-    <div
-      aria-hidden="true"
-      className="fixed inset-0 z-0 pointer-events-none"
-      style={{
-        background: `
-          linear-gradient(rgba(180,170,150,0.12) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(180,170,150,0.12) 1px, transparent 1px)
-        `,
-        backgroundSize: "28px 28px",
-        backgroundColor: "#f5f0e8",
-      }}
-    />
-  );
+interface TrendPoint {
+  id: number;
+  valence: number;
+  color: string;
+  key: string;
+  label: string;
 }
 
-function HalftoneBg() {
-  return (
-    <div
-      aria-hidden="true"
-      className="fixed inset-0 z-0 pointer-events-none opacity-[0.05]"
-      style={{
-        backgroundImage: `radial-gradient(circle, #1a1a1a 1px, transparent 1px)`,
-        backgroundSize: "20px 20px",
-      }}
-    />
-  );
+interface LogEntry {
+  id: string;
+  time: string;
+  label: string;
+  source: string;
+  key: string;
 }
 
-function CheckerStrip() {
-  const squares = Array.from({ length: 24 }, (_, i) => i);
+/* ============ CHECKERSTRIP ============ */
+function CheckerStrip({ className = "" }: { className?: string }) {
   return (
-    <div aria-hidden="true" className="fixed top-0 left-0 right-0 z-50 h-8 flex overflow-hidden" style={{ background: "#1a1a1a" }}>
-      {squares.map((i) => (
-        <div
-          key={i}
-          className="h-full flex-1 min-w-[1.5rem]"
-          style={{ background: i % 2 === 0 ? "#1a1a1a" : "#f5f0e8" }}
-        />
+    <div className={`flex overflow-hidden ${className}`} style={{ height: "36px", flexShrink: 0 }}>
+      {Array.from({ length: 40 }).map((_, i) => (
+        <div key={i} style={{ flex: 1, background: i % 2 === 0 ? T.black : T.white }} />
       ))}
     </div>
   );
 }
 
-/* ================================================================
-   MOOD BADGE
-   ================================================================ */
-function MoodBadge({ mood, size = "md", animate = false }: { mood: string; size?: "sm" | "md" | "lg"; animate?: boolean }) {
-  const m = MOOD[mood] || MOOD.neutral;
-  const sizeClasses = {
-    sm: "text-xs px-2 py-0.5",
-    md: "text-sm px-3 py-1",
-    lg: "text-base px-4 py-1.5",
-  };
+/* ============ GRAPH PAPER GRID ============ */
+function GraphPaper({ showDots = false, children }: { showDots?: boolean; children?: React.ReactNode }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${sizeClasses[size]} ${animate ? "mood-pop" : ""}`}
+    <div
+      className="relative"
       style={{
-        backgroundColor: m.bgColor,
-        color: m.color,
-        border: `1.5px solid ${m.color}20`,
-        fontFamily: "'Noto Sans Thai', sans-serif",
+        background: `
+          linear-gradient(${T.gridLine} 1px, transparent 1px),
+          linear-gradient(90deg, ${T.gridLine} 1px, transparent 1px)
+        `,
+        backgroundSize: "28px 28px",
+        backgroundColor: T.cream,
       }}
     >
-      <span className="font-mono text-xs opacity-70">{m.icon}</span>
-      {m.label}
-    </span>
+      {showDots && (
+        <div
+          className="absolute left-0 top-0 bottom-0 pointer-events-none"
+          style={{
+            width: "36%",
+            backgroundImage: `radial-gradient(circle, rgba(60,60,60,0.45) 2.5px, transparent 2.5px)`,
+            backgroundSize: "22px 22px",
+            zIndex: 0,
+          }}
+        />
+      )}
+      {children}
+    </div>
   );
 }
 
-/* ================================================================
-   LOGIN PAGE
-   ================================================================ */
+/* ============ BRAIN CLOUD SVG ============ */
+function BrainCloud({ className = "", size = 200 }: { className?: string; size?: number }) {
+  const h = Math.round(size * 0.8);
+  return (
+    <div className={`absolute pointer-events-none ${className}`} style={{ width: size, height: h }}>
+      <svg viewBox="0 0 200 160" width={size} height={h} fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="brainBlur2">
+            <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="4" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="12" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+          <clipPath id="brainClip2">
+            <ellipse cx="100" cy="80" rx="85" ry="65" />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#brainClip2)" filter="url(#brainBlur2)">
+          {Array.from({ length: 12 }).map((_, row) =>
+            Array.from({ length: 16 }).map((_, col) => {
+              const x = col * 13 + 5;
+              const y = row * 13 + 5;
+              const dist = Math.sqrt((x - 100) ** 2 + (y - 80) ** 2);
+              const r = Math.max(0, 5.5 - dist * 0.045);
+              return r >= 0.5 ? <circle key={`${row}-${col}`} cx={x} cy={y} r={r} fill="#444" opacity="0.9" /> : null;
+            })
+          )}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/* ============ RED DOT CROSS ============ */
+function RedDotCross({ className = "", color = T.red }: { className?: string; color?: string }) {
+  return (
+    <div className={`absolute pointer-events-none ${className}`}>
+      <svg viewBox="0 0 80 80" width="80" height="80" fill="none">
+        {[
+          [32,8],[40,8],[48,8],
+          [24,16],[32,16],[40,16],[48,16],[56,16],
+          [16,24],[24,24],[32,24],[40,24],[48,24],[56,24],[64,24],
+          [8,32],[16,32],[24,32],[32,32],[40,32],[48,32],[56,32],[64,32],[72,32],
+          [8,40],[16,40],[24,40],[32,40],[40,40],[48,40],[56,40],[64,40],[72,40],
+          [16,48],[24,48],[32,48],[40,48],[48,48],[56,48],[64,48],
+          [24,56],[32,56],[40,56],[48,56],[56,56],
+          [32,64],[40,64],[48,64],
+          [40,72],
+        ].map(([cx, cy], i) => <circle key={i} cx={cx} cy={cy} r="3.2" fill={color} opacity="0.9" />)}
+      </svg>
+    </div>
+  );
+}
+
+/* ============ HALFTONE DOT FIELD ============ */
+function HalftoneField({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`absolute pointer-events-none ${className}`}
+      style={{
+        backgroundImage: `radial-gradient(circle, rgba(50,50,50,0.5) 2.5px, transparent 2.5px)`,
+        backgroundSize: "22px 22px",
+      }}
+    />
+  );
+}
+
+/* ============ ONBOARDING CARD SHELL ============ */
+function OnbCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={`relative z-10 ${className}`}
+      style={{
+        background: T.white,
+        borderRadius: "20px",
+        padding: "44px 48px",
+        maxWidth: "560px",
+        width: "100%",
+        boxShadow: "0 4px 32px rgba(0,0,0,0.07)",
+        border: "1.5px solid rgba(200,195,185,0.45)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ============ TEAL BADGE ============ */
+function TealBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="inline-block px-4 py-1.5 rounded-full text-sm mb-5"
+      style={{
+        border: `1.5px solid ${T.teal}`,
+        color: T.teal,
+        fontFamily: "'IBM Plex Mono', monospace",
+        fontSize: "12px",
+        backgroundColor: "rgba(45,106,111,0.07)",
+        letterSpacing: "0.01em",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ============ TEAL BUTTON ============ */
+function TealBtn({ children, onClick, disabled = false, fullWidth = false }: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  fullWidth?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`px-8 py-3.5 rounded-full font-bold text-white transition-all active:scale-[0.97] ${fullWidth ? "w-full" : ""}`}
+      style={{
+        backgroundColor: disabled ? "#a0b8bb" : T.teal,
+        fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
+        fontSize: "15px",
+        cursor: disabled ? "default" : "pointer",
+        boxShadow: disabled ? "none" : "0 2px 14px rgba(45,106,111,0.28)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ============ SALMON BUTTON (login) ============ */
+function SalmonBtn({ children, onClick, fullWidth = false }: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  fullWidth?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-8 py-3.5 rounded-full font-bold text-white transition-all active:scale-[0.97] ${fullWidth ? "w-full" : ""}`}
+      style={{
+        backgroundColor: T.red,
+        fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
+        fontSize: "15px",
+        boxShadow: "0 2px 14px rgba(196,30,58,0.3)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ============ LOGIN PAGE ============ */
 function LoginPage({ onNext }: { onNext: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
 
+  useEffect(() => {
+    // Title screen stagger in
+    gsap.fromTo(".login-img", { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power3.out" });
+    gsap.fromTo(".login-form", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)", delay: 0.3 });
+  }, []);
+
   return (
-    <div className="relative min-h-screen overflow-hidden" style={{ backgroundColor: "#f5f0e8" }}>
-      <CheckerStrip />
-      <GridBg />
-      <HalftoneBg />
-
-      {/* Left collage */}
-      <div className="absolute left-0 top-8 bottom-0 w-1/2 z-10 hidden md:block">
-        <img src={IMG.loginCollage} alt="" className="w-full h-full object-cover object-left-top opacity-90" />
-        <div className="absolute bottom-0 left-0 w-full h-32 z-20"
-          style={{ background: "linear-gradient(to top, #1a1a1a 0%, transparent 100%)" }} />
-      </div>
-
-      {/* Curved black shape */}
-      <div className="absolute left-0 bottom-0 w-[45%] z-10 hidden md:block" style={{ height: "60%" }}>
-        <svg viewBox="0 0 600 500" className="w-full h-full" preserveAspectRatio="none">
-          <path d="M0,0 C200,50 300,100 500,200 C600,300 600,500 600,500 L0,500 Z" fill="#1a1a1a" />
-        </svg>
-      </div>
-
-      {/* Login card */}
-      <div className="absolute right-0 top-8 bottom-0 w-full md:w-[55%] flex items-center justify-center z-20 px-6 md:px-8">
-        <div
-          className="w-full max-w-md p-8 relative animate-scale-in"
-          style={{
-            background: "linear-gradient(160deg, #FFB5A7 0%, #FFC8B8 40%, #FFD5CC 100%)",
-            borderRadius: "28px",
-            border: "2.5px solid #e0d0c4",
-            boxShadow: "6px 6px 0px rgba(26,26,26,0.15), 0 20px 60px rgba(0,0,0,0.1)",
-          }}
-        >
-          <div className="absolute inset-0 rounded-[28px] opacity-[0.06] pointer-events-none"
-            style={{
-              backgroundImage: `radial-gradient(circle, #1a1a1a 1px, transparent 1px)`,
-              backgroundSize: "12px 12px",
-            }} />
-
-          <h1
-            className="text-2xl font-bold mb-1"
-            style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
-          >
-            สวัสดี กระจกรอคุณอยู่
-          </h1>
-          <h2
-            className="text-4xl font-black mb-6"
-            style={{ fontFamily: "'Playfair Display', serif", color: "#C41E3A" }}
-          >
-            JaiKrajok
-          </h2>
-
-          <p className="text-xs mb-5 tracking-widest uppercase" style={{ color: "#888", fontFamily: "'Space Mono', monospace" }}>
-            พื้นที่ปลอดภัย - สำหรับนักเรียน
-          </p>
-
-          <div className="space-y-4">
-            <input
-              type="email"
-              placeholder="อีเมล"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border-0 outline-none text-[#1a1a1a]"
-              style={{
-                backgroundColor: "rgba(255,255,255,0.85)",
-                fontFamily: "'Noto Sans Thai', sans-serif",
-                fontSize: "15px",
-                border: "2px solid rgba(26,26,26,0.1)",
-              }}
-            />
-            <input
-              type="password"
-              placeholder="รหัสผ่าน"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border-0 outline-none text-[#1a1a1a]"
-              style={{
-                backgroundColor: "rgba(255,255,255,0.85)",
-                fontFamily: "'Noto Sans Thai', sans-serif",
-                fontSize: "15px",
-                border: "2px solid rgba(26,26,26,0.1)",
-              }}
-            />
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => {
-                  if (!email || !password) { toast("กรุณากรอกข้อมูลให้ครบ"); return; }
-                  onNext();
-                }}
-                className="flex-1 py-3.5 rounded-xl font-semibold text-white transition-all duration-150 active:scale-[0.97]"
-                style={{
-                  backgroundColor: "#2D6A6F",
-                  fontFamily: "'Noto Sans Thai', sans-serif",
-                  boxShadow: "3px 3px 0px rgba(26,26,26,0.2)",
-                }}
-              >
-                {mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
-              </button>
-            </div>
-
-            <button
-              className="w-full py-3.5 rounded-xl font-medium flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.97] mt-2"
-              style={{
-                backgroundColor: "rgba(255,255,255,0.9)",
-                color: "#1a1a1a",
-                fontFamily: "'Noto Sans Thai', sans-serif",
-                border: "2px solid rgba(26,26,26,0.1)",
-              }}
-              onClick={() => toast("ฟีเจอร์ Google Login กำลังพัฒนา")}
-            >
-              <svg width="20" height="20" viewBox="0 0 48 48">
-                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-              </svg>
-              เข้าสู่ระบบด้วย Google
-            </button>
-
-            <p className="text-center text-sm mt-5" style={{ color: "#666", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-              {mode === "login" ? "ยังไม่มีบัญชี? " : "มีบัญชีอยู่แล้ว? "}
-              <button
-                onClick={() => setMode(mode === "login" ? "signup" : "login")}
-                className="underline font-semibold"
-                style={{ color: "#2D6A6F" }}
-              >
-                {mode === "login" ? "สมัครสมาชิก" : "เข้าสู่ระบบ"}
-              </button>
-            </p>
-          </div>
+    <div className="relative min-h-screen overflow-hidden" style={{ backgroundColor: T.black }}>
+      <CheckerStrip className="fixed top-0 left-0 right-0 z-50" />
+      
+      {/* LEFT: collage only (no grid) */}
+      <div
+        className="absolute left-0 top-0 bottom-0 z-0 login-img"
+        style={{
+          width: "55%",
+          backgroundColor: T.cream,
+        }}
+      >
+        <img
+          src={IMG.loginCollage}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-left-top"
+          style={{ mixBlendMode: "multiply", opacity: 0.88 }}
+        />
+        
+        {/* Black curved divider sweeping right fully connected */}
+        <div className="absolute inset-y-0 right-0 z-10" style={{ width: "25%" }}>
+          <svg viewBox="0 0 120 100" preserveAspectRatio="none" className="w-full h-full block">
+            <path d="M120,0 C60,20 20,50 20,100 L120,100 Z" fill={T.black} />
+          </svg>
         </div>
       </div>
 
-      {/* Hand with pen */}
-      <div className="absolute bottom-4 right-4 z-30 opacity-60 hidden md:block" style={{ width: "180px" }}>
-        <img src={IMG.handPen} alt="" className="w-full h-auto animate-float" style={{ filter: "brightness(0.8) contrast(1.2)" }} />
+      {/* RIGHT: black panel with form card */}
+      <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-10 pointer-events-none" style={{ width: "45%" }}>
+        {/* Hand-pen collage */}
+        <div className="fixed bottom-[-150px] right-[-150px] z-40 pointer-events-none" style={{ width: "1200px" }}>
+          <img src={IMG.hand} alt="" className="w-full h-auto" />
+        </div>
+      </div>
+      
+      <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-30 login-form" style={{ width: "50%" }}>
+        {/* Form card */}
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "380px",
+            background: "linear-gradient(150deg, #FBCFCA 0%, #FCD5CF 55%, #FDDDD9 100%)",
+            borderRadius: "24px",
+            padding: "36px 32px",
+            boxShadow: "0 12px 60px rgba(0,0,0,0.4)",
+            position: "relative",
+          }}
+        >
+          <p className="text-xl font-semibold mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>Welcome To</p>
+          <h1 className="text-5xl font-black mb-6" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red, lineHeight: 1.1 }}>JaiKraJok</h1>
+
+          <div
+            className="flex mb-5 rounded-2xl overflow-hidden"
+            style={{ border: "1.5px solid rgba(26,26,26,0.12)", background: "rgba(255,255,255,0.55)" }}
+          >
+            <button
+              onClick={() => setMode("login")}
+              className="flex-1 py-2.5 text-sm font-semibold transition-all"
+              style={{
+                background: mode === "login" ? T.white : "transparent",
+                color: T.black,
+                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                borderRight: "1.5px solid rgba(26,26,26,0.12)",
+              }}
+            >
+              Log In
+            </button>
+            <button
+              onClick={() => setMode("signup")}
+              className="flex-1 py-2.5 text-sm font-semibold transition-all"
+              style={{
+                background: mode === "signup" ? T.white : "transparent",
+                color: T.black,
+                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+              }}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red }}>
+            Email
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-4 py-3 rounded-2xl mb-4 outline-none transition-all focus:ring-2"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.8)",
+              border: "1px solid rgba(0,0,0,0.05)",
+              color: T.black,
+              fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+            }}
+          />
+
+          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red }}>
+            Password
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-3 rounded-2xl mb-6 outline-none transition-all focus:ring-2"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.8)",
+              border: "1px solid rgba(0,0,0,0.05)",
+              color: T.black,
+              fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+            }}
+          />
+
+          <button
+            onClick={() => {
+              if (!email || !password) { toast("กรุณากรอกอีเมลและรหัสผ่าน"); return; }
+              onNext();
+            }}
+            className="w-full py-3.5 rounded-full font-bold text-white text-base mb-3 transition-all active:scale-[0.97]"
+            style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
+          >
+            {mode === "login" ? "Log In" : "Sign Up"}
+          </button>
+
+          <div className="text-center text-xs mb-3" style={{ color: "rgba(26,26,26,0.6)", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>or</div>
+
+          <button
+            className="w-full py-3 rounded-full font-bold text-base mb-3 transition-all active:scale-[0.97] bg-white flex items-center justify-center"
+            style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+          >
+            Sign Up
+          </button>
+
+          <button
+            onClick={() => toast("ฟีเจอร์ Google Login กำลังพัฒนา")}
+            className="w-full py-3 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] flex items-center justify-center gap-2"
+            style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
+          >
+            Log In With Google
+            <svg width="16" height="16" viewBox="0 0 48 48">
+              <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
+              <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
+              <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
+              <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ================================================================
-   ONBOARDING STEP 1: Welcome
-   ================================================================ */
 function OnbWelcome({ onNext }: { onNext: () => void }) {
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 md:p-8" style={{ backgroundColor: "#f5f0e8" }}>
-      <GridBg />
-      <HalftoneBg />
-
-      <img src={IMG.halftoneDots} alt="" className="absolute top-0 left-0 w-[300px] md:w-[400px] opacity-20 pointer-events-none" style={{ transform: "scaleX(-1)" }} />
-
-      <div className="absolute bottom-8 right-8 opacity-50 hidden md:block" style={{ width: "220px" }}>
-        <img src={IMG.handPen} alt="" className="w-full h-auto animate-float" />
-      </div>
-
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl animate-scale-in" style={{ border: "2px solid #e0d8cc" }}>
-        <div
-          className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 text-white"
-          style={{ backgroundColor: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}
-        >
-          AI for Thai - Pathumma LLM
-        </div>
-
-        <h1 className="text-3xl font-black mb-4 leading-tight" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
-          กระจกสะท้อนใจ
-        </h1>
-        <p className="text-lg font-semibold mb-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#2D6A6F" }}>
-          พื้นที่ปลอดภัยให้ใจได้มองเห็นตัวเอง
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+        <img src={IMG.origamiStarsNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
+        <img src={IMG.hand} className="absolute bottom-[-100px] right-[-100px] w-[800px] h-auto pointer-events-none z-20" alt="" />
+        <img src={IMG.redstar} className="absolute top-16 right-24 w-16 h-auto pointer-events-none z-0" alt="" />
+        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+          ยินดีต้อนรับสู่ JaiKraJok
+        </h2>
+        <p className="text-base mb-12" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
+          พื้นที่ปลอดภัยสำหรับแชร์ความรู้สึกของคุณ เราพร้อมรับฟังและเคียงข้างเสมอ
         </p>
-        <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
-          แอปพลิเคชัน AI สำหรับนักเรียน ม.ปลาย ที่ช่วยให้คุณสำรวจและเข้าใจอารมณ์ของตัวเอง ผ่านการวิเคราะห์ข้อความ และเสียงพูด อย่างปลอดภัยและโปร่งใส
-        </p>
-
-        <button
-          onClick={onNext}
-          className="w-full py-4 rounded-2xl text-white font-bold text-lg transition-all duration-150 active:scale-[0.97]"
-          style={{ backgroundColor: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}
-        >
-          เริ่มต้นใช้งาน
+        <button onClick={onNext} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
+          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>เริ่มกันเลย</span>
         </button>
       </div>
     </div>
   );
 }
 
-/* ================================================================
-   ONBOARDING STEP 2: Age
-   ================================================================ */
-function OnbAge({ onNext, age, setAge }: { onNext: () => void; age: string; setAge: (v: string) => void }) {
+function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => void; onNext: () => void }) {
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 md:p-8" style={{ backgroundColor: "#f5f0e8" }}>
-      <GridBg />
-      <HalftoneBg />
-
-      <img src={IMG.halftoneDots} alt="" className="absolute top-0 left-0 w-[350px] opacity-15 pointer-events-none" />
-
-      <div className="absolute bottom-4 left-8 opacity-50 hidden md:block" style={{ width: "180px" }}>
-        <img src={IMG.origamiStars} alt="" className="w-full h-auto" />
-      </div>
-
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl animate-scale-in" style={{ border: "2px solid #e0d8cc" }}>
-        <div
-          className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 text-white"
-          style={{ backgroundColor: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}
-        >
-          ขั้นตอนที่ 1 จาก 3
-        </div>
-
-        <h1 className="text-2xl font-black mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-          ขอทราบอายุของคุณ
-        </h1>
-        <p className="text-sm mb-6" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-          ระบุอายุเพื่อการตรวจสอบตามข้อกำหนด PDPA
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+        <img src={IMG.booksStackNoBg} className="absolute bottom-0 left-0 w-80 h-auto pointer-events-none z-0" alt="" />
+        <img src={IMG.glasses} className="absolute top-4 right-10 w-96 h-auto pointer-events-none z-0 opacity-80" alt="" />
+        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+          คุณอายุเท่าไหร่?
+        </h2>
+        <p className="text-base mb-10" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
+          เพื่อประสบการณ์ที่เหมาะสมกับคุณ
         </p>
-
         <input
           type="number"
-          placeholder="อายุ (ปี)"
           value={age}
           onChange={(e) => setAge(e.target.value)}
-          className="w-full px-5 py-4 rounded-2xl text-lg mb-6 outline-none"
-          style={{
-            backgroundColor: "#f5f0e8",
-            fontFamily: "'Noto Sans Thai', sans-serif",
-            border: "2px solid #e0d8cc",
-            color: "#1a1a1a",
-          }}
+          placeholder="ระบุอายุของคุณ"
+          className="w-full px-5 py-4 rounded-2xl mb-10 outline-none focus:ring-2 text-lg text-center"
+          style={{ backgroundColor: "#EBE5DC", border: "2px solid #1a1a1a", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
         />
-
-        <button
-          onClick={() => {
-            if (!age || parseInt(age) < 1 || parseInt(age) > 99) {
-              toast("กรุณากรอกอายุที่ถูกต้อง");
-              return;
-            }
-            onNext();
-          }}
-          className="w-full py-4 rounded-2xl text-white font-bold text-lg transition-all duration-150 active:scale-[0.97]"
-          style={{ backgroundColor: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}
-        >
-          ถัดไป
+        <button onClick={() => { if (!age || parseInt(age) <= 0) return; onNext(); }} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
+          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>ถัดไป</span>
         </button>
       </div>
     </div>
   );
 }
 
-/* ================================================================
-   GUARDIAN CONSENT
-   ================================================================ */
-function GuardianPage({
-  approved, onSend, onNext, guardianEmail, setGuardianEmail,
-}: {
-  approved: boolean; onSend: () => void; onNext: () => void;
-  guardianEmail: string; setGuardianEmail: (v: string) => void;
-}) {
+function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmail }: any) {
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 md:p-8" style={{ backgroundColor: "#f5f0e8" }}>
-      <GridBg />
-      <HalftoneBg />
-
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl animate-scale-in" style={{ border: "2px solid #e0d8cc" }}>
-        <div
-          className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 text-white"
-          style={{ backgroundColor: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}
-        >
-          ต้องได้รับความยินยอมจากผู้ปกครอง
-        </div>
-
-        <h1 className="text-2xl font-black mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-          ผู้ใช้อายุต่ำกว่า 13 ปี
-        </h1>
-        <p className="text-sm mb-6" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-          ตามข้อกำหนด PDPA ต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้งาน
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+        <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0" alt="" />
+        <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0 " alt="" />
+        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+          ขอความยินยอมจากผู้ปกครอง
+        </h2>
+        <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
+          เนื่องจากคุณอายุต่ำกว่า 13 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณ
         </p>
-
-        {approved ? (
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl" style={{ backgroundColor: "#E8F5E9", border: "1px solid #A5D6A7" }}>
-              <p className="text-sm font-semibold flex items-center gap-2" style={{ color: "#2E7D32", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-                <IconShield size={16} color="#2E7D32" />
-                ผู้ปกครองให้ความยินยอมแล้ว
-              </p>
-            </div>
-            <button
-              onClick={onNext}
-              className="w-full py-4 rounded-2xl text-white font-bold text-lg transition-all duration-150 active:scale-[0.97]"
-              style={{ backgroundColor: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}
-            >
-              ถัดไป
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
+        {!approved ? (
+          <div className="flex flex-col gap-6">
             <input
               type="email"
               placeholder="อีเมลผู้ปกครอง"
               value={guardianEmail}
               onChange={(e) => setGuardianEmail(e.target.value)}
-              className="w-full px-5 py-4 rounded-2xl text-lg outline-none"
-              style={{ backgroundColor: "#f5f0e8", fontFamily: "'Noto Sans Thai', sans-serif", border: "2px solid #e0d8cc", color: "#1a1a1a" }}
+              className="w-full px-5 py-4 rounded-2xl outline-none focus:ring-2 text-base"
+              style={{ backgroundColor: "#EBE5DC", border: "2px solid #1a1a1a", color: "#1a1a1a", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
             />
-            <button
-              onClick={onSend}
-              className="w-full py-4 rounded-2xl text-white font-bold text-lg transition-all duration-150 active:scale-[0.97]"
-              style={{ backgroundColor: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}
-            >
+            <button onClick={onSend} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]" style={{ backgroundColor: "#1a1a1a", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
               ส่งคำขอความยินยอม
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-6">
+            <div className="p-5 rounded-2xl text-center" style={{ backgroundColor: "#E8F5E9", border: "2px solid #4CAF50", color: "#2E7D32", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", fontWeight: "bold" }}>
+              ✓ ได้รับความยินยอมแล้ว
+            </div>
+            <button onClick={onNext} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+              ถัดไป
             </button>
           </div>
         )}
@@ -790,133 +652,269 @@ function GuardianPage({
   );
 }
 
-/* ================================================================
-   PRIVACY PAGE
-   ================================================================ */
 function PrivacyPage({ onNext }: { onNext: () => void }) {
-  const [accepted, setAccepted] = useState(false);
-
-  const items = [
-    "ไม่เก็บข้อมูลใบหน้า -- ใช้การวิเคราะห์ทันทีแล้วลบ",
-    "ข้อมูลทั้งหมดเข้ารหัสแบบ end-to-end",
-    "ไม่ใช่การวินิจฉัยทางการแพทย์",
-    "คุณสามารถลบข้อมูลได้ทุกเมื่อ",
-  ];
-
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 md:p-8" style={{ backgroundColor: "#f5f0e8" }}>
-      <GridBg />
-      <HalftoneBg />
-
-      <div className="absolute bottom-8 left-8 opacity-40 hidden md:block" style={{ width: "180px" }}>
-        <img src={IMG.megaphone} alt="" className="w-full h-auto" />
-      </div>
-
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-[28px] p-8 shadow-xl animate-scale-in" style={{ border: "2px solid #e0d8cc" }}>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+        <img src={IMG.chartGraphNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
+        <img src={IMG.dots} className="absolute top-16 right-16 w-32 h-auto pointer-events-none z-0 " alt="" />
+        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+          นโยบายความเป็นส่วนตัว
+        </h2>
         <div
-          className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 text-white"
-          style={{ backgroundColor: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}
-        >
-          ขั้นตอนสุดท้าย
-        </div>
-
-        <h1 className="text-2xl font-black mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-          ความเป็นส่วนตัวของคุณ
-        </h1>
-        <p className="text-sm mb-6" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-          โปรดอ่านและยอมรับเงื่อนไขก่อนใช้งาน
-        </p>
-
-        <ul className="space-y-3 mb-6 stagger-children">
-          {items.map((item, i) => (
-            <li key={i} className="flex items-start gap-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#444", fontSize: "14px" }}>
-              <span className="mt-0.5"><IconShield size={14} color="#2D6A6F" /></span>
-              {item}
-            </li>
-          ))}
-        </ul>
-
-        <label className="flex items-center gap-3 mb-6 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={accepted}
-            onChange={() => setAccepted(!accepted)}
-            className="w-5 h-5 rounded-md accent-[#2D6A6F]"
-          />
-          <span className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#444" }}>
-            ยอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว
-          </span>
-        </label>
-
-        <button
-          onClick={() => {
-            if (!accepted) { toast("กรุณายอมรับเงื่อนไขก่อนใช้งาน"); return; }
-            onNext();
-          }}
-          className="w-full py-4 rounded-2xl text-white font-bold text-lg transition-all duration-150 active:scale-[0.97]"
+          className="mb-8 p-6 rounded-2xl text-sm leading-relaxed overflow-y-auto"
           style={{
-            backgroundColor: accepted ? "#2D6A6F" : "#999",
-            fontFamily: "'Noto Sans Thai', sans-serif",
+            backgroundColor: "#EBE5DC",
+            border: "2px solid #1a1a1a",
+            height: "220px",
+            color: "#4a4a4a",
+            fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
           }}
         >
-          เข้าสู่กระจกสะท้อนใจ
+          <p className="mb-4">เราให้ความสำคัญกับความเป็นส่วนตัวของคุณ ข้อมูลทั้งหมดที่คุณแชร์ใน JaiKraJok จะถูกเก็บรักษาเป็นความลับและปลอดภัย</p>
+          <p className="mb-4">1. ข้อมูลส่วนบุคคลจะถูกใช้เพื่อปรับปรุงประสบการณ์ของคุณเท่านั้น</p>
+          <p className="mb-4">2. เราไม่มีนโยบายส่งต่อข้อมูลของคุณให้กับบุคคลที่สาม</p>
+          <p>3. คุณสามารถขอลบข้อมูลของคุณได้ตลอดเวลาผ่านเมนูตั้งค่า</p>
+        </div>
+        <button onClick={onNext} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
+          <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>ยอมรับและเข้าสู่ระบบ</span>
         </button>
       </div>
     </div>
   );
 }
 
-/* ================================================================
-   MAIN APP SHELL
-   ================================================================ */
+/* ============ USER ID MANAGEMENT ============ */
+function getUserId(): string {
+  let uid = localStorage.getItem("jaikrajok_user_id");
+  if (!uid) {
+    uid = `u_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    localStorage.setItem("jaikrajok_user_id", uid);
+  }
+  return uid;
+}
+
+/* ============ MAIN APP SHELL ============ */
 function AppShell() {
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [age] = useState("16");
-  const [mood, setMood] = useState<string>("neutral");
-  const [userId] = useState(getUserId);
-  const [crisisRaised, setCrisisRaised] = useState(false);
-  const [trend, setTrend] = useState<TrendResult | null>(null);
-  const [school, setSchool] = useState<SchoolResult | null>(null);
-  const [dataError, setDataError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const refreshTrend = useCallback(async () => {
-    try {
-      const [t, s] = await Promise.all([api.trend(userId), api.school()]);
-      setTrend(t);
-      setSchool(s);
-      setDataError(null);
-    } catch (err) {
-      setDataError(err instanceof ApiError ? err.message : "โหลดข้อมูลไม่สำเร็จ");
-    }
-  }, [userId]);
-
-  useEffect(() => { void refreshTrend(); }, [refreshTrend]);
-
-  useEffect(() => {
-    if (crisisRaised) setCurrentView("safety");
-  }, [crisisRaised]);
+  const [guardianConsent] = useState(true);
+  const [mood, setMood] = useState<string>("calm");
+  const [lineNotify, setLineNotify] = useState(false);
+  const userId = getUserId();
 
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
+      id: "init",
       role: "bot",
-      text: "สวัสดีค่ะ กระจกดีใจที่ได้พบคุณวันนี้ อยากคุยเรื่องอะไรให้กระจกช่วยไหม?",
+      text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ",
       timestamp: Date.now(),
     },
   ]);
   const [inputText, setInputText] = useState("");
-  const [chatMode, setChatMode] = useState<ChatMode>("ข้อความ");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const navItems: { id: AppView; label: string; Icon: typeof IconHome }[] = [
-    { id: "home", label: "หน้าหลัก", Icon: IconHome },
-    { id: "chat", label: "แชท", Icon: IconChat },
-    { id: "trend", label: "แนวโน้มของวัน", Icon: IconTrend },
-    { id: "school", label: "ภาพรวมโรงเรียน", Icon: IconSchool },
-    { id: "safety", label: "ความปลอดภัย & ข้อมูล", Icon: IconShield },
+  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const [concernStreak, setConcernStreak] = useState(0);
+  const [modesUsed, setModesUsed] = useState<Set<string>>(new Set());
+  const [transparencyLogs, setTransparencyLogs] = useState<string[]>([]);
+  const [showEscalationModal, setShowEscalationModal] = useState(false);
+
+  const speakText = (text: string) => {
+    if (!("speechSynthesis" in window)) { toast("เบราว์เซอร์นี้ไม่รองรับ Text-to-Speech"); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "th-TH";
+    u.rate = 0.98;
+    window.speechSynthesis.speak(u);
+    toast("🔊 กำลังอ่านข้อความเสียง...");
+  };
+
+  const pushTrend = useCallback((key: string, sourceLabel: string) => {
+    const info = EMO[key] || EMO.neutral;
+    setMood(key);
+    setTrendData((prev) => {
+      const nextId = prev.length > 0 ? prev[prev.length - 1].id + 1 : 1;
+      return [...prev, { id: nextId, valence: info.valence, color: info.color, key, label: info.label }].slice(-9);
+    });
+    const nowStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+    setLogEntries((prev) => [{ id: Math.random().toString(), time: nowStr, label: info.label, source: sourceLabel, key }, ...prev.slice(0, 19)]);
+    setConcernStreak((prevStreak) => {
+      const newStreak = info.concern ? prevStreak + 1 : 0;
+      if (newStreak >= 3) setTimeout(() => setShowEscalationModal(true), 1200);
+      return newStreak;
+    });
+  }, []);
+
+  const noteMultimodal = useCallback((sourceLabel: string) => {
+    setModesUsed((prev) => {
+      const nextSet = new Set(prev).add(sourceLabel);
+      if (nextSet.size === 2 && !prev.has(sourceLabel)) {
+        setTimeout(() => {
+          setMessages((msgs) => [...msgs, {
+            id: Math.random().toString(),
+            role: "system",
+            text: `Pathumma LLM กำลังรวมข้อมูลจากหลายแหล่ง (${Array.from(nextSet).join(" + ")}) เพื่อให้คำแนะนำที่แม่นยำขึ้น`,
+            timestamp: Date.now(),
+          }]);
+        }, 600);
+      }
+      return nextSet;
+    });
+    const transNote = TRANSPARENCY[sourceLabel] || "กำลังวิเคราะห์ข้อมูลด้วย Pathumma LLM";
+    setTransparencyLogs((prev) => [transNote, ...prev.slice(0, 4)]);
+  }, []);
+
+
+  const sendMessage = useCallback(async (overrideText?: string, sourceLabel: string = "ข้อความ") => {
+    const textToSend = overrideText !== undefined ? overrideText : inputText;
+    if (!textToSend.trim()) return;
+    if (overrideText === undefined) setInputText("");
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
+    noteMultimodal(sourceLabel);
+    setIsAnalyzing(true);
+
+    try {
+      const result = await api.sendMessage(userId, textToSend);
+      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
+      pushTrend(result.mood, sourceLabel);
+      if (result.crisis) {
+        setTimeout(() => setShowEscalationModal(true), 800);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "ส่งข้อความไม่สำเร็จ");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [inputText, noteMultimodal, pushTrend, userId]);
+
+  const handleSelfie = async () => {
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "📷 ถ่ายเซลฟี่เพื่อวิเคราะห์สีหน้า", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
+    noteMultimodal("เซลฟี่");
+    setIsAnalyzing(true);
+
+    // Mock: create a tiny 1x1 transparent PNG as placeholder
+    const mockBlob = new Blob([new Uint8Array([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+      0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+    ])], { type: "image/png" });
+
+    try {
+      const result = await api.analyzeSelfie(userId, mockBlob);
+      const info = EMO[result.mood];
+      setMessages((prev) => [...prev, {
+        id: Math.random().toString(),
+        role: "bot",
+        text: result.reply,
+        timestamp: Date.now(),
+        cardType: "emotion",
+        emotionData: { label: info.label, note: result.reply, color: info.color, bg: info.bg, text: info.text }
+      }]);
+      pushTrend(result.mood, "เซลฟี่");
+    } catch (err: any) {
+      toast.error(err.message || "วิเคราะห์เซลฟี่ไม่สำเร็จ");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleVoice = async () => {
+    noteMultimodal("เสียงพูด");
+    setIsAnalyzing(true);
+
+    // Mock: create a tiny silent WebM audio blob
+    const mockAudioBlob = new Blob([new Uint8Array([
+      0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81, 0x01, 0x42, 0xF7, 0x81,
+      0x01, 0x42, 0xF2, 0x81, 0x04, 0x42, 0xF3, 0x81, 0x08, 0x42, 0x82, 0x84,
+      0x77, 0x65, 0x62, 0x6D
+    ])], { type: "audio/webm" });
+
+    try {
+      const result = await api.transcribeVoice(userId, mockAudioBlob);
+      if (result.transcript) {
+        setMessages((prev) => [...prev, {
+          id: Math.random().toString(),
+          role: "user",
+          text: `🎤 (เสียงพูด): "${result.transcript}"`,
+          timestamp: Date.now(),
+          sourceTag: "เสียงพูด"
+        }]);
+      }
+      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
+      pushTrend(result.mood, "เสียงพูด");
+    } catch (err: any) {
+      toast.error(err.message || "แปลงเสียงไม่สำเร็จ");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleHomeworkPhoto = async () => {
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🖼️ แนบรูปถ่ายการบ้าน (Homework.jpg)", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
+    noteMultimodal("รูปการบ้าน");
+    setIsAnalyzing(true);
+
+    // Mock: create a tiny 1x1 transparent PNG as placeholder
+    const mockBlob = new Blob([new Uint8Array([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+      0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+    ])], { type: "image/png" });
+
+    try {
+      const result = await api.readHomework(userId, mockBlob);
+      if (result.detail) {
+        setMessages((prev) => [...prev, {
+          id: Math.random().toString(),
+          role: "bot",
+          text: "อ่านโจทย์เรียบร้อยแล้ว",
+          timestamp: Date.now(),
+          cardType: "ocr",
+          ocrText: `"${result.detail}"`
+        }]);
+      }
+      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
+      pushTrend(result.mood, "รูปการบ้าน");
+    } catch (err: any) {
+      toast.error(err.message || "อ่านการบ้านไม่สำเร็จ");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const resetChat = () => {
+    setMessages([{ id: "init_" + Date.now(), role: "bot", text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ", timestamp: Date.now() }]);
+    setTrendData([]); setLogEntries([]); setConcernStreak(0); setModesUsed(new Set()); setTransparencyLogs([]); setMood("calm");
+    toast("เริ่มการสนทนาใหม่แล้ว");
+  };
+
+  const tryMode = (mode: "camera" | "keyboard" | "mic" | "photo") => {
+    setCurrentView("chat");
+    setTimeout(() => {
+      if (mode === "camera") handleSelfie();
+      else if (mode === "mic") handleVoice();
+      else if (mode === "photo") handleHomeworkPhoto();
+    }, 300);
+  };
+
+  const navItems: { id: AppView; label: string; iconSrc: string }[] = [
+    { id: "home", label: "หน้าหลัก", iconSrc: IMG.redstar },
+    { id: "chat", label: "แชท", iconSrc: IMG.chatBubblesNoBg },
+    { id: "trend", label: "แนวโน้มของฉัน", iconSrc: IMG.chartGraphNoBg },
+    { id: "school", label: "ภาพรวมโรงเรียน", iconSrc: IMG.schoolBuildingNoBg },
+    { id: "safety", label: "ความปลอดภัย & ข้อมูล", iconSrc: IMG.shieldLockNoBg },
   ];
 
-  const viewLabels: Record<AppView, string> = {
+  const pageLabel: Record<AppView, string> = {
     home: "หน้าหลัก",
     chat: "คุยกับกระจก",
     trend: "แนวโน้มของฉัน",
@@ -924,1394 +922,1132 @@ function AppShell() {
     safety: "ความปลอดภัย & ข้อมูล",
   };
 
-  const addBot = useCallback((text: string, service?: string) => {
-    setMessages((prev) => [...prev, { role: "bot", text, timestamp: Date.now(), service }]);
-  }, []);
-
-  const noteDegraded = useCallback((degraded: string[]) => {
-    if (degraded.length) toast(`บางบริการไม่พร้อมใช้งาน: ${degraded.join(", ")}`);
-  }, []);
-
-  const sendMessage = useCallback(async () => {
-    const text = inputText.trim();
-    if (!text || isAnalyzing) return;
-
-    setMessages((prev) => [...prev, { role: "user", text, timestamp: Date.now() }]);
-    setInputText("");
-    setIsAnalyzing(true);
-    try {
-      const res = await api.sendMessage(userId, text);
-      setMood(res.mood);
-      addBot(res.reply, res.service);
-      if (res.crisis) setCrisisRaised(true);
-      noteDegraded(res.degraded);
-      void refreshTrend();
-    } catch (err) {
-      addBot(ERROR_REPLY);
-      toast(err instanceof ApiError ? err.message : "ส่งข้อความไม่สำเร็จ");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }, [inputText, isAnalyzing, userId, addBot, noteDegraded, refreshTrend]);
-
-  const runAnalysis = useCallback(
-    async (label: string, call: () => Promise<import("@/lib/api").AnalysisResult>) => {
-      if (isAnalyzing) return;
-      setIsAnalyzing(true);
-      try {
-        const res = await call();
-        if (res.transcript) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "user", text: res.transcript as string, timestamp: Date.now() },
-          ]);
-        }
-        setMood(res.mood);
-        addBot(res.reply, res.service);
-        void refreshTrend();
-      } catch (err) {
-        addBot(ERROR_REPLY);
-        toast(err instanceof ApiError ? err.message : `${label}ไม่สำเร็จ`);
-      } finally {
-        setIsAnalyzing(false);
-      }
-    },
-    [isAnalyzing, addBot, refreshTrend],
-  );
-
-  const doSelfie = useCallback(
-    (image: Blob) => runAnalysis("วิเคราะห์ภาพ", () => api.analyzeSelfie(userId, image)),
-    [runAnalysis, userId],
-  );
-  const doVoice = useCallback(
-    (audio: Blob, filename: string) => runAnalysis("ถอดเสียง", () => api.transcribeVoice(userId, audio, filename)),
-    [runAnalysis, userId],
-  );
-  const doHomework = useCallback(
-    (image: Blob) => runAnalysis("อ่านการบ้าน", () => api.readHomework(userId, image)),
-    [runAnalysis, userId],
-  );
-
-  const navigateTo = (view: AppView) => {
-    setCurrentView(view);
-    setSidebarOpen(false);
-  };
-
   return (
-    <div className="relative min-h-screen flex" style={{ backgroundColor: "#f5f0e8" }}>
-      <CheckerStrip />
-      <GridBg />
-      <HalftoneBg />
+    <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: T.cream }}>
 
-      {/* Skip link: the sidebar has five nav items before the content, which a
-          keyboard user otherwise has to tab through on every view. */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-10 focus:left-4 focus:z-[70] focus:px-4 focus:py-2 focus:rounded-xl"
-        style={{ backgroundColor: "#1a1a1a", color: "#FFB5A7", fontFamily: "'Noto Sans Thai', sans-serif" }}
-      >
-        ข้ามไปเนื้อหาหลัก
-      </a>
-
-      {/* Mobile hamburger button */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="fixed top-9 left-3 z-[60] p-2 rounded-xl lg:hidden"
-        style={{ backgroundColor: "rgba(26,26,26,0.85)", color: "#FFB5A7" }}
-        aria-label={sidebarOpen ? "ปิดเมนู" : "เปิดเมนู"}
-        aria-expanded={sidebarOpen}
-        aria-controls="sidebar-nav"
-      >
-        {sidebarOpen ? <IconX size={20} /> : <IconMenu size={20} />}
-      </button>
-
-      {/* Sidebar overlay for mobile. aria-hidden because the same dismissal is
-          available from the labelled close button above. */}
-      {sidebarOpen && (
+      {/* TOP CHECKERBOARD with salmon tab break */}
+      <div className="fixed top-0 left-0 right-0 z-50 flex" style={{ height: "36px" }}>
+        {/* Checker left of active tab */}
+        <div className="flex overflow-hidden" style={{ flex: "0 0 230px" }}>
+          {Array.from({ length: 16 }).map((_, i) => (
+            <div key={i} style={{ flex: 1, background: i % 2 === 0 ? T.black : T.white }} />
+          ))}
+        </div>
+        {/* Active page label tab (salmon) */}
         <div
-          aria-hidden="true"
-          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div
-        className={`fixed left-0 top-8 bottom-0 w-[240px] z-40 flex flex-col pt-6 px-4 transition-transform duration-300 lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-        style={{ backgroundColor: "#1a1a1a", borderRadius: "0 24px 24px 0" }}
-      >
-        {/* Brand */}
-        <div className="mb-8 px-2">
-          <h1
-            className="text-xl font-black tracking-tight"
-            style={{ fontFamily: "'Playfair Display', serif", color: "#FFB5A7" }}
-          >
-            JaiKrajok
-          </h1>
-          <p className="text-xs mt-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "rgba(255,181,167,0.6)" }}>
-            กระจกสะท้อนใจ
-          </p>
-        </div>
-
-        {/* Nav */}
-        <nav id="sidebar-nav" aria-label="เมนูหลัก" className="flex-1 space-y-1.5">
-          {navItems.map((item) => {
-            const isActive = currentView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => navigateTo(item.id)}
-                aria-current={isActive ? "page" : undefined}
-                className="relative w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all duration-200 focus-ring-inset overflow-hidden"
-                style={{
-                  backgroundColor: isActive ? "#FFB5A7" : "transparent",
-                  color: isActive ? "#1a1a1a" : "rgba(255,255,255,0.65)",
-                  fontFamily: "'Noto Sans Thai', sans-serif",
-                  fontWeight: isActive ? 700 : 400,
-                  fontSize: "14px",
-                }}
-              >
-                {/* Active state is carried by background colour and weight as
-                    well as this bar, so it does not rely on colour alone. */}
-                <span
-                  aria-hidden="true"
-                  className="absolute left-0 top-0 bottom-0 w-[3px] transition-transform duration-300"
-                  style={{
-                    background: "#C41E3A",
-                    transform: isActive ? "scaleY(1)" : "scaleY(0)",
-                  }}
-                />
-                <item.Icon size={18} color={isActive ? "#1a1a1a" : "rgba(255,255,255,0.55)"} />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Mood status */}
-        <div className="mt-auto mb-4 px-1">
-          <div className="p-3 rounded-xl" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
-            <p className="text-xs mb-1.5" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-              สภาวะล่าสุด
-            </p>
-            <MoodBadge mood={mood} size="sm" />
-          </div>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="lg:ml-[240px] flex-1 pt-10 min-h-screen w-full">
-        {/* Page header */}
-        <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-3">
-          {/* Spacer for hamburger on mobile */}
-          <div className="w-10 lg:hidden" />
-          <div
-            className="inline-block px-5 py-2 rounded-full text-sm font-bold"
-            style={{
-              backgroundColor: "#FFB5A7",
-              color: "#1a1a1a",
-              fontFamily: "'Noto Sans Thai', sans-serif",
-            }}
-          >
-            {viewLabels[currentView]}
-          </div>
-        </div>
-
-        {/* Content area. main + a heading-level h1 in the sidebar gives the page
-            one landmark to jump to, which the skip link below targets. */}
-        <main id="main-content" className="px-4 md:px-8 pb-8">
-          {currentView === "home" && (
-            <HomeView mood={mood} setMood={setMood} age={age} trend={trend} onNavigate={navigateTo} />
-          )}
-          {currentView === "chat" && (
-            <ChatView
-              messages={messages}
-              inputText={inputText}
-              setInputText={setInputText}
-              sendMessage={sendMessage}
-              chatMode={chatMode}
-              setChatMode={setChatMode}
-              isAnalyzing={isAnalyzing}
-              doSelfie={doSelfie}
-              doVoice={doVoice}
-              doHomework={doHomework}
-            />
-          )}
-          {currentView === "trend" && <TrendView mood={mood} trend={trend} error={dataError} />}
-          {currentView === "school" && <SchoolView school={school} error={dataError} />}
-          {currentView === "safety" && <SafetyView crisis={crisisRaised} />}
-        </main>
-      </div>
-    </div>
-  );
-}
-
-/* ================================================================
-   HOME VIEW
-   ================================================================ */
-function HomeView({ mood, setMood, age, trend, onNavigate }: {
-  mood: string; setMood: (v: string) => void; age: string;
-  trend: TrendResult | null; onNavigate: (v: AppView) => void;
-}) {
-  const greeting = getGreeting();
-  const moods = Object.entries(MOOD);
-
-  const quickActions = [
-    { label: "คุยกับกระจก", desc: "พิมพ์หรือพูดเล่าให้กระจกฟัง", Icon: IconChat, view: "chat" as AppView, color: "#2D6A6F" },
-    { label: "แนวโน้มของฉัน", desc: "ดูกราฟสภาวะอารมณ์ย้อนหลัง", Icon: IconTrend, view: "trend" as AppView, color: "#C41E3A" },
-    { label: "ภาพรวมโรงเรียน", desc: "สถิติรวมแบบไม่ระบุตัวตน", Icon: IconSchool, view: "school" as AppView, color: "#8b7355" },
-  ];
-
-  const tips = [
-    "หายใจเข้าลึก ๆ นับ 4 ค้าง 4 หายใจออก 4 ทำซ้ำ 3 รอบ",
-    "เขียนสิ่งที่รู้สึกขอบคุณ 3 อย่างก่อนนอน ช่วยให้นอนหลับสบายขึ้น",
-    "ลองเดินเล่น 10 นาที เปลี่ยนบรรยากาศ ช่วยให้สมองปลอดโปร่ง",
-    "ดื่มน้ำให้เพียงพอ ร่างกายที่ขาดน้ำทำให้อารมณ์หงุดหงิดง่าย",
-    "ก่อนสอบ ลองทบทวนบทเรียนก่อนนอน สมองจะจัดระเบียบข้อมูลขณะหลับ",
-  ];
-  const todayTip = tips[new Date().getDate() % tips.length];
-
-  const [heroRef, heroInView] = useInView<HTMLDivElement>();
-  const [actionsRef, actionsInView] = useInView<HTMLDivElement>();
-  const [tipsRef, tipsInView] = useInView<HTMLDivElement>();
-  const msgCount = useCountUp(trend?.messages ?? 0, 800, heroInView);
-  const dayCount = useCountUp(trend?.active_days ?? 0, 600, heroInView);
-
-  // The status panel used to hardcode every service as connected, which was a
-  // false claim: TTS in particular can be down while the rest works. /health
-  // reports what the container actually resolved, so read it instead.
-  const [health, setHealth] = useState<HealthResult | null>(null);
-  const [healthFailed, setHealthFailed] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .health()
-      .then((h) => alive && setHealth(h))
-      .catch(() => alive && setHealthFailed(true));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return (
-    <div className="space-y-6 view-transition">
-      {/* Hero greeting */}
-      <div
-        ref={heroRef}
-        className={`p-7 md:p-9 rounded-[24px] relative overflow-hidden transition-all duration-700 ${heroInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
-        style={{
-          background: "linear-gradient(135deg, #1f4d51 0%, #2D6A6F 45%, #3a8a90 100%)",
-          boxShadow: "var(--shadow-lg)",
-        }}
-      >
-        {/* Decorative layers: a dot field plus two soft light pools that give the
-            flat gradient some depth without adding a raster asset. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 opacity-10"
+          className="flex items-center justify-center px-6 flex-shrink-0"
           style={{
-            backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)",
-            backgroundSize: "16px 16px",
+            background: T.salmon,
+            fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
+            fontWeight: 700,
+            fontSize: "13px",
+            color: T.black,
+            minWidth: "120px",
           }}
-        />
-        <div
-          aria-hidden="true"
-          className="absolute -top-24 -right-16 w-72 h-72 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(255,181,167,0.32), transparent 68%)" }}
-        />
-        <div
-          aria-hidden="true"
-          className="absolute -bottom-28 -left-10 w-64 h-64 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.16), transparent 70%)" }}
-        />
-
-        <div className="relative z-10">
-          <p
-            className="text-[11px] font-bold uppercase tracking-[0.18em] mb-3"
-            style={{ color: "rgba(255,181,167,0.95)", fontFamily: "'Space Mono', monospace" }}
-          >
-            {greeting}
-          </p>
-          <h2
-            className="text-3xl md:text-[2.75rem] font-black leading-[1.1] mb-3"
-            style={{ fontFamily: "'Playfair Display', serif", color: "#fff" }}
-          >
-            กระจกสะท้อนใจ
-          </h2>
-          <p
-            className="text-sm md:text-base max-w-md leading-relaxed"
-            style={{ color: "rgba(255,255,255,0.82)", fontFamily: "'Noto Sans Thai', sans-serif" }}
-          >
-            พื้นที่ปลอดภัยที่รับฟังและเข้าใจอารมณ์ของคุณ ไม่ตัดสิน ไม่บันทึกข้อความ
-          </p>
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <MoodBadge mood={mood} animate={heroInView} />
-            {[
-              { value: msgCount, unit: "ข้อความ" },
-              { value: dayCount, unit: "วันใช้งาน" },
-            ].map((s) => (
-              <div
-                key={s.unit}
-                className="px-3.5 py-2 rounded-xl flex items-baseline gap-1.5"
-                style={{
-                  background: "rgba(255,255,255,0.12)",
-                  border: "1px solid rgba(255,255,255,0.18)",
-                }}
-              >
-                <span
-                  className="text-lg font-black leading-none"
-                  style={{ color: "#fff", fontFamily: "'Space Mono', monospace" }}
-                >
-                  {s.value}
-                </span>
-                <span
-                  className="text-[11px]"
-                  style={{ color: "rgba(255,255,255,0.7)", fontFamily: "'Noto Sans Thai', sans-serif" }}
-                >
-                  {s.unit}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Mood picker. radiogroup rather than plain buttons: exactly one value is
-          selected at a time, so screen readers should announce it that way. */}
-      <section>
-        <div className="flex items-baseline justify-between mb-3">
-          <h3
-            className="text-lg font-bold"
-            style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
-          >
-            วันนี้รู้สึกยังไง?
-          </h3>
-          <span
-            className="text-[11px]"
-            style={{ fontFamily: "'Space Mono', monospace", color: "#a09585" }}
-          >
-            เลือกได้ 1 อย่าง
-          </span>
-        </div>
-        <div
-          role="radiogroup"
-          aria-label="เลือกอารมณ์ของวันนี้"
-          className="grid grid-cols-3 md:grid-cols-6 gap-3 stagger-children"
         >
-          {moods.map(([key, m]) => {
-            const active = mood === key;
-            return (
-              <button
-                key={key}
-                role="radio"
-                aria-checked={active}
-                onClick={() => setMood(key)}
-                className="relative p-3.5 rounded-2xl transition-all duration-200 active:scale-[0.95] text-center overflow-hidden"
-                style={{
-                  backgroundColor: active ? m.bgColor : "#fff",
-                  border: active ? `2px solid ${m.color}` : "1.5px solid var(--rule)",
-                  boxShadow: active ? `0 6px 18px ${m.bgColor}` : "var(--shadow-sm)",
-                  transform: active ? "translateY(-2px)" : undefined,
-                  fontFamily: "'Noto Sans Thai', sans-serif",
-                }}
-              >
-                <span
-                  aria-hidden="true"
-                  className="text-lg font-mono font-bold block mb-1"
-                  style={{ color: m.color }}
-                >
-                  {m.icon}
-                </span>
-                <span
-                  className="text-xs font-semibold"
-                  style={{ color: active ? m.color : "#666" }}
-                >
-                  {m.label}
-                </span>
-                {active && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute left-0 right-0 bottom-0 h-[3px]"
-                    style={{ backgroundColor: m.color }}
-                  />
-                )}
-              </button>
-            );
-          })}
+          {pageLabel[currentView]}
         </div>
-      </section>
-
-      {/* Quick actions */}
-      <div
-        ref={actionsRef}
-        className={`grid grid-cols-1 md:grid-cols-3 gap-4 transition-all duration-500 ${actionsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}
-      >
-        {quickActions.map((action, idx) => (
-          <button
-            key={action.label}
-            onClick={(e) => { createRipple(e); onNavigate(action.view); }}
-            className="surface surface-interactive accent-rule group p-5 pl-6 text-left transition-all duration-200 active:scale-[0.98]"
-            style={{ transitionDelay: `${idx * 0.08}s` }}
-          >
-            <div className="flex items-center gap-3 mb-2.5">
-              <div
-                className="w-11 h-11 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                style={{ backgroundColor: `${action.color}14` }}
-              >
-                <action.Icon size={20} color={action.color} />
-              </div>
-              <p
-                className="font-bold text-sm"
-                style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
-              >
-                {action.label}
-              </p>
-            </div>
-            <p
-              className="text-xs leading-relaxed"
-              style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}
-            >
-              {action.desc}
-            </p>
-            <span
-              className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold transition-transform duration-300 group-hover:translate-x-1"
-              style={{ color: action.color, fontFamily: "'Space Mono', monospace" }}
-            >
-              เปิด
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" stroke={action.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* Tip of the day + API status */}
-      <div
-        ref={tipsRef}
-        className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-all duration-500 delay-100 ${tipsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}
-      >
-        <div className="surface accent-rule p-5 pl-6">
-          <div className="flex items-center gap-2 mb-3">
-            <IconHeart size={16} color="#C41E3A" />
-            <p className="text-xs font-bold" style={{ color: "#C41E3A", fontFamily: "'Space Mono', monospace" }}>
-              เคล็ดลับวันนี้
-            </p>
-          </div>
-          <p
-            className="text-sm leading-relaxed"
-            style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#444" }}
-          >
-            {todayTip}
-          </p>
-        </div>
-
-        <div className="surface p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <IconActivity size={16} color="#2D6A6F" />
-            <p className="text-xs font-bold" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
-              สถานะระบบ
-            </p>
-          </div>
-
-          {!health && !healthFailed && (
-            <div className="space-y-2.5" aria-hidden="true">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="skeleton h-4" style={{ width: `${88 - i * 12}%` }} />
-              ))}
-            </div>
-          )}
-
-          {healthFailed && (
-            <p className="text-xs" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#a09585" }}>
-              ตรวจสอบสถานะไม่สำเร็จ ลองรีเฟรชหน้านี้อีกครั้ง
-            </p>
-          )}
-
-          {health && (
-            <div className="space-y-2">
-              {[
-                { name: "เซิร์ฟเวอร์", ok: health.status === "ok" },
-                { name: "AI for Thai", ok: health.aiforthai_key_set },
-                { name: "LINE", ok: health.line_configured },
-              ].map((s) => (
-                <div key={s.name} className="flex items-center justify-between">
-                  <span
-                    className="text-xs"
-                    style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}
-                  >
-                    {s.name}
-                  </span>
-                  <span
-                    className="text-xs font-bold flex items-center gap-1.5"
-                    style={{ color: s.ok ? "#2D8F5C" : "#C41E3A" }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="w-2 h-2 rounded-full inline-block"
-                      style={{ backgroundColor: s.ok ? "#2D8F5C" : "#C41E3A" }}
-                    />
-                    {s.ok ? "พร้อมใช้งาน" : "ยังไม่พร้อม"}
-                  </span>
-                </div>
-              ))}
-              <p
-                className="text-[10px] pt-1.5"
-                style={{ fontFamily: "'Space Mono', monospace", color: "#b5aa9a" }}
-              >
-                {health.team} / {health.env}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ================================================================
-   CHAT VIEW
-   ================================================================ */
-function ChatView({
-  messages, inputText, setInputText, sendMessage, chatMode, setChatMode, isAnalyzing, doSelfie, doVoice, doHomework,
-}: {
-  messages: ChatMsg[]; inputText: string; setInputText: (v: string) => void;
-  sendMessage: () => void; chatMode: ChatMode; setChatMode: (v: ChatMode) => void;
-  isAnalyzing: boolean; doSelfie: (image: Blob) => void;
-  doVoice: (audio: Blob, filename: string) => void; doHomework: (image: Blob) => void;
-}) {
-  const chatBodyRef = useRef<HTMLDivElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const modes: { mode: ChatMode; Icon: typeof IconText; label: string }[] = [
-    { mode: "ข้อความ", Icon: IconText, label: "ข้อความ" },
-    { mode: "เซลฟี่", Icon: IconCamera, label: "เซลฟี่" },
-    { mode: "เสียงพูด", Icon: IconMic, label: "เสียง" },
-    { mode: "รูปการบ้าน", Icon: IconImage, label: "การบ้าน" },
-  ];
-  const { recording, seconds, start, stop } = useRecorder(doVoice);
-
-  useEffect(() => {
-    const el = chatBodyRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isAnalyzing]);
-
-  const onImagePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) (chatMode === "เซลฟี่" ? doSelfie : doHomework)(file);
-    e.target.value = "";
-  };
-
-  const playTTS = async (text: string) => {
-    try {
-      const blob = await api.speak(text);
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.play();
-      audio.onended = () => URL.revokeObjectURL(url);
-    } catch {
-      toast("อ่านออกเสียงไม่สำเร็จ");
-    }
-  };
-
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  };
-
-  return (
-    <div className="flex flex-col h-[calc(100vh-110px)]" style={{ maxHeight: "calc(100vh - 110px)" }}>
-      {/* Transparency banner */}
-      {isAnalyzing && TRANSPARENCY[chatMode] && (
-        <div className="mb-3 px-4 py-2 rounded-xl text-xs animate-fade-in" style={{
-          backgroundColor: "rgba(45,106,111,0.06)",
-          border: "1.5px solid rgba(45,106,111,0.15)",
-          color: "#2D6A6F",
-          fontFamily: "'Space Mono', monospace",
-        }}>
-          {TRANSPARENCY[chatMode]}
-        </div>
-      )}
-
-      {/* Mode tabs. Sizing is fixed per state so switching modes does not reflow
-          the row: the active pill only changes colour, never width. */}
-      <div className="flex gap-2 mb-4 flex-wrap" role="group" aria-label="เลือกวิธีคุย">
-        {modes.map((m) => {
-          const active = chatMode === m.mode;
-          return (
-            <button
-              key={m.mode}
-              onClick={() => setChatMode(m.mode)}
-              aria-pressed={active}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97]"
-              style={{
-                backgroundColor: active ? "#2D6A6F" : "#fff",
-                color: active ? "#fff" : "#666",
-                border: active ? "1.5px solid #2D6A6F" : "1.5px solid var(--rule)",
-                boxShadow: active ? "0 4px 14px rgba(45,106,111,0.25)" : "var(--shadow-sm)",
-                fontFamily: "'Noto Sans Thai', sans-serif",
-              }}
-            >
-              <m.Icon size={14} color={active ? "#fff" : "#888"} />
-              {m.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Chat body */}
-      <div
-        ref={chatBodyRef}
-        role="log"
-        aria-label="บทสนทนา"
-        className="flex-1 overflow-y-auto space-y-3 pr-2 pb-4"
-        style={{ scrollbarWidth: "thin" }}
-      >
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} msg-enter`} style={{ animationDelay: `${Math.max(0, i - messages.length + 3) * 0.05}s` }}>
-            <div className="max-w-[80%] md:max-w-[70%]">
-              <div
-                className="px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words"
-                style={{
-                  background:
-                    msg.role === "user"
-                      ? "linear-gradient(135deg, #2D6A6F, #256064)"
-                      : "#fff",
-                  color: msg.role === "user" ? "#fff" : "#1a1a1a",
-                  border: msg.role === "bot" ? "1.5px solid var(--rule)" : "none",
-                  boxShadow:
-                    msg.role === "user"
-                      ? "0 4px 14px rgba(45,106,111,0.22)"
-                      : "var(--shadow-sm)",
-                  fontFamily: "'Noto Sans Thai', sans-serif",
-                  borderBottomRightRadius: msg.role === "user" ? "6px" : "20px",
-                  borderBottomLeftRadius: msg.role === "bot" ? "6px" : "20px",
-                }}
-              >
-                {msg.text}
-              </div>
-              <div className={`flex items-center gap-2 mt-1 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <span className="text-[10px]" style={{ color: "#aaa", fontFamily: "'Space Mono', monospace" }}>
-                  {formatTime(msg.timestamp)}
-                </span>
-                {msg.role === "bot" && msg.service && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
-                    backgroundColor: "rgba(45,106,111,0.06)",
-                    color: "#2D6A6F",
-                    fontFamily: "'Space Mono', monospace",
-                  }}>
-                    {msg.service}
-                  </span>
-                )}
-                {msg.role === "bot" && (
-                  <button
-                    onClick={() => playTTS(msg.text)}
-                    className="opacity-40 hover:opacity-80 transition-opacity"
-                    title="อ่านออกเสียง"
-                    aria-label="อ่านข้อความนี้ออกเสียง"
-                  >
-                    <IconVolume size={12} color="#2D6A6F" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-        {/* Pending reply. role=status announces it once to screen readers; the
-            dots themselves are decorative and stay hidden from the tree. */}
-        {isAnalyzing && (
-          <div className="flex justify-start animate-fade-in" role="status" aria-live="polite">
-            <span className="sr-only">กระจกกำลังคิดคำตอบ</span>
-            <div
-              className="px-5 py-3.5 rounded-2xl flex items-center gap-2.5"
-              style={{
-                backgroundColor: "#fff",
-                border: "1.5px solid var(--rule)",
-                borderBottomLeftRadius: "6px",
-                boxShadow: "var(--shadow-sm)",
-              }}
-            >
-              <div className="flex gap-1.5" aria-hidden="true">
-                <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 rounded-full bg-[#2D6A6F] animate-bounce" style={{ animationDelay: "300ms" }} />
-              </div>
-              <span
-                aria-hidden="true"
-                className="text-[11px]"
-                style={{ color: "#9d9384", fontFamily: "'Space Mono', monospace" }}
-              >
-                กำลังคิด
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Upload mode actions */}
-      {(chatMode === "เซลฟี่" || chatMode === "รูปการบ้าน") && (
-        <div className="mb-3">
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            capture={chatMode === "เซลฟี่" ? "user" : "environment"}
-            onChange={onImagePicked}
-            className="sr-only"
-            aria-label={chatMode === "เซลฟี่" ? "เลือกภาพเซลฟี่" : "เลือกรูปการบ้าน"}
-          />
-          <button
-            onClick={() => imageInputRef.current?.click()}
-            disabled={isAnalyzing}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
-            style={{ backgroundColor: "#C41E3A", fontFamily: "'Noto Sans Thai', sans-serif" }}
-          >
-            {chatMode === "เซลฟี่" ? <><IconCamera size={16} /> ถ่ายเซลฟี่วิเคราะห์</> : <><IconImage size={16} /> อัปโหลดรูปการบ้าน</>}
-          </button>
-        </div>
-      )}
-
-      {chatMode === "เสียงพูด" && (
-        <div className="mb-3 flex items-center gap-3">
-          <button
-            onClick={recording ? stop : start}
-            disabled={isAnalyzing}
-            aria-pressed={recording}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50 ${recording ? "animate-recording-pulse" : ""}`}
-            style={{
-              backgroundColor: recording ? "#1a1a1a" : "#C41E3A",
-              fontFamily: "'Noto Sans Thai', sans-serif",
-            }}
-          >
-            {recording ? <><IconStop size={14} color="#fff" /> หยุดและส่ง</> : <><IconMic size={14} /> เริ่มอัดเสียง</>}
-          </button>
-          {recording && (
-            <span
-              className="text-sm font-semibold flex items-center gap-1.5"
-              style={{ color: "#C41E3A", fontFamily: "'Space Mono', monospace" }}
-              role="status"
-              aria-live="polite"
-            >
-              <span className="w-2 h-2 rounded-full bg-[#C41E3A] animate-pulse" />
-              {String(Math.floor(seconds / 60)).padStart(2, "0")}:
-              {String(seconds % 60).padStart(2, "0")}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Input area. outline-none is safe here because index.css restores a
-          :focus-visible ring globally; without that this control had no keyboard
-          focus indicator at all. */}
-      <div className="flex gap-3 pt-3 border-t" style={{ borderColor: "var(--rule)" }}>
-        <input
-          type="text"
-          placeholder="พิมพ์ข้อความที่นี่..."
-          aria-label="ข้อความที่จะส่ง"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          className="flex-1 px-5 py-3 rounded-2xl outline-none text-sm transition-shadow duration-200"
-          style={{
-            backgroundColor: "#fff",
-            border: "1.5px solid var(--rule)",
-            boxShadow: "var(--shadow-sm)",
-            fontFamily: "'Noto Sans Thai', sans-serif",
-            color: "#1a1a1a",
-          }}
-        />
-        <button
-          onClick={sendMessage}
-          disabled={isAnalyzing || !inputText.trim()}
-          className="px-5 py-3 rounded-2xl text-white font-bold text-sm transition-all duration-150 active:scale-[0.97] disabled:opacity-50 flex items-center gap-2"
-          style={{ backgroundColor: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}
-        >
-          <IconSend size={16} />
-          <span className="hidden md:inline">ส่ง</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ================================================================
-   TREND VIEW
-   ================================================================ */
-const DAY_LABELS_TH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
-
-const MOOD_HEIGHT: Record<string, number> = {
-  stressed: 35, sad: 45, tired: 55, neutral: 65, calm: 80, positive: 95,
-};
-
-function TrendView({ mood, trend, error }: { mood: string; trend: TrendResult | null; error: string | null }) {
-  const weekData = (() => {
-    const byDate = new Map((trend?.days ?? []).map((d) => [d.date, d.mood as string]));
-    const out: { day: string; mood: string | null; date: string }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      out.push({ day: DAY_LABELS_TH[d.getDay()], mood: byDate.get(key) ?? null, date: key });
-    }
-    return out;
-  })();
-
-  const hasData = (trend?.messages ?? 0) > 0;
-
-  const dominantMood = trend?.dominant_mood ?? mood;
-  const dm = MOOD[dominantMood] || MOOD.neutral;
-
-  const [chartRef, chartInView] = useInView<HTMLDivElement>();
-  const [statsRef, statsInView] = useInView<HTMLDivElement>();
-  const activeDays = useCountUp(trend?.active_days ?? 0, 700, statsInView);
-  const totalMessages = useCountUp(trend?.messages ?? 0, 900, statsInView);
-
-  return (
-    <div className="space-y-6 view-transition">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
-          แนวโน้มอารมณ์ของฉัน
-        </h2>
-        {hasData && <MoodBadge mood={dominantMood} />}
-      </div>
-
-      {error && (
-        <div className="p-4 rounded-xl flex items-center gap-2" style={{ backgroundColor: "rgba(196,30,58,0.06)", border: "1.5px solid rgba(196,30,58,0.2)" }}>
-          <IconAlert size={16} color="#C41E3A" />
-          <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#C41E3A" }}>
-            {error}
-          </p>
-        </div>
-      )}
-
-      {/* Weekly chart */}
-      <div ref={chartRef} className={`surface p-6 transition-all duration-600 ${chartInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
-        <p className="text-xs font-bold mb-4 flex items-center gap-2" style={{ color: "#2D6A6F", fontFamily: "'Space Mono', monospace" }}>
-          <IconTrend size={14} color="#2D6A6F" />
-          สภาวะอารมณ์ 7 วันล่าสุด
-        </p>
-        {!hasData && !error && (
-          <div className="text-center py-8">
-            <IconChat size={32} color="#ccc" />
-            <p className="text-sm mt-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-              ยังไม่มีข้อมูลนะ ลองคุยกับกระจกในหน้าแชทก่อน
-            </p>
-            <p className="text-xs mt-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#aaa" }}>
-              แล้วกราฟจะเริ่มขึ้นที่นี่
-            </p>
-          </div>
-        )}
-        {/* Bars carry their value in colour and height only, so each one also
-            gets a text label in the accessibility tree. Previously the value
-            lived in a title attribute, which keyboard and screen reader users
-            never receive (WCAG 1.1.1 / 1.4.1). */}
-        <ul className="flex items-end gap-2 md:gap-3 h-44 list-none m-0 p-0">
-          {weekData.map((d, i) => {
-            const m = d.mood ? MOOD[d.mood] : null;
-            const h = d.mood ? (MOOD_HEIGHT[d.mood] ?? 65) : 5;
-            return (
-              <li key={d.date} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-                <span className="sr-only">
-                  {d.date}: {m ? m.label : "ไม่มีข้อมูล"}
-                </span>
-                {m && (
-                  <span
-                    aria-hidden="true"
-                    className="text-[10px] font-semibold"
-                    style={{ color: m.color, fontFamily: "'Noto Sans Thai', sans-serif" }}
-                  >
-                    {m.label}
-                  </span>
-                )}
-                <div
-                  aria-hidden="true"
-                  className="w-full rounded-t-xl animate-bar-grow relative overflow-hidden"
-                  style={{
-                    height: `${h}%`,
-                    background: m
-                      ? `linear-gradient(180deg, ${m.color}, ${m.color}99)`
-                      : "repeating-linear-gradient(45deg, #ece7de, #ece7de 4px, #f6f2ea 4px, #f6f2ea 8px)",
-                    animationDelay: `${i * 0.08}s`,
-                  }}
-                />
-                <span
-                  aria-hidden="true"
-                  className="text-xs font-semibold"
-                  style={{ color: "#666", fontFamily: "'Noto Sans Thai', sans-serif" }}
-                >
-                  {d.day}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-
-        {/* Mood legend */}
-        <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t" style={{ borderColor: "var(--rule)" }}>
-          {Object.entries(MOOD).map(([key, m]) => (
-            <div key={key} className="flex items-center gap-1.5">
-              <span aria-hidden="true" className="w-3 h-3 rounded-sm" style={{ backgroundColor: m.color }} />
-              <span className="text-[10px]" style={{ color: "#888", fontFamily: "'Noto Sans Thai', sans-serif" }}>{m.label}</span>
-            </div>
+        {/* Checker right */}
+        <div className="flex overflow-hidden flex-1">
+          {Array.from({ length: 40 }).map((_, i) => (
+            <div key={i} style={{ flex: 1, background: i % 2 === 0 ? T.black : T.white }} />
           ))}
         </div>
       </div>
 
-      {/* Stats cards */}
-      <div ref={statsRef} className={`grid grid-cols-3 gap-3 md:gap-4 transition-all duration-500 ${statsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
-        {[
-          { label: "วันใช้งาน", value: `${activeDays} วัน`, Icon: IconCalendar, color: "#2D6A6F" },
-          { label: "แชททั้งหมด", value: `${totalMessages} ข้อความ`, Icon: IconMessages, color: "#8b7355" },
-          { label: "สภาวะหลัก", value: dm.label, Icon: IconHeart, color: dm.color },
-        ].map((stat, i) => (
-          <div key={i} className="surface surface-interactive p-4 text-center">
-            <div className="w-8 h-8 rounded-lg mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: `${stat.color}10` }}>
-              <stat.Icon size={16} color={stat.color} />
-            </div>
-            <p className="text-base md:text-lg font-bold" style={{ color: "#1a1a1a", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-              {stat.value}
-            </p>
-            <p className="text-xs" style={{ color: "#888", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-              {stat.label}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Weekly summary */}
-      {hasData && (
-        <div className="surface p-5">
-          <p className="text-sm font-bold mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-            สรุปสัปดาห์นี้
-          </p>
-          <p className="text-sm leading-relaxed" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
-            สัปดาห์นี้คุณใช้งานกระจกมาทั้งหมด {trend?.messages ?? 0} ข้อความ
-            ใน {trend?.active_days ?? 0} วัน
-            {dominantMood && ` สภาวะอารมณ์หลักของคุณคือ "${dm.label}"`}
-            {dominantMood === "stressed" || dominantMood === "sad"
-              ? " อย่าลืมพักผ่อนให้เพียงพอ และหากต้องการความช่วยเหลือ สามารถติดต่อสายด่วนสุขภาพจิต 1323 ได้ตลอด 24 ชั่วโมง"
-              : dominantMood === "positive" || dominantMood === "calm"
-                ? " ดีใจที่คุณอยู่ในสภาวะที่ดี ขอให้รักษาความรู้สึกนี้ไว้นะ"
-                : " ลองคุยกับกระจกเพิ่มเติมเพื่อสำรวจอารมณ์ให้ลึกขึ้น"}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ================================================================
-   SCHOOL VIEW
-   ================================================================ */
-function SchoolView({ school, error }: { school: SchoolResult | null; error: string | null }) {
-  const pct = (v: number) => `${Math.round(v * 100)}%`;
-  const total = school?.readings ?? 0;
-  const distribution = school?.distribution ?? {};
-
-  const [statsGridRef, statsGridInView] = useInView<HTMLDivElement>();
-  const [distRef, distInView] = useInView<HTMLDivElement>();
-  const userCount = useCountUp(school?.users ?? 0, 800, statsGridInView);
-  const readingCount = useCountUp(school?.readings ?? 0, 1000, statsGridInView);
-
-  return (
-    <div className="space-y-6 view-transition">
-      <h2 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
-        ภาพรวมโรงเรียน
-      </h2>
-      <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
-        ข้อมูลแบบไม่ระบุตัวตน รวมจากนักเรียนทั้งหมดในสถาบัน
-      </p>
-
-      {error && (
-        <div className="p-4 rounded-xl flex items-center gap-2" style={{ backgroundColor: "rgba(196,30,58,0.06)", border: "1.5px solid rgba(196,30,58,0.2)" }}>
-          <IconAlert size={16} color="#C41E3A" />
-          <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#C41E3A" }}>{error}</p>
-        </div>
-      )}
-
-      {/* Stats grid */}
-      <div ref={statsGridRef} className={`grid grid-cols-2 gap-4 transition-all duration-500 ${statsGridInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
-        {[
-          { label: "นักเรียนที่ใช้งาน", value: `${userCount} คน`, Icon: IconUsers, color: "#2D6A6F" },
-          { label: "สภาวะเครียดเฉลี่ย", value: pct(school?.stress_ratio ?? 0), Icon: IconActivity, color: "#C41E3A" },
-          { label: "การวิเคราะห์ทั้งหมด", value: `${readingCount} ครั้ง`, Icon: IconMessages, color: "#2D6A6F" },
-          { label: "ใช้แชทเป็นประจำ", value: pct(school?.regular_ratio ?? 0), Icon: IconHeart, color: "#2D8F5C" },
-        ].map((stat, i) => (
-          <div key={i} className="surface surface-interactive p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${stat.color}10` }}>
-                <stat.Icon size={16} color={stat.color} />
-              </div>
-            </div>
-            <p className="text-2xl font-black" style={{ color: stat.color, fontFamily: "'Noto Sans Thai', sans-serif" }}>
-              {stat.value}
-            </p>
-            <p className="text-sm mt-1" style={{ color: "#666", fontFamily: "'Noto Sans Thai', sans-serif" }}>
-              {stat.label}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Mood distribution bars */}
-      {total > 0 && (
-        <div ref={distRef} className={`surface p-5 transition-all duration-500 delay-100 ${distInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
-          <p className="text-sm font-bold mb-4" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-            การกระจายตัวของสภาวะอารมณ์
-          </p>
-          <div className="space-y-3">
-            {Object.entries(distribution).sort((a, b) => b[1] - a[1]).map(([moodKey, count]) => {
-              const m = MOOD[moodKey] || MOOD.neutral;
-              const ratio = total > 0 ? (count / total) * 100 : 0;
-              return (
-                <div key={moodKey}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-semibold" style={{ color: m.color, fontFamily: "'Noto Sans Thai', sans-serif" }}>
-                      {m.label}
-                    </span>
-                    <span className="text-xs" style={{ color: "#888", fontFamily: "'Space Mono', monospace" }}>
-                      {count} ({Math.round(ratio)}%)
-                    </span>
-                  </div>
-                  <div aria-hidden="true" className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: "#f0ebe3" }}>
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{
-                        width: distInView ? `${ratio}%` : "0%",
-                        background: `linear-gradient(90deg, ${m.color}, ${m.color}bb)`,
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Empty state. Without this the page just ended after the zeroed stat
-          cards, which reads as a loading failure rather than "no data yet". */}
-      {total === 0 && !error && (
-        <div className="surface p-8 text-center">
-          <IconSchool size={28} color="#ccc" />
-          <p className="text-sm mt-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-            ยังไม่มีข้อมูลรวมของโรงเรียน
-          </p>
-          <p className="text-xs mt-1" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#aaa" }}>
-            เมื่อมีนักเรียนเริ่มใช้งาน สถิติแบบไม่ระบุตัวตนจะแสดงที่นี่
-          </p>
-        </div>
-      )}
-
-      {/* School image */}
-      <div aria-hidden="true" className="rounded-2xl overflow-hidden" style={{ border: "1.5px solid var(--rule)" }}>
-        <img src={IMG.schoolBuilding} alt="" className="w-full h-40 object-cover opacity-60" />
-      </div>
-
-      {/* Disclaimer */}
-      <div className="p-4 rounded-xl flex items-start gap-2" style={{ backgroundColor: "rgba(255,181,167,0.1)", border: "1.5px solid rgba(255,181,167,0.3)" }}>
-        <IconLock size={14} color="#888" />
-        <p className="text-xs" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-          ข้อมูลทั้งหมดไม่ระบุตัวตน (anonymized) และไม่สามารถย้อนกลับไปถึงบุคคลใดบุคคลหนึ่งได้
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* ================================================================
-   SAFETY VIEW
-   ================================================================ */
-const NOTIFY_KEY = "jaikrajok_line_notify";
-
-function SafetyView({ crisis }: { crisis: boolean }) {
-  const [lineNotify, setLineNotify] = useState(() => {
-    try {
-      return localStorage.getItem(NOTIFY_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  const [busy, setBusy] = useState(false);
-  const userId = getUserId();
-  const [cardsRef, cardsInView] = useInView<HTMLDivElement>();
-
-  const exportData = async () => {
-    setBusy(true);
-    try {
-      const data = await api.exportData(userId);
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `jaikrajok-${userId}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast("ส่งออกข้อมูลเรียบร้อย");
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : "ส่งออกข้อมูลไม่สำเร็จ");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const deleteData = async () => {
-    if (!window.confirm("ลบประวัติอารมณ์และสถิติการใช้งานทั้งหมดของคุณ? การกระทำนี้ย้อนกลับไม่ได้")) return;
-    setBusy(true);
-    try {
-      await api.deleteData(userId);
-      toast("ลบข้อมูลทั้งหมดเรียบร้อย");
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : "ลบข้อมูลไม่สำเร็จ");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const privacyItems = [
-    {
-      title: "ความโปร่งใส",
-      // Matches what the store actually writes: mood_events plus message_counts.
-      // The previous copy claimed chat text was saved, which it never is.
-      desc: "ภาพ เสียง และข้อความถูกส่งไปวิเคราะห์ที่ AI for Thai / Pathumma ผ่าน HTTPS แล้วทิ้งทันที ไม่มีการเก็บไฟล์หรือเนื้อหาข้อความไว้บนเซิร์ฟเวอร์ ส่วนที่บันทึกไว้คือผลอารมณ์และจำนวนครั้งที่ใช้งานเท่านั้น",
-      Icon: IconEye,
-      color: "#2D6A6F",
-    },
-    {
-      title: "การควบคุมข้อมูล",
-      desc: "คุณสามารถส่งออกหรือลบข้อมูลทั้งหมดของคุณได้ทุกเมื่อจากหน้านี้",
-      Icon: IconDownload,
-      color: "#8b7355",
-    },
-    {
-      title: "ไม่ใช่การวินิจฉัย",
-      desc: "กระจกสะท้อนใจไม่ใช่เครื่องมือทางการแพทย์ ไม่สามารถวินิจฉัยโรคหรือภาวะทางจิตเวชได้",
-      Icon: IconAlert,
-      color: "#C41E3A",
-    },
-  ];
-
-  return (
-    <div className="space-y-6 view-transition">
-      <h2 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif", color: "#1a1a1a" }}>
-        ความปลอดภัย & ข้อมูล
-      </h2>
-
-      {/* Crisis alert */}
-      {crisis && (
-        <div
-          className="p-5 rounded-2xl animate-scale-in"
-          style={{ backgroundColor: "rgba(196,30,58,0.08)", border: "2px solid #C41E3A" }}
-          role="alert"
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <IconHeart size={20} color="#C41E3A" />
-            <p className="font-bold" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#C41E3A" }}>
-              กระจกเป็นห่วงคุณนะ
-            </p>
-          </div>
-          <p className="text-sm mb-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-            ถ้ากำลังรู้สึกอยากทำร้ายตัวเอง โปรดติดต่อคนที่ช่วยได้ทันที
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <a
-              href="tel:1323"
-              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-bold text-sm"
-              style={{ backgroundColor: "#C41E3A", fontFamily: "'Noto Sans Thai', sans-serif" }}
-            >
-              <IconPhone size={16} />
-              สายด่วนสุขภาพจิต 1323
-            </a>
-            <a
-              href="tel:1669"
-              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm"
-              style={{ backgroundColor: "rgba(196,30,58,0.08)", color: "#C41E3A", fontFamily: "'Noto Sans Thai', sans-serif", border: "1.5px solid #C41E3A" }}
-            >
-              <IconPhone size={16} />
-              เหตุฉุกเฉิน 1669
-            </a>
-          </div>
-        </div>
-      )}
-
-      {/* Helpline card (always visible) */}
-      {!crisis && (
-        <div className="surface p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <IconPhone size={16} color="#2D6A6F" />
-            <p className="font-bold text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#2D6A6F" }}>
-              สายด่วนสุขภาพจิต
-            </p>
-          </div>
-          <p className="text-sm mb-3" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
-            หากต้องการความช่วยเหลือ โทรได้ตลอด 24 ชั่วโมง ฟรี ไม่เสียค่าใช้จ่าย
-          </p>
-          <a
-            href="tel:1323"
-            className="inline-flex items-center gap-1.5 text-sm font-bold"
-            style={{ color: "#2D6A6F", fontFamily: "'Noto Sans Thai', sans-serif" }}
-          >
-            <IconPhone size={14} />
-            1323
-          </a>
-        </div>
-      )}
-
-      {/* Privacy cards */}
-      <div ref={cardsRef} className={`space-y-3 transition-all duration-500 ${cardsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
-        {privacyItems.map((item, i) => (
+      <div className="flex flex-1" style={{ paddingTop: "36px" }}>
+        {/* LEFT SIDEBAR — pure black, curved right edge */}
+        <div className="fixed left-0 z-40 flex flex-col overflow-hidden" style={{ top: "36px", bottom: 0, width: "230px" }}>
+          {/* Black body */}
           <div
-            key={i}
-            className="surface surface-interactive p-5"
-            style={{ transitionDelay: `${i * 0.08}s` }}
+            className="relative flex flex-col h-full"
+            style={{ backgroundColor: T.black }}
           >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${item.color}10` }}>
-                <item.Icon size={18} color={item.color} />
-              </div>
-              <p className="font-bold" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-                {item.title}
-              </p>
+            {/* Curved right edge mask */}
+            <div
+              className="absolute right-0 top-0 bottom-0 pointer-events-none"
+              style={{ width: "32px", zIndex: 1 }}
+            >
+              <svg viewBox="0 0 32 100" preserveAspectRatio="none" className="w-full h-full block">
+                <path d="M32,0 L32,100 C20,80 0,60 0,35 C0,20 12,8 32,0 Z" fill={T.cream} />
+              </svg>
             </div>
-            <p className="text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#666" }}>
-              {item.desc}
-            </p>
+
+            {/* Content */}
+            <div className="relative z-10 flex flex-col h-full px-5 py-6" style={{ paddingRight: "28px" }}>
+              {/* Brand */}
+              <div className="mb-8">
+                <h1
+                  className="font-black leading-tight"
+                  style={{ fontFamily: "'Taviraj', Georgia, serif", color: T.salmon, fontSize: "1.7rem" }}
+                >
+                  JaiKraJok
+                </h1>
+                <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: "rgba(255,181,167,0.6)", fontSize: "10px", letterSpacing: "0.08em" }}>
+                  กระจกสะท้อนใจ
+                </p>
+              </div>
+
+              {/* Nav */}
+              <nav className="flex-1 flex flex-col gap-1">
+                {navItems.map((item) => {
+                  const active = currentView === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setCurrentView(item.id);
+                        // GSAP pop animation on click
+                        const el = document.getElementById(`nav-icon-${item.id}`);
+                        if (el) gsap.fromTo(el, { scale: 0.7, rotate: -15 }, { scale: 1, rotate: 0, duration: 0.5, ease: "elastic.out(1.2, 0.5)" });
+                      }}
+                      onMouseEnter={(e) => {
+                        const el = e.currentTarget.querySelector(`#nav-icon-${item.id}`);
+                        if (el && !active) gsap.to(el, { scale: 1.2, rotate: 8, duration: 0.3, ease: "back.out(2)" });
+                      }}
+                      onMouseLeave={(e) => {
+                        const el = e.currentTarget.querySelector(`#nav-icon-${item.id}`);
+                        if (el && !active) gsap.to(el, { scale: 1, rotate: 0, duration: 0.25, ease: "power2.out" });
+                      }}
+                      className="w-full text-left px-3 py-2.5 rounded-xl transition-colors duration-150 flex items-center gap-3"
+                      style={{
+                        backgroundColor: active ? "rgba(255,181,167,0.18)" : "transparent",
+                        color: active ? T.salmon : "rgba(255,181,167,0.6)",
+                        fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                        fontWeight: active ? 700 : 500,
+                        fontSize: "13px",
+                        border: active ? `1px solid rgba(255,181,167,0.3)` : "1px solid transparent",
+                      }}
+                    >
+                      <img
+                        id={`nav-icon-${item.id}`}
+                        src={item.iconSrc}
+                        alt=""
+                        style={{
+                          width: "22px",
+                          height: "22px",
+                          objectFit: "contain",
+                          flexShrink: 0,
+                          filter: active ? "none" : "brightness(0) invert(0.8) sepia(1) hue-rotate(300deg) saturate(0.5)",
+                          transition: "filter 0.2s",
+                        }}
+                      />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {/* Status */}
+              <div className="mt-auto pt-4" style={{ borderTop: "1px solid rgba(255,181,167,0.15)" }}>
+                <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: "rgba(255,181,167,0.5)", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>
+                  สภาวะล่าสุด
+                </p>
+                <p className="flex items-center gap-2" style={{ color: T.salmon, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", fontSize: "13px", fontWeight: 600 }}>
+                  <span>{EMO[mood]?.emoji}</span>
+                  {EMO[mood]?.label || "ปกติ"}
+                </p>
+              </div>
+            </div>
           </div>
-        ))}
+        </div>
+
+        {/* MAIN CONTENT */}
+        <div className="flex-1 min-h-screen" style={{ marginLeft: "230px" }}>
+          {/* Graph paper background */}
+          <div
+            className="fixed pointer-events-none"
+            style={{
+              left: "230px", top: "36px", right: 0, bottom: 0,
+              background: `linear-gradient(${T.gridLine} 1px, transparent 1px), linear-gradient(90deg, ${T.gridLine} 1px, transparent 1px)`,
+              backgroundSize: "28px 28px",
+              backgroundColor: T.cream,
+              zIndex: 0,
+            }}
+          />
+
+          <div className="relative z-10 px-8 py-7">
+            {currentView === "home" && (
+              <PageWrapper pageKey="home">
+                <HomeView
+                  mood={mood}
+                  setMood={setMood}
+                  onGoChat={() => setCurrentView("chat")}
+                  onGoTrend={() => setCurrentView("trend")}
+                  tryMode={tryMode}
+                  lineNotify={lineNotify}
+                  setLineNotify={setLineNotify}
+                />
+              </PageWrapper>
+            )}
+            {currentView === "chat" && (
+              <PageWrapper pageKey="chat">
+                <ChatView
+                  messages={messages}
+                  inputText={inputText}
+                  setInputText={setInputText}
+                  sendMessage={() => sendMessage()}
+                  isAnalyzing={isAnalyzing}
+                  handleSelfie={handleSelfie}
+                  handleVoice={handleVoice}
+                  handleHomeworkPhoto={handleHomeworkPhoto}
+                  resetChat={resetChat}
+                  speakText={speakText}
+                  mood={mood}
+                  concernStreak={concernStreak}
+                  transparencyLogs={transparencyLogs}
+                  onNotifyCounselor={() => {
+                    toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว ครูจะติดต่อกลับภายในวันนี้");
+                    setShowEscalationModal(false);
+                  }}
+                />
+              </PageWrapper>
+            )}
+            {currentView === "trend" && (
+              <PageWrapper pageKey="trend">
+                <TrendView
+                  trendData={trendData}
+                  logEntries={logEntries}
+                  onDeleteEntry={(id) => { setLogEntries((prev) => prev.filter((e) => e.id !== id)); toast("ลบรายการแล้ว"); }}
+                  onClearAll={() => {
+                    if (window.confirm("ยืนยันลบข้อมูลแนวโน้มอารมณ์ทั้งหมดของคุณ?")) {
+                      setTrendData([]); setLogEntries([]); setConcernStreak(0);
+                      toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
+                    }
+                  }}
+                  onExport={() => {
+                    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries }, null, 2)], { type: "application/json" });
+                    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
+                    a.click(); URL.revokeObjectURL(a.href);
+                    toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
+                  }}
+                />
+              </PageWrapper>
+            )}
+            {currentView === "school" && <PageWrapper pageKey="school"><SchoolView /></PageWrapper>}
+            {currentView === "safety" && (
+              <PageWrapper pageKey="safety">
+                <SafetyView
+                  age={age}
+                  guardianConsent={guardianConsent}
+                  onExport={async () => {
+                    try {
+                      const result = await api.exportData(userId);
+                      const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+                      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
+                      a.click(); URL.revokeObjectURL(a.href);
+                      toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
+                    } catch (err: any) {
+                      toast.error(err.message || "ส่งออกข้อมูลไม่สำเร็จ");
+                    }
+                  }}
+                  onClearAll={async () => {
+                    if (window.confirm("ยืนยันลบข้อมูลทั้งหมดของคุณ? การกระทำนี้ไม่สามารถย้อนกลับได้")) {
+                      try {
+                        await api.deleteData(userId);
+                        setTrendData([]); setLogEntries([]);
+                        toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
+                      } catch (err: any) {
+                        toast.error(err.message || "ลบข้อมูลไม่สำเร็จ");
+                      }
+                    }
+                  }}
+                />
+              </PageWrapper>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* LINE Notify toggle */}
-      <div className="surface p-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "rgba(45,106,111,0.08)" }}>
-            <IconBell size={18} color="#2D6A6F" />
+      {/* ESCALATION MODAL */}
+      {showEscalationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" style={{ border: `2px solid ${T.salmon}` }}>
+            <div className="text-4xl mb-3">🤝</div>
+            <h3 className="text-xl font-bold mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+              เราสังเกตว่าช่วงนี้ใจคุณหนักอยู่หลายครั้ง
+            </h3>
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+              ไม่เป็นไรนะ ความรู้สึกแบบนี้ไม่ผิดเลย กระจกอยากชวนคุณลองพูดคุยกับคนที่ไว้ใจได้ สายด่วนสุขภาพจิต 1323
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => { toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว"); setShowEscalationModal(false); }}
+                className="w-full py-3 rounded-2xl text-white font-bold transition-all active:scale-[0.97]"
+                style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
+              >
+                แจ้งครูที่ปรึกษา
+              </button>
+              <a
+                href="tel:1323"
+                className="block text-center w-full py-3 rounded-2xl font-bold transition-all"
+                style={{ color: T.red, border: `2px solid ${T.red}`, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
+              >
+                📞 โทรสายด่วน 1323
+              </a>
+              <button
+                onClick={() => setShowEscalationModal(false)}
+                className="w-full py-2.5 rounded-2xl text-gray-500 font-medium text-sm hover:bg-gray-100"
+                style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
+              >
+                ยังไม่พร้อมตอนนี้
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ HOME VIEW ============ */
+function HomeView({
+  mood, setMood, onGoChat, onGoTrend, tryMode, lineNotify, setLineNotify,
+}: {
+  mood: string;
+  setMood: (v: string) => void;
+  onGoChat: () => void;
+  onGoTrend: () => void;
+  tryMode: (mode: "camera" | "keyboard" | "mic" | "photo") => void;
+  lineNotify: boolean;
+  setLineNotify: (v: boolean) => void;
+}) {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "อรุณสวัสดิ์ค่ะ" : hour < 18 ? "สวัสดีตอนบ่ายค่ะ" : "สวัสดีตอนเย็นค่ะ";
+  const moods = Object.entries(EMO);
+
+  return (
+    <div className="space-y-7 max-w-4xl">
+      {/* HERO CARD */}
+      <div
+        className="p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden"
+        style={{
+          background: "#fefdfa",
+          backgroundImage: "radial-gradient(#e0d6c8 1px, transparent 1px)",
+          backgroundSize: "20px 20px",
+          borderRadius: "16px",
+          border: "2px solid #DED3C1",
+          boxShadow: "4px 8px 0px rgba(222,211,193,0.4), 0 4px 24px rgba(0,0,0,0.06)",
+        }}
+      >
+        <div className="flex items-center gap-5 z-10">
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center text-4xl flex-shrink-0 -mt-2 -ml-2 shadow-lg z-10 relative"
+            style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `3px solid ${T.white}` }}
+          >
+            {EMO[mood]?.emoji || "😌"}
+            <div className="absolute inset-0 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] pointer-events-none"></div>
           </div>
           <div>
-            <p className="font-bold text-sm" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-              การแจ้งเตือนผ่าน LINE
-            </p>
-            <p className="text-xs mt-0.5" style={{ fontFamily: "'Noto Sans Thai', sans-serif", color: "#888" }}>
-              บันทึกไว้บนอุปกรณ์นี้เท่านั้น ต้องเพิ่มบอทใน LINE ก่อนจึงจะได้รับแจ้งเตือน
+            <h2 className="text-2xl font-bold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+              {greeting}
+            </h2>
+            <p className="text-sm mt-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
+              วันนี้อยากให้กระจกฟังอะไรบ้าง จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ
             </p>
           </div>
         </div>
-        <button
-          role="switch"
-          aria-checked={lineNotify}
-          aria-label="การแจ้งเตือนผ่าน LINE"
-          onClick={() => {
-            const next = !lineNotify;
-            setLineNotify(next);
-            // No server-side preference exists yet, so the choice is kept on the
-            // device. Without this it silently reset on every reload.
-            try {
-              localStorage.setItem(NOTIFY_KEY, next ? "1" : "0");
-            } catch {
-              /* private mode: the toggle still works for this session */
-            }
-            toast(next ? "เปิดการแจ้งเตือนผ่าน LINE แล้ว" : "ปิดการแจ้งเตือนผ่าน LINE แล้ว");
-          }}
-          className="w-12 h-6 rounded-full transition-all duration-300 relative flex-shrink-0"
-          style={{ backgroundColor: lineNotify ? "#2D6A6F" : "#ccc" }}
-        >
-          <div
-            aria-hidden="true"
-            className="w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all duration-300 shadow-sm"
-            style={{ left: lineNotify ? "26px" : "2px" }}
-          />
-        </button>
+        <div className="flex gap-3 flex-shrink-0 z-10">
+          <button
+            onClick={onGoChat}
+            className="px-5 py-2.5 rounded-full text-white font-bold text-sm transition-all hover:scale-105 active:scale-95"
+            style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 4px 12px rgba(45,106,111,0.3)" }}
+          >
+            💬 เริ่มคุยกับกระจก
+          </button>
+          <button
+            onClick={onGoTrend}
+            className="px-4 py-2.5 rounded-full font-semibold text-sm transition-all hover:bg-gray-50 active:scale-95"
+            style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", backgroundColor: T.white, border: "2px solid #E2D9C2" }}
+          >
+            📈 ดูแนวโน้มของฉัน
+          </button>
+        </div>
       </div>
 
-      {/* Data controls */}
-      <div className="space-y-3">
-        <button
-          onClick={exportData}
-          disabled={busy}
-          aria-busy={busy}
-          className="w-full py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2"
-          style={{
-            backgroundColor: "#fff",
-            border: "1.5px solid var(--rule)",
-            boxShadow: "var(--shadow-sm)",
-            color: "#2D6A6F",
-            fontFamily: "'Noto Sans Thai', sans-serif",
-          }}
-        >
-          <IconDownload size={16} />
-          {busy ? "กำลังดำเนินการ..." : "ส่งออกข้อมูลทั้งหมดของฉัน"}
-        </button>
+      {/* QUICK MOOD PICKER */}
+      <div>
+        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+          วันนี้รู้สึกยังไง?
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          {moods.map(([key, emo], idx) => {
+            const rotations = ["rotate-[-2deg]", "rotate-[1deg]", "rotate-[-1deg]", "rotate-[2deg]", "rotate-[0deg]", "rotate-[-3deg]"];
+            const rot = rotations[idx % rotations.length];
+            return (
+            <button
+              key={key}
+              onClick={() => setMood(key)}
+              className={`p-4 rounded-xl text-center transition-all duration-300 transform hover:-translate-y-2 hover:shadow-xl active:scale-95 ${rot}`}
+              style={{
+                backgroundColor: mood === key ? "#DCEAE8" : T.white,
+                border: mood === key ? `3px solid ${T.teal}` : "1px solid #EDE6D3",
+                boxShadow: mood === key ? "0 8px 0px rgba(45,106,111,0.2)" : "0 4px 10px rgba(0,0,0,0.05)",
+                fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
+              }}
+            >
+              <span className="text-4xl block mb-2 drop-shadow-sm">{emo.emoji}</span>
+              <span className="text-[11px] font-bold block uppercase tracking-wide" style={{ color: mood === key ? T.teal : T.black }}>{emo.label}</span>
+            </button>
+          )})}
+        </div>
+      </div>
 
-        <button
-          onClick={deleteData}
-          disabled={busy}
-          aria-busy={busy}
-          className="w-full py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2"
-          style={{
-            backgroundColor: "#fff",
-            border: "1.5px solid #C41E3A",
-            boxShadow: "var(--shadow-sm)",
-            color: "#C41E3A",
-            fontFamily: "'Noto Sans Thai', sans-serif",
-          }}
-        >
-          <IconTrash size={16} />
-          ลบข้อมูลทั้งหมดของฉัน
-        </button>
+      {/* 4 MODE CARDS */}
+      <div>
+        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+          วิธีระบายความรู้สึก · เลือกวิธีที่ถนัดได้เลย
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+          {[
+            { id: "camera" as const, title: "ถ่ายเซลฟี่", desc: "Face Recognition API", iconSrc: IMG.bulb, bg: "#FDF5E6", border: "#F0E1C8" },
+            { id: "keyboard" as const, title: "พิมพ์ความรู้สึก", desc: "Sentiment Analysis API", iconSrc: IMG.handPen, bg: "#F2F5E9", border: "#E0E8D3" },
+            { id: "mic" as const, title: "พูดระบาย", desc: "Speech-to-Text API", iconSrc: IMG.amplifier, bg: "#FFF0F4", border: "#F5DBE4" },
+            { id: "photo" as const, title: "ถ่ายรูปการบ้าน", desc: "OCR API", iconSrc: IMG.origamiStarsNoBg, bg: "#EBF3F5", border: "#D4E5E8" },
+          ].map((item, idx) => {
+            const rots = ["rotate-[1deg]", "rotate-[-1deg]", "rotate-[2deg]", "rotate-[-2deg]"];
+            const r = rots[idx % rots.length];
+            const cardId = `action-card-${item.id}`;
+            const imgId = `action-img-${item.id}`;
+            return (
+            <button
+              key={item.id}
+              id={cardId}
+              onClick={(e) => {
+                tryMode(item.id);
+                // GSAP burst ripple on click
+                const rect = e.currentTarget.getBoundingClientRect();
+                const ripple = document.createElement("div");
+                ripple.style.cssText = `position:fixed;left:${rect.left + rect.width/2}px;top:${rect.top + rect.height/2}px;width:12px;height:12px;border-radius:50%;background:${item.border};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
+                document.body.appendChild(ripple);
+                gsap.fromTo(ripple,
+                  { scale: 0, opacity: 0.8 },
+                  { scale: 9, opacity: 0, duration: 0.7, ease: "expo.out", onComplete: () => ripple.remove() }
+                );
+                // GSAP pop the image
+                const imgEl = document.getElementById(imgId);
+                if (imgEl) gsap.fromTo(imgEl, { scale: 0.8, rotate: -10 }, { scale: 1, rotate: 0, duration: 0.6, ease: "elastic.out(1.3, 0.4)" });
+              }}
+              onMouseEnter={() => {
+                const imgEl = document.getElementById(imgId);
+                if (imgEl) gsap.to(imgEl, { y: -8, rotate: 5, duration: 0.4, ease: "power2.out" });
+                const card = document.getElementById(cardId);
+                if (card) gsap.to(card, { y: -6, duration: 0.3, ease: "power2.out" });
+              }}
+              onMouseLeave={() => {
+                const imgEl = document.getElementById(imgId);
+                if (imgEl) gsap.to(imgEl, { y: 0, rotate: 0, duration: 0.4, ease: "elastic.out(1, 0.5)" });
+                const card = document.getElementById(cardId);
+                if (card) gsap.to(card, { y: 0, duration: 0.35, ease: "power2.inOut" });
+              }}
+              className={`p-6 rounded-none text-center group transition-colors duration-200 ${r}`}
+              style={{
+                backgroundColor: item.bg,
+                border: `1px solid ${item.border}`,
+                boxShadow: `4px 4px 0px ${item.border}, 0 10px 20px rgba(0,0,0,0.05)`,
+                position: "relative",
+                willChange: "transform",
+              }}
+            >
+              {/* Tape visual */}
+              <div className="absolute top-[-10px] left-1/2 -translate-x-1/2 w-12 h-6 bg-white/40 border border-white/60 shadow-sm rotate-[-2deg]" style={{backdropFilter: "blur(2px)"}}></div>
+              
+              <div className="bg-white rounded-sm aspect-square flex items-center justify-center mb-4 shadow-inner overflow-hidden" style={{ border: `1px solid ${item.border}` }}>
+                <img
+                  id={imgId}
+                  src={item.iconSrc}
+                  alt=""
+                  style={{
+                    width: "85%",
+                    height: "85%",
+                    objectFit: "contain",
+                    display: "block",
+                    willChange: "transform",
+                  }}
+                />
+              </div>
+              <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+                {item.title}
+              </h4>
+              <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#888" }}>
+                {item.desc}
+              </p>
+            </button>
+          )})}
+        </div>
+      </div>
+
+      {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
+      {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
+      <div
+        className="p-6 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative mt-4"
+        style={{ 
+          backgroundColor: "#F9F8F5", 
+          border: "2px dashed #C8BEAC",
+          backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(200, 190, 172, 0.05) 10px, rgba(200, 190, 172, 0.05) 20px)"
+        }}
+      >
+        {/* Pin visual */}
+        <div className="absolute top-3 right-5 w-3 h-3 rounded-full bg-[#A85F73] shadow-[0_2px_4px_rgba(0,0,0,0.3)] z-10">
+          <div className="w-1 h-1 bg-white/60 rounded-full absolute top-[1px] left-[1px]"></div>
+        </div>
+
+        <div>
+          <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+            ช่องทางการเข้าถึง
+          </h4>
+          <div className="flex gap-3 mt-3 flex-wrap">
+            <span className="px-4 py-1.5 text-[#00B900] text-xs font-bold rounded-sm border border-[#00B900] bg-white shadow-sm" style={{transform: "rotate(-1deg)"}}>
+              💚 LINE Official Account
+            </span>
+            <span className="px-4 py-1.5 text-blue-600 text-xs font-bold rounded-sm border border-blue-600 bg-white shadow-sm" style={{transform: "rotate(1deg)"}}>
+              🌐 Web Application (หน้านี้)
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-full border border-[#E2D9C2] shadow-sm z-10">
+          <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+            รับการแจ้งเตือนผ่าน LINE
+          </span>
+          <button
+            onClick={() => { setLineNotify(!lineNotify); toast(lineNotify ? "ปิดการแจ้งเตือนผ่าน LINE แล้ว" : "เปิดการแจ้งเตือนผ่าน LINE แล้ว"); }}
+            className="w-10 h-5 rounded-full flex items-center transition-colors px-0.5 relative"
+            style={{ backgroundColor: lineNotify ? "#00B900" : "#D1D5DB", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)" }}
+          >
+            <div className={`w-4 h-4 bg-white rounded-full shadow transition-all absolute top-0.5`} style={{ left: lineNotify ? "22px" : "2px" }} />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ================================================================
-   MAIN APP
-   ================================================================ */
+/* ============ CHAT VIEW ============ */
+function ChatView({
+  messages, inputText, setInputText, sendMessage, isAnalyzing,
+  handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
+  mood, concernStreak, transparencyLogs, onNotifyCounselor,
+}: {
+  messages: ChatMsg[];
+  inputText: string;
+  setInputText: (v: string) => void;
+  sendMessage: () => void;
+  isAnalyzing: boolean;
+  handleSelfie: () => void;
+  handleVoice: () => void;
+  handleHomeworkPhoto: () => void;
+  resetChat: () => void;
+  speakText: (t: string) => void;
+  mood: string;
+  concernStreak: number;
+  transparencyLogs: string[];
+  onNotifyCounselor: () => void;
+}) {
+  const chatBodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (chatBodyRef.current) chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+  }, [messages, isAnalyzing]);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ height: "calc(100vh - 100px)" }}>
+      {/* LEFT CHAT PANEL */}
+      <div
+        className="lg:col-span-2 flex flex-col overflow-hidden"
+        style={{ backgroundColor: T.white, borderRadius: "20px", border: "1.5px solid #E2D9C2", boxShadow: "0 2px 18px rgba(26,26,26,0.07)" }}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1.5px solid #EDE6D3" }}>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
+              style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `2px solid ${T.teal}` }}
+            >
+              {EMO[mood]?.emoji || "😌"}
+            </div>
+            <div>
+              <p className="font-bold text-sm" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+                กระจกสะท้อนใจ
+              </p>
+              <p className="text-xs flex items-center gap-1 font-semibold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: T.teal }} />
+                สภาวะล่าสุด: {EMO[mood]?.label || "ปกติ"}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={resetChat}
+            className="p-2 rounded-xl hover:bg-gray-100 transition-all text-gray-500"
+            title="เริ่มการสนทนาใหม่"
+          >
+            🔄
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div ref={chatBodyRef} className="flex-1 overflow-y-auto p-5 space-y-4" style={{ scrollbarWidth: "thin" }}>
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              {msg.role === "system" ? (
+                <div className="w-full px-4 py-2 rounded-2xl text-xs font-mono text-center" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
+                  💡 {msg.text}
+                </div>
+              ) : msg.cardType === "emotion" && msg.emotionData ? (
+                <div
+                  className="max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed"
+                  style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
+                >
+                  <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                    ผลการสะท้อนจากใบหน้า · {msg.emotionData.label}
+                  </p>
+                  <p>{msg.emotionData.note}</p>
+                </div>
+              ) : msg.cardType === "ocr" ? (
+                <div className="max-w-[85%] p-4 rounded-2xl text-sm" style={{ backgroundColor: T.cream, border: "1.5px dashed #aaa" }}>
+                  <p className="font-bold text-xs text-gray-500 mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>📷 ผลจาก OCR API</p>
+                  <p className="text-xs text-gray-500 italic border-l-2 pl-3 py-1 my-1" style={{ borderColor: T.teal }}>{msg.ocrText}</p>
+                </div>
+              ) : (
+                <div
+                  className="max-w-[80%] px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm"
+                  style={{
+                    backgroundColor: msg.role === "user" ? T.teal : T.white,
+                    color: msg.role === "user" ? T.white : T.black,
+                    border: msg.role === "user" ? "none" : "1.5px solid #EDE6D3",
+                    borderBottomRightRadius: msg.role === "user" ? "6px" : "20px",
+                    borderBottomLeftRadius: msg.role === "bot" ? "6px" : "20px",
+                    fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
+                  }}
+                >
+                  {msg.text}
+                  {msg.role === "bot" && (
+                    <button onClick={() => speakText(msg.text)} className="ml-2 text-xs opacity-50 hover:opacity-100 transition-opacity">🔊</button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+          {isAnalyzing && (
+            <div className="flex justify-start">
+              <div className="px-5 py-3 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}` }}>
+                <div className="flex gap-1.5">
+                  {[0, 150, 300].map((d) => (
+                    <div key={d} className="w-2.5 h-2.5 rounded-full " style={{ backgroundColor: T.teal, animationDelay: `${d}ms` }} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input toolbar */}
+        <div className="p-4 space-y-3" style={{ borderTop: `2px solid ${T.teal}`, backgroundColor: T.white }}>
+          <div className="flex items-center gap-2">
+            {[
+              { handler: handleSelfie, icon: "📷", title: "ถ่ายเซลฟี่" },
+              { handler: handleVoice, icon: "🎤", title: "พูดระบาย" },
+              { handler: handleHomeworkPhoto, icon: "🖼️", title: "แนบรูปการบ้าน" },
+            ].map(({ handler, icon, title }) => (
+              <button
+                key={title}
+                onClick={handler}
+                title={title}
+                className="p-2.5 rounded-full text-sm font-bold transition-all hover:text-white"
+                style={{ border: `2px solid ${T.teal}`, backgroundColor: "#E3EAE0", color: T.teal }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = T.teal; e.currentTarget.style.color = T.white; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#E3EAE0"; e.currentTarget.style.color = T.teal; }}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="พิมพ์ความรู้สึกของคุณ..."
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              className="flex-1 px-5 py-3 rounded-full outline-none text-sm"
+              style={{ backgroundColor: T.cream, border: "1.5px solid transparent", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}
+              onFocus={(e) => (e.target.style.borderColor = T.teal)}
+              onBlur={(e) => (e.target.style.borderColor = "transparent")}
+            />
+            <button
+              onClick={sendMessage}
+              className="w-11 h-11 rounded-full text-white font-bold flex items-center justify-center transition-all active:scale-[0.95]"
+              style={{ backgroundColor: T.teal }}
+            >
+              ⬆️
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT SIDEBAR */}
+      <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 100px)", scrollbarWidth: "thin" }}>
+        {/* Modes info */}
+        <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+          <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>โหมดที่ใช้ได้</h4>
+          <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
+            Face Recognition · Sentiment Analysis · Speech-to-Text · OCR ถูกส่งต่อให้ Pathumma LLM สังเคราะห์คำแนะนำเฉพาะบุคคล
+          </p>
+        </div>
+
+        {/* Concern card */}
+        <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+          <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>สถานะการดูแล</h4>
+          {concernStreak >= 2 ? (
+            <div className="p-3.5 rounded-xl space-y-2" style={{ backgroundColor: "#F1DEE3", border: "1.5px solid #A85F73" }}>
+              <p className="font-bold text-xs" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#6B3B49" }}>⚠️ สังเกตแนวโน้มเชิงลบต่อเนื่อง</p>
+              <p className="text-xs" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#6B3B49" }}>อยากชวนคุยกับครูที่ปรึกษาหรือสายด่วน 1323 ไหม</p>
+              <div className="flex gap-2 pt-1">
+                <button onClick={onNotifyCounselor} className="px-3 py-1.5 rounded-xl text-white text-xs font-bold" style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                  แจ้งครูที่ปรึกษา
+                </button>
+                <a href="tel:1323" className="px-3 py-1.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#6B3B49", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                  โทร 1323
+                </a>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
+              ยังไม่พบสัญญาณที่น่าเป็นห่วง ระบบจะแจ้งเตือนอัตโนมัติหากพบแนวโน้มต่อเนื่อง
+            </p>
+          )}
+        </div>
+
+        {/* Transparency logs */}
+        <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+          <h4 className="font-bold text-sm mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>บันทึกความโปร่งใส</h4>
+          {transparencyLogs.length === 0 ? (
+            <p className="text-xs text-gray-400" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>ยังไม่มีการเรียกใช้ API</p>
+          ) : (
+            <div className="space-y-2">
+              {transparencyLogs.map((log, i) => (
+                <div key={i} className="text-xs font-mono text-gray-600 p-2 rounded-xl flex items-center gap-2" style={{ backgroundColor: "#f5f5f5", border: "1px solid #e5e5e5" }}>
+                  <span>👁️</span><span>{log}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ TREND VIEW ============ */
+function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport }: {
+  trendData: TrendPoint[];
+  logEntries: LogEntry[];
+  onDeleteEntry: (id: string) => void;
+  onClearAll: () => void;
+  onExport: () => void;
+}) {
+  const userId = getUserId();
+  const [serverTrend, setServerTrend] = useState<TrendResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.trend(userId)
+      .then(setServerTrend)
+      .catch(() => toast.error("โหลดข้อมูลแนวโน้มไม่สำเร็จ"))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      {loading && (
+        <div className="text-center py-8 text-gray-500">กำลังโหลดข้อมูล...</div>
+      )}
+      {!loading && serverTrend && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
+            <span className="text-2xl font-black block" style={{ color: T.teal }}>{serverTrend.messages}</span>
+            <span className="text-xs text-gray-600 font-semibold">ข้อความทั้งหมด</span>
+          </div>
+          <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
+            <span className="text-2xl font-black block" style={{ color: T.teal }}>{serverTrend.active_days}</span>
+            <span className="text-xs text-gray-600 font-semibold">วันที่ใช้งาน</span>
+          </div>
+          <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
+            <span className="text-xl font-black block" style={{ color: T.teal }}>
+              {serverTrend.dominant_mood ? EMO[serverTrend.dominant_mood].emoji : "—"}
+            </span>
+            <span className="text-xs text-gray-600 font-semibold">อารมณ์ส่วนใหญ่</span>
+          </div>
+          <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
+            <span className="text-2xl font-black block" style={{ color: T.teal }}>{serverTrend.days.length}</span>
+            <span className="text-xs text-gray-600 font-semibold">วันที่มีบันทึก</span>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* SVG trend chart */}
+        <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มอารมณ์ในเซสชันนี้</h3>
+            <span className="text-xs font-mono text-gray-500">{trendData.length === 0 ? "ยังไม่มีข้อมูล" : `${trendData.length} จุดข้อมูล`}</span>
+          </div>
+          <div className="relative h-44 w-full my-2">
+            <svg viewBox="0 0 500 160" className="w-full h-full overflow-visible">
+              <line x1="0" y1="140" x2="500" y2="140" stroke="#EDE6D3" strokeWidth="1" />
+              <text x="0" y="18" fontFamily="'IBM Plex Mono', monospace" fontSize="10" fill="#888">ผ่อนคลาย</text>
+              <text x="0" y="150" fontFamily="'IBM Plex Mono', monospace" fontSize="10" fill="#888">ตึงเครียด</text>
+              {trendData.length > 0 && (
+                <>
+                  <polyline fill="none" stroke="#6F6389" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    points={trendData.map((d, idx) => {
+                      const stepX = trendData.length > 1 ? 460 / (trendData.length - 1) : 0;
+                      return `${30 + idx * stepX},${140 - d.valence * 110}`;
+                    }).join(" ")}
+                  />
+                  {trendData.map((d, idx) => {
+                    const stepX = trendData.length > 1 ? 460 / (trendData.length - 1) : 0;
+                    return <circle key={d.id} cx={30 + idx * stepX} cy={140 - d.valence * 110} r="5.5" fill={d.color} stroke="#fff" strokeWidth="1.5" />;
+                  })}
+                </>
+              )}
+            </svg>
+          </div>
+          <div className="flex gap-4 pt-3 text-xs font-semibold text-gray-600" style={{ borderTop: "1px solid #EDE6D3" }}>
+            {[["#2F5D62", "ผ่อนคลาย / ดี"], ["#6F6389", "ปกติ / เหนื่อยล้า"], ["#A85F73", "เครียด / กังวล"]].map(([c, l]) => (
+              <span key={l} className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c }} /> {l}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Check-in history */}
+        <div className="p-6 rounded-2xl flex flex-col" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+          <h3 className="font-bold text-base mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>ประวัติการเช็คอิน</h3>
+          <div className="flex-1 overflow-y-auto max-h-48 space-y-2 pr-1" style={{ scrollbarWidth: "thin" }}>
+            {logEntries.length === 0 ? (
+              <div className="text-center text-xs text-gray-400 py-8" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>ยังไม่มีประวัติการเช็คอินในเซสชันนี้</div>
+            ) : (
+              logEntries.map((e) => (
+                <div key={e.id} className="flex items-center justify-between p-3 rounded-xl text-xs" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                  <span className="font-semibold text-gray-800">{e.label} · {e.source}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-gray-400">{e.time}</span>
+                    <button onClick={() => onDeleteEntry(e.id)} className="text-gray-400 hover:text-red-500">🗑️</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="flex gap-2 pt-4 mt-auto" style={{ borderTop: "1px solid #EDE6D3" }}>
+            <button onClick={onExport} className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all" style={{ border: `2px solid ${T.teal}`, color: T.teal, backgroundColor: "#E3EAE0", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+              📥 ส่งออกข้อมูลของฉัน
+            </button>
+            <button onClick={onClearAll} className="px-4 py-2.5 rounded-xl text-white text-xs font-bold transition-all" style={{ backgroundColor: "#A85F73", border: "2px solid #A85F73", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+              🗑️ ลบข้อมูลทั้งหมด
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ SCHOOL VIEW ============ */
+function SchoolView() {
+  const [schoolData, setSchoolData] = useState<SchoolResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.school()
+      .then(setSchoolData)
+      .catch(() => toast.error("โหลดข้อมูลโรงเรียนไม่สำเร็จ"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-4xl">
+        <div className="text-center py-12 text-gray-500">กำลังโหลดข้อมูล...</div>
+      </div>
+    );
+  }
+
+  if (!schoolData) {
+    return (
+      <div className="space-y-6 max-w-4xl">
+        <div className="text-center py-12 text-gray-500">ไม่มีข้อมูล</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div className="inline-block px-4 py-1.5 rounded-full text-xs font-mono font-bold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
+        📊 ภาพรวมโรงเรียน (ไม่ระบุตัวตนนักเรียน)
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { num: schoolData.readings.toString(), label: "การเช็คอินทั้งหมด" },
+          { num: `${Math.round(schoolData.stress_ratio * 100)}%`, label: "มีแนวโน้มเครียด/กังวล" },
+          { num: `${Math.round(schoolData.regular_ratio * 100)}%`, label: "อยู่ในเกณฑ์ปกติ-ผ่อนคลาย" },
+          { num: schoolData.users.toString(), label: "นักเรียนที่ใช้งาน" },
+        ].map((stat, i) => (
+          <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
+            <span className="text-3xl font-black block" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>{stat.num}</span>
+            <span className="text-xs text-gray-700 mt-1 block font-semibold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{stat.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+        <h4 className="font-bold text-base mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การกระจายตัวของอารมณ์</h4>
+        <div className="space-y-3">
+          {Object.entries(schoolData.distribution).map(([mood, count]) => {
+            const info = EMO[mood as Mood] || EMO.neutral;
+            const percentage = schoolData.readings > 0 ? Math.round((count / schoolData.readings) * 100) : 0;
+            return (
+              <div key={mood} className="flex items-center gap-3">
+                <span className="text-xl">{info.emoji}</span>
+                <span className="text-sm font-semibold w-32" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>{info.label}</span>
+                <div className="flex-1 h-6 rounded-full overflow-hidden" style={{ backgroundColor: "#F0F0F0" }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${percentage}%`, backgroundColor: info.color }} />
+                </div>
+                <span className="text-sm font-bold w-12 text-right" style={{ color: info.color }}>{percentage}%</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          { title: "บริการฟรี", desc: "นักเรียนใช้งานรายบุคคลผ่าน LINE Official Account ได้ฟรีเสมอ" },
+          { title: "แพ็กเกจโรงเรียน", desc: "ค่าบริการรายเดือนสำหรับภาพรวมสถิติระดับสถาบัน ไม่ระบุตัวตนนักเรียน" },
+          { title: "บริการวิเคราะห์ข้อมูล", desc: "สำหรับหน่วยงานด้านการศึกษาที่ต้องการข้อมูลเชิงลึกระดับภาพรวม" },
+        ].map((plan, i) => (
+          <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
+            <h5 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>{plan.title}</h5>
+            <p className="text-xs text-gray-700 leading-relaxed font-medium" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{plan.desc}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============ SAFETY & PRIVACY VIEW ============ */
+function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
+  age: string; guardianConsent: boolean; onExport: () => void; onClearAll: () => void;
+}) {
+  const [subTab, setSubTab] = useState<"privacy" | "ethics" | "arch" | "limits">("privacy");
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+        {[
+          { id: "privacy" as const, label: "ข้อมูลของฉัน" },
+          { id: "ethics" as const, label: "การใช้ AI อย่างรับผิดชอบ" },
+          { id: "arch" as const, label: "สถาปัตยกรรมระบบ" },
+          { id: "limits" as const, label: "ข้อจำกัดที่ควรทราบ" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setSubTab(t.id)}
+            className="px-5 py-2.5 rounded-full text-xs font-bold transition-all active:scale-[0.97] whitespace-nowrap"
+            style={{
+              backgroundColor: subTab === t.id ? T.teal : T.white,
+              color: subTab === t.id ? T.white : T.black,
+              border: subTab === t.id ? `2px solid ${T.teal}` : "2px solid #EDE6D3",
+              fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {subTab === "privacy" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { label: "อายุที่ยืนยัน", value: age ? `${age} ปี` : "16 ปี" },
+              { label: "ความยินยอมผู้ปกครอง", value: guardianConsent ? "ได้รับความยินยอมแล้ว" : "รอดำเนินการ" },
+              { label: "เงื่อนไขการใช้งาน", value: "ยอมรับแล้ว" },
+            ].map((item, i) => (
+              <div key={i} className="p-4 rounded-xl" style={{ backgroundColor: "#E3EAE0", color: "#3C5137" }}>
+                <h5 className="font-bold text-xs mb-1" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{item.label}</h5>
+                <p className="text-sm font-semibold">{item.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="p-6 rounded-2xl space-y-4" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
+            <h4 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การควบคุมข้อมูลของฉัน</h4>
+            <p className="text-xs text-gray-600" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>คุณสามารถเข้าถึง ส่งออก หรือลบข้อมูลของตนเองได้ทุกเมื่อ</p>
+            <div className="flex gap-3">
+              <button onClick={onExport} className="px-5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-xs font-bold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                📥 ส่งออกข้อมูลของฉัน
+              </button>
+              <button onClick={onClearAll} className="px-5 py-2.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#A85F73", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                🗑️ ลบข้อมูลทั้งหมด
+              </button>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {[
+              { title: "พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA)", content: "ระบบปฏิบัติตาม PDPA อย่างเคร่งครัด ภาพใบหน้าประมวลผลแบบเรียลไทม์และไม่ถูกจัดเก็บลงเซิร์ฟเวอร์ ข้อมูลแนวโน้มอารมณ์จัดเก็บแบบไม่ระบุตัวตนโดยใช้รหัสแทนชื่อ และเข้ารหัสตามมาตรฐาน AES-256" },
+              { title: "นโยบายความเป็นส่วนตัว (สรุป)", content: "ข้อมูลที่เก็บมีเพียงแนวโน้มอารมณ์แบบไม่ระบุตัวตนเพื่อแสดงพัฒนาการของผู้ใช้เท่านั้น ไม่มีการขายหรือแบ่งปันข้อมูลส่วนบุคคลให้บุคคลที่สาม" },
+              { title: "ข้อกำหนดการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 13 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้งาน ผู้ใช้อายุต่ำกว่า 20 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนเก็บข้อมูล ระบบมีการจำกัดอัตราการใช้งาน" },
+            ].map((acc, i) => (
+              <details key={i} className="p-4 rounded-2xl group" style={{ backgroundColor: T.white, border: "1.5px solid #EDE6D3" }}>
+                <summary className="font-bold text-sm cursor-pointer list-none flex justify-between items-center" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                  <span>{acc.title}</span>
+                  <span className="text-gray-400 font-mono text-base group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <p className="text-xs text-gray-600 mt-3 pt-3 leading-relaxed" style={{ borderTop: "1px solid #f0f0f0", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{acc.content}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {subTab === "ethics" && (
+        <div className="space-y-4">
+          <div className="p-6 rounded-2xl space-y-3" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
+            {["👁️ ระบบแสดงข้อความแจ้งเตือนทุกครั้งที่กำลังวิเคราะห์ข้อมูล (Transparent AI)", "🩺 AI ไม่มีหน้าที่วินิจฉัยโรคซึมเศร้าหรือโรคทางจิตเวชไม่ว่ากรณีใดๆ", "👥 มี Human-in-the-loop — กรณีฉุกเฉินจะแจ้งเตือนไปยังผู้ดูแลระบบที่เป็นมนุษย์แบบไม่ระบุตัวตน", "💖 ผลลัพธ์จากการวิเคราะห์เป็นข้อเสนอแนะเชิงบวก ไม่ใช่การตัดสิน ตีตรา หรือประเมินค่า", "🛡️ มี Rate Limiting และระบบตรวจจับกรองเนื้อหาที่ไม่เหมาะสม เพื่อป้องกันการใช้งานในทางที่ผิด"].map((text, i) => (
+              <div key={i} className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{text}</div>
+            ))}
+          </div>
+          <div className="p-6 rounded-2xl flex items-center justify-between gap-4" style={{ backgroundColor: T.black }}>
+            <div>
+              <h4 className="font-bold text-lg mb-1" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.salmon }}>📞 สายด่วนสุขภาพจิต 1323</h4>
+              <p className="text-xs text-gray-300" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>หากพบสัญญาณน่าเป็นห่วงต่อเนื่อง กระจกจะแนะนำให้ปรึกษาครูที่ปรึกษา ผู้ปกครอง หรือสายด่วนนี้</p>
+            </div>
+            <a href="tel:1323" className="px-6 py-3 rounded-full text-white font-bold text-sm shrink-0 transition-all" style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+              โทร 1323
+            </a>
+          </div>
+        </div>
+      )}
+
+      {subTab === "arch" && (
+        <div className="space-y-3">
+          {[
+            { layer: "ชั้น 1", title: "User Interface", desc: "LINE Official Account และ Web Application — พิมพ์ ถ่ายเซลฟี่ พูด หรือถ่ายรูปการบ้าน" },
+            { layer: "ชั้น 2", title: "API Gateway", desc: "ตรวจสอบสิทธิ์ กระจายคำขอไปยังบริการที่ถูกต้อง บันทึก Log แบบไม่ระบุตัวตน" },
+            { layer: "ชั้น 3", title: "AI Services · AI for Thai", desc: "Face Recognition · Sentiment Analysis · Speech-to-Text · OCR · Pathumma LLM (โมเดลหลัก)" },
+            { layer: "ชั้น 4", title: "Data Storage", desc: "เก็บประวัติแนวโน้มอารมณ์แบบไม่ระบุตัวตน เข้ารหัส AES-256 ปฏิบัติตาม PDPA" },
+          ].map((item, i) => (
+            <div key={i} className="p-5 rounded-2xl flex items-center gap-4" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold text-white shrink-0" style={{ backgroundColor: T.teal }}>{item.layer}</span>
+              <div>
+                <h5 className="font-bold text-sm text-gray-900" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{item.title}</h5>
+                <p className="text-xs text-gray-600 mt-0.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {subTab === "limits" && (
+        <div className="p-6 rounded-2xl space-y-3" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
+          {["⚠️ การวิเคราะห์อารมณ์จากใบหน้าอาจคลาดเคลื่อนในสภาพแสงน้อย หรือเมื่อใส่หน้ากากอนามัย", "⚠️ การวิเคราะห์ความรู้สึกจากข้อความอาจไม่ครอบคลุมภาษาเฉพาะกลุ่มหรือภาษาถิ่นบางรูปแบบ", "⚠️ ระบบนี้เป็นเครื่องมือเสริม ไม่สามารถแทนที่การปรึกษาจิตแพทย์หรือนักจิตวิทยา", "⚠️ อาจยังไม่สามารถตรวจจับอารมณ์เชิงซ้อนที่เกิดจากหลายสาเหตุพร้อมกันได้อย่างแม่นยำ", "⚠️ ประสิทธิภาพขึ้นอยู่กับคุณภาพการเชื่อมต่ออินเทอร์เน็ต เนื่องจากเรียกใช้ API แบบเรียลไทม์"].map((text, i) => (
+            <div key={i} className="p-3.5 rounded-xl text-xs font-semibold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{text}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ MAIN APP ============ */
+// Page transition wipe effect wrapper
+const PageWrapper = ({ children, pageKey }: { children: React.ReactNode, pageKey: string }) => {
+  const elRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (elRef.current) {
+      gsap.fromTo(elRef.current,
+        { clipPath: "inset(0 100% 0 0)" },
+        { clipPath: "inset(0 0% 0 0)", duration: 0.6, ease: "power3.inOut" }
+      );
+    }
+  }, [pageKey]);
+  return <div ref={elRef} className="h-full w-full">{children}</div>;
+};
+
 export default function App() {
   const [page, setPage] = useState<Page>("login");
   const [age, setAge] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianApproved, setGuardianApproved] = useState(false);
 
+  // Global click ripple effect
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      // Don't ripple if clicking inside a modal or explicitly prevented
+      if ((e.target as HTMLElement).closest(".no-ripple")) return;
+      
+      const colors = ["#2D6A6F", "#1A1A1A", "#FFB5A7", "#A85F73", "#6C8C64"];
+      const col = colors[Math.floor(Math.random() * colors.length)];
+      const maxR = 40 + Math.random() * 60;
+      
+      const drop = document.createElement("div");
+      drop.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;width:12px;height:12px;border-radius:50%;background:${col};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
+      document.body.appendChild(drop);
+      
+      gsap.fromTo(drop,
+        { scale: 0, opacity: 0.35 },
+        { scale: maxR/6, opacity: 0, duration: 1.2, ease: "expo.out", onComplete: () => drop.remove() }
+      );
+      
+      // Some micro droplets
+      for(let i=0; i<3; i++) {
+        const micro = document.createElement("div");
+        const angle = Math.random() * Math.PI * 2;
+        const dist = maxR * (0.3 + Math.random() * 0.5);
+        const tx = Math.cos(angle) * dist;
+        const ty = Math.sin(angle) * dist;
+        micro.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;width:3px;height:3px;border-radius:50%;background:${col};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
+        document.body.appendChild(micro);
+        gsap.to(micro, {
+          x: tx, y: ty, scale: 0, opacity: 0, duration: 0.6 + Math.random()*0.4, ease: "power2.out",
+          onComplete: () => micro.remove()
+        });
+      }
+    };
+    document.addEventListener("click", handleGlobalClick);
+    return () => document.removeEventListener("click", handleGlobalClick);
+  }, []);
+
   return (
     <div className="font-sans">
       <Toaster richColors position="top-center" />
-
-      {page === "login" && <LoginPage onNext={() => setPage("onb1")} />}
-      {page === "onb1" && <OnbWelcome onNext={() => setPage("onb2")} />}
+      {page === "login" && <PageWrapper pageKey="login"><LoginPage onNext={() => setPage("onb1")} /></PageWrapper>}
+      {page === "onb1" && <PageWrapper pageKey="onb1"><OnbWelcome onNext={() => setPage("onb2")} /></PageWrapper>}
       {page === "onb2" && (
-        <OnbAge
-          age={age}
-          setAge={setAge}
-          onNext={() => {
-            const ageNum = parseInt(age);
-            if (ageNum < 13) {
-              setPage("guardian");
-            } else {
-              setPage("privacy");
-            }
-          }}
-        />
+        <PageWrapper pageKey="onb2">
+          <OnbAge
+            age={age}
+            setAge={setAge}
+            onNext={() => {
+              const ageNum = parseInt(age);
+              setPage(ageNum < 13 ? "guardian" : "privacy");
+            }}
+          />
+        </PageWrapper>
       )}
       {page === "guardian" && (
-        <GuardianPage
-          approved={guardianApproved}
-          onSend={() => {
-            if (!guardianEmail || !guardianEmail.includes("@")) {
-              toast("กรุณากรอกอีเมลที่ถูกต้อง");
-              return;
-            }
-            setTimeout(() => setGuardianApproved(true), 1200);
-          }}
-          onNext={() => setPage("privacy")}
-          guardianEmail={guardianEmail}
-          setGuardianEmail={setGuardianEmail}
-        />
+        <PageWrapper pageKey="guardian">
+          <GuardianPage
+            approved={guardianApproved}
+            onSend={() => {
+              if (!guardianEmail || !guardianEmail.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
+              setTimeout(() => setGuardianApproved(true), 1200);
+            }}
+            onNext={() => setPage("privacy")}
+            guardianEmail={guardianEmail}
+            setGuardianEmail={setGuardianEmail}
+          />
+        </PageWrapper>
       )}
-      {page === "privacy" && <PrivacyPage onNext={() => setPage("app")} />}
-      {page === "app" && <AppShell />}
+      {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={() => setPage("app")} /></PageWrapper>}
+      {page === "app" && <PageWrapper pageKey="app"><AppShell /></PageWrapper>}
     </div>
   );
 }
