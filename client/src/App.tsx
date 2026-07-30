@@ -437,8 +437,8 @@ function LoginPage({ onNext }: { onNext: () => void }) {
       {/* RIGHT: black panel with form card */}
       <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-10 pointer-events-none" style={{ width: "45%" }}>
         {/* Hand-pen collage */}
-        <div className="fixed bottom-[-150px] right-[-150px] z-40 pointer-events-none" style={{ width: "1200px" }}>
-          <img src={IMG.hand} alt="" className="w-full h-auto" />
+        <div className="fixed bottom-0 right-0 z-10 pointer-events-none" style={{ width: "150px" }}>
+          <img src={IMG.hand} alt="" className="w-full h-auto opacity-80" />
         </div>
       </div>
       
@@ -563,7 +563,7 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
         <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
         <img src={IMG.origamiStarsNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
-        <img src={IMG.hand} className="absolute bottom-[-100px] right-[-100px] w-[800px] h-auto pointer-events-none z-20" alt="" />
+        <img src={IMG.hand} className="absolute bottom-[-40px] right-[-40px] w-[420px] h-auto pointer-events-none z-0 opacity-70" alt="" />
         <img src={IMG.redstar} className="absolute top-16 right-24 w-16 h-auto pointer-events-none z-0" alt="" />
         <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
         <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
