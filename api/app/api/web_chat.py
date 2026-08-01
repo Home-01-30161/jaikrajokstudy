@@ -7,19 +7,22 @@ mood label the UI can render and an LLM reply written for that mood.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
+from pydantic import BaseModel, Field
 
 from app import store
 from app.services import face, mood as mood_svc, ocr, pathumma, stt, tts
 from app.services.sentiment import analyze_sentiment
+from app.utils.security import create_session, enforce_rate_limit, require_session
 
-router = APIRouter(tags=["web"])
+router = APIRouter(tags=["web"], dependencies=[Depends(enforce_rate_limit)])
 
-# Upload guard: the deployed container has a 2 GB memory limit and reads the
-# whole body into RAM, so oversized uploads are rejected before buffering.
+# Upload guard: keep the amount handed to an upstream AI service bounded even
+# when the multipart parser has already accepted the request body.
 _MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 _MAX_MESSAGE_CHARS = 2000
+_MAX_OCR_CHARS = 4000
+_MAX_TTS_CHARS = 300
 
 CRISIS_KEYWORDS = ("ฆ่าตัวตาย", "อยากตาย", "ทำร้ายตัวเอง", "ไม่อยากอยู่")
 CRISIS_REPLY = (
@@ -30,8 +33,7 @@ CRISIS_REPLY = (
 
 
 class ChatRequest(BaseModel):
-    user_id: str
-    message: str
+    message: str = Field(..., min_length=1, max_length=_MAX_MESSAGE_CHARS)
 
 
 class ChatResponse(BaseModel):
@@ -41,11 +43,15 @@ class ChatResponse(BaseModel):
     confidence: float | None = None
     crisis: bool = False
     service: str = "sentiment+llm"
-    degraded: list[str] = []
+    degraded: list[str] = Field(default_factory=list)
 
 
 class EmotionRequest(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1, max_length=_MAX_MESSAGE_CHARS)
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=_MAX_TTS_CHARS)
 
 
 class EmotionResponse(BaseModel):
@@ -67,16 +73,31 @@ class AnalysisResponse(BaseModel):
     error: str | None = None
 
 
-async def _read_upload(upload: UploadFile) -> bytes:
-    data = await upload.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file")
-    if len(data) > _MAX_UPLOAD_BYTES:
+async def _read_upload(upload: UploadFile, *allowed_types: str) -> bytes:
+    content_type = (upload.content_type or "").lower()
+    if allowed_types and not any(content_type.startswith(t) for t in allowed_types):
+        raise HTTPException(status_code=415, detail="Unsupported file type")
+
+    if upload.size is not None and upload.size > _MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=413,
             detail=f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
         )
-    return data
+
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await upload.read(1024 * 1024):
+        total += len(chunk)
+        if total > _MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
+            )
+        chunks.append(chunk)
+
+    if total == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+    return b"".join(chunks)
 
 
 async def _mood_and_reply(user_id: str, text: str, *, source: str) -> tuple[str, str, float | None, list[str]]:
@@ -110,8 +131,18 @@ async def _mood_and_reply(user_id: str, text: str, *, source: str) -> tuple[str,
 # The reverse proxy strips /api before the request reaches this container
 # (guide s.7/s.15), so routes are declared WITHOUT the /api prefix.
 # Public URL: https://team07.aiforthai.in.th/api/chat/send
+@router.post("/session")
+async def start_session(response: Response, request: Request) -> dict:
+    """Issue or refresh the signed pseudonymous browser session cookie."""
+    create_session(response, request)
+    return {"ok": True}
+
+
 @router.post("/chat/send")
-async def send_message(req: ChatRequest) -> ChatResponse:
+async def send_message(
+    req: ChatRequest,
+    user_id: str = Depends(require_session),
+) -> ChatResponse:
     """Text mode: sentiment analysis + mood-aware LLM reply."""
     text = req.message.strip()
     if not text:
@@ -123,13 +154,13 @@ async def send_message(req: ChatRequest) -> ChatResponse:
 
     # Crisis language short-circuits the LLM: a generated reply is not safe here.
     if any(k in text for k in CRISIS_KEYWORDS):
-        store.record_mood(req.user_id, "sad", source="crisis")
+        store.record_mood(user_id, "sad", source="crisis")
         return ChatResponse(
             reply=CRISIS_REPLY, emotion="negative", mood="sad", crisis=True, service="safety"
         )
 
     detected, reply, score, degraded = await _mood_and_reply(
-        req.user_id, text, source="text"
+        user_id, text, source="text"
     )
     return ChatResponse(
         reply=reply,
@@ -143,7 +174,10 @@ async def send_message(req: ChatRequest) -> ChatResponse:
 
 
 @router.post("/emotion/analyze")
-async def analyze_emotion(req: EmotionRequest) -> EmotionResponse:
+async def analyze_emotion(
+    req: EmotionRequest,
+    _user_id: str = Depends(require_session),
+) -> EmotionResponse:
     """Analyze emotion/sentiment of text."""
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
@@ -171,7 +205,7 @@ async def analyze_emotion(req: EmotionRequest) -> EmotionResponse:
 @router.post("/selfie/analyze")
 async def analyze_selfie(
     file: UploadFile = File(...),
-    user_id: str = Form("web-anon"),
+    user_id: str = Depends(require_session),
 ) -> AnalysisResponse:
     """Selfie mode: face detection.
 
@@ -179,7 +213,7 @@ async def analyze_selfie(
     expression, so this reports presence honestly instead of guessing a mood
     from it. Mood still comes from what the student tells us.
     """
-    data = await _read_upload(file)
+    data = await _read_upload(file, "image/")
     result = await face.analyze_image(data)
 
     if not result.ok:
@@ -227,11 +261,15 @@ async def analyze_selfie(
 @router.post("/voice/transcribe")
 async def transcribe_voice(
     file: UploadFile = File(...),
-    user_id: str = Form("web-anon"),
+    user_id: str = Depends(require_session),
 ) -> AnalysisResponse:
     """Voice mode: speech-to-text, then the same mood + reply path as text."""
-    data = await _read_upload(file)
-    result = await stt.transcribe(data)
+    data = await _read_upload(file, "audio/", "video/")
+    result = await stt.transcribe(
+        data,
+        filename=file.filename or "voice.webm",
+        content_type=file.content_type or "audio/webm",
+    )
 
     if not result.ok or not (result.text or "").strip():
         return AnalysisResponse(
@@ -257,10 +295,10 @@ async def transcribe_voice(
 @router.post("/homework/ocr")
 async def homework_ocr(
     file: UploadFile = File(...),
-    user_id: str = Form("web-anon"),
+    user_id: str = Depends(require_session),
 ) -> AnalysisResponse:
     """Homework mode: OCR the photo, then let the LLM help with what it read."""
-    data = await _read_upload(file)
+    data = await _read_upload(file, "image/")
     result = await ocr.extract_text(data)
 
     if not result.ok or not (result.text or "").strip():
@@ -271,7 +309,7 @@ async def homework_ocr(
             error=result.error or "no text found",
         )
 
-    extracted = result.text.strip()
+    extracted = result.text.strip()[:_MAX_OCR_CHARS]
     llm = await pathumma.generate_reply(
         f"นักเรียนส่งรูปการบ้านมา ข้อความที่อ่านได้จากภาพคือ:\n{extracted}\n\n"
         "ช่วยอธิบายหรือแนะนำวิธีทำอย่างเป็นขั้นตอน โดยไม่เฉลยคำตอบตรง ๆ ทันที"
@@ -294,7 +332,10 @@ async def homework_ocr(
 
 
 @router.post("/tts/speak")
-async def speak(req: EmotionRequest):
+async def speak(
+    req: TTSRequest,
+    _user_id: str = Depends(require_session),
+):
     """Read a reply aloud. Returns WAV audio."""
     text = req.text.strip()
     if not text:
@@ -306,8 +347,8 @@ async def speak(req: EmotionRequest):
     return Response(content=result.data, media_type="audio/wav")
 
 
-@router.get("/trend/{user_id}")
-async def trend(user_id: str) -> dict:
+@router.get("/trend")
+async def trend(user_id: str = Depends(require_session)) -> dict:
     """Per-user mood history for the trend view."""
     data = store.user_trend(user_id)
     data["labels"] = mood_svc.MOOD_LABELS_TH
@@ -315,23 +356,18 @@ async def trend(user_id: str) -> dict:
 
 
 @router.get("/school/overview")
-async def school() -> dict:
+async def school(_user_id: str = Depends(require_session)) -> dict:
     """Anonymous aggregate stats for the school view."""
     return store.school_overview()
 
 
-@router.get("/data/{user_id}/export")
-async def export_data(user_id: str) -> dict:
-    """PDPA data-access: everything stored under this id.
-
-    The id is a browser-generated random string, not a credential, so this is
-    not an authorization boundary. It stays usable because ids are unguessable
-    UUIDs and nothing sensitive beyond the user's own chat text is stored.
-    """
+@router.get("/data/export")
+async def export_data(user_id: str = Depends(require_session)) -> dict:
+    """PDPA data-access for the authenticated pseudonymous session."""
     return store.export_user(user_id)
 
 
-@router.delete("/data/{user_id}")
-async def delete_data(user_id: str) -> dict:
-    """PDPA erasure: drop every reading and message for this id."""
+@router.delete("/data")
+async def delete_data(user_id: str = Depends(require_session)) -> dict:
+    """PDPA erasure for the authenticated pseudonymous session."""
     return {"deleted": store.delete_user(user_id)}

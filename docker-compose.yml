@@ -35,6 +35,7 @@ services:
       APP_ENV: production
       LOG_LEVEL: INFO
       TEAM: ${TEAM:-team07}
+      CORS_ORIGINS: https://${TEAM:-team07}.aiforthai.in.th,http://localhost:3000
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:

@@ -40,13 +40,14 @@ git push -u origin main
 ```
 
 ### GitLab CI/CD variables
-In GitLab → Settings → CI/CD → Variables, add these 3 **masked** variables:
+In GitLab → Settings → CI/CD → Variables, add these 4 **masked** variables:
 
 | Variable | Value |
 |----------|-------|
 | `APP_AIFORTHAI_API_KEY` | Your AI for Thai key |
 | `APP_LINE_CHANNEL_ACCESS_TOKEN` | Your LINE token |
 | `APP_LINE_CHANNEL_SECRET` | Your LINE secret |
+| `APP_SESSION_SECRET` | Random signing key for web sessions |
 
 ---
 

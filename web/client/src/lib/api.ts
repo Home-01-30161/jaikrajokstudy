@@ -7,7 +7,10 @@
  * straight to http://127.0.0.1:8000.
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+const isDirectLocalApi = typeof window !== "undefined"
+  && (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost")
+  && window.location.port === "8000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? (isDirectLocalApi ? "" : "/api");
 
 export type Mood = "stressed" | "sad" | "tired" | "neutral" | "calm" | "positive";
 
@@ -44,22 +47,27 @@ export interface SchoolResult {
   users: number;
   readings: number;
   distribution: Record<string, number>;
-  stress_ratio: number;
-  regular_ratio: number;
+  stress_ratio: number | null;
+  regular_ratio: number | null;
+  suppressed: boolean;
 }
 
 /**
- * Everything the server holds for one id. Chat text, images and audio are never
- * written to disk, so only mood readings and usage counters come back.
+ * Everything the server holds for the current session. Chat text, images and
+ * audio are never written to disk, so only mood readings and usage counters
+ * come back.
  */
 export interface ExportResult {
-  user_id: string;
   exported_at: string;
   readings: { at: string; mood: string; source: string; confidence: number | null }[];
   messages: number;
   first_seen: string | null;
   last_seen: string | null;
   note: string;
+}
+
+export interface SessionResult {
+  ok: boolean;
 }
 
 /** Shape of GET /health. Used by the home page status panel. */
@@ -70,6 +78,7 @@ export interface HealthResult {
   env: string;
   line_configured: boolean;
   aiforthai_key_set: boolean;
+  session_configured: boolean;
 }
 
 /** Thrown for any non-2xx response so callers can show one consistent message. */
@@ -88,7 +97,11 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const resp = await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal });
+    const resp = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      credentials: "include",
+      signal: controller.signal,
+    });
     if (!resp.ok) {
       let detail = `HTTP ${resp.status}`;
       try {
@@ -119,17 +132,19 @@ function json(body: unknown): RequestInit {
   };
 }
 
-function upload(file: Blob, filename: string, userId: string): RequestInit {
+function upload(file: Blob, filename: string): RequestInit {
   const form = new FormData();
   form.append("file", file, filename);
-  form.append("user_id", userId);
   return { method: "POST", body: form };
 }
 
 export const api = {
+  /** Establish the server-owned pseudonymous browser session. */
+  createSession: () => request<SessionResult>("/session", { method: "POST" }),
+
   /** Text mode: sentiment + mood-aware LLM reply. */
-  sendMessage: (userId: string, message: string) =>
-    request<ChatResult>("/chat/send", json({ user_id: userId, message })),
+  sendMessage: (message: string) =>
+    request<ChatResult>("/chat/send", json({ message })),
 
   /** Sentiment only, without generating a reply. */
   analyzeEmotion: (text: string) =>
@@ -139,35 +154,35 @@ export const api = {
     ),
 
   /** Selfie mode: face detection. */
-  analyzeSelfie: (userId: string, image: Blob) =>
-    request<AnalysisResult>("/selfie/analyze", upload(image, "selfie.jpg", userId)),
+  analyzeSelfie: (image: Blob, filename = "selfie.jpg") =>
+    request<AnalysisResult>("/selfie/analyze", upload(image, filename)),
 
   /** Voice mode: speech-to-text, then the text pipeline. */
-  transcribeVoice: (userId: string, audio: Blob, filename = "voice.webm") =>
-    request<AnalysisResult>("/voice/transcribe", upload(audio, filename, userId)),
+  transcribeVoice: (audio: Blob, filename = "voice.webm") =>
+    request<AnalysisResult>("/voice/transcribe", upload(audio, filename)),
 
   /** Homework mode: OCR, then the LLM explains what it read. */
-  readHomework: (userId: string, image: Blob) =>
-    request<AnalysisResult>("/homework/ocr", upload(image, "homework.jpg", userId)),
+  readHomework: (image: Blob, filename = "homework.jpg") =>
+    request<AnalysisResult>("/homework/ocr", upload(image, filename)),
 
-  trend: (userId: string) =>
-    request<TrendResult>(`/trend/${encodeURIComponent(userId)}`, { method: "GET" }),
+  trend: () => request<TrendResult>("/trend", { method: "GET" }),
 
   school: () => request<SchoolResult>("/school/overview", { method: "GET" }),
 
   health: () => request<HealthResult>("/health", { method: "GET" }),
 
   /** PDPA: hand back everything stored for this id. */
-  exportData: (userId: string) =>
-    request<ExportResult>(`/data/${encodeURIComponent(userId)}/export`, { method: "GET" }),
+  exportData: () => request<ExportResult>("/data/export", { method: "GET" }),
 
   /** PDPA: erase all stored readings and messages for this id. */
-  deleteData: (userId: string) =>
-    request<{ deleted: number }>(`/data/${encodeURIComponent(userId)}`, { method: "DELETE" }),
+  deleteData: () => request<{ deleted: number }>("/data", { method: "DELETE" }),
 
   /** Text-to-speech. Returns WAV bytes, not JSON, so it bypasses request(). */
   async speak(text: string): Promise<Blob> {
-    const resp = await fetch(`${API_BASE}/tts/speak`, json({ text }));
+    const resp = await fetch(`${API_BASE}/tts/speak`, {
+      ...json({ text }),
+      credentials: "include",
+    });
     if (!resp.ok) throw new ApiError(resp.status, "อ่านออกเสียงไม่สำเร็จ");
     return resp.blob();
   },

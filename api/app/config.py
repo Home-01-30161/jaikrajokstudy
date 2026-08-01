@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     # Hackathon deploy: proxy strips /api, so root_path keeps docs working.
     root_path: str = ""
     team: str = "team07"
+    cors_origins: str = Field(
+        default="http://localhost:3000",
+        validation_alias=AliasChoices("CORS_ORIGINS", "APP_CORS_ORIGINS"),
+    )
+    session_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("SESSION_SECRET", "APP_SESSION_SECRET"),
+    )
 
     # TLS verification for outbound calls. Defaults to ON. Only set this false
     # for local shells with a broken CA bundle (e.g. MSYS2 Python); never in

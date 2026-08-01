@@ -1,136 +1,98 @@
-﻿# How to Know the Bot is Working
+# Testing Checklist
 
-## Stage 1: Local tests (before LINE)
+Run the local checks before testing external AI or LINE. The web UI requires a
+server-owned session cookie; it must never receive a caller-supplied `user_id`.
 
-### Test 1: Health endpoint
+## 1. Automated checks
+
+From the repository root:
+
+```powershell
+python -m pytest -q
+cd web
+npm run check
+npm run build
+```
+
+`npm run build` writes the committed frontend bundle to
+`api/app/frontend/`, which is served by FastAPI.
+
+## 2. API smoke test
+
+Start the API:
+
 ```powershell
 cd E:\pathummalesgo\api
 uvicorn app.main:app --reload --port 8000
 ```
-Open http://127.0.0.1:8000/health in browser. Should see:
-```json
-{
-  "status": "ok",
-  "team": "team07",
-  "timestamp": "2026-07-25T..."
-}
-```
-✓ If this works → FastAPI is running
 
-### Test 2: Bot logic (without LINE webhook)
+Check health at `http://127.0.0.1:8000/health`. In production it must include
+`"session_configured": true`; a missing `APP_SESSION_SECRET` must produce
+HTTP 503 and fail deployment.
+
+Create a browser session and verify protected routes:
+
+```powershell
+curl -i -X POST http://127.0.0.1:8000/session
+curl -i http://127.0.0.1:8000/trend
+curl -i http://127.0.0.1:8000/trend/someone-else
+```
+
+The first request sets the `jaikrajok_session` HttpOnly cookie. A client that
+does not send that cookie must receive HTTP 401. The old user-ID route must
+receive HTTP 404, not access another user's data.
+
+## 3. Web modes
+
+Open the frontend and check each mode with a real input:
+
+- Text: sends a message and records a server-side mood event.
+- Selfie: uploads an image and reports face presence only; it must not claim to
+  infer emotion from facial expression.
+- Voice: requests microphone permission, records at most five seconds, and
+  sends the actual audio to speech-to-text.
+- Homework: selects or captures a real image, runs OCR, and explains the
+  extracted text.
+- Trend: reload the page and confirm server history remains. Export must use
+  the server response. Delete must remove server-side data, not only hide rows.
+- School: with fewer than five users, the page must show suppression and no
+  ratios or mood distribution.
+
+## 4. LINE webhook
+
+Run the local bot probe only when credentials are available:
+
 ```powershell
 cd E:\pathummalesgo
-.\.venv\Scripts\activate
 python api\scripts\test_bot_local.py
 ```
-You'll see:
-1. Config check (all keys present?)
-2. Your test message
-3. Sentiment result (label + score)
-4. **Pathumma's reply in Thai**
 
-✓ If you see a Thai reply → the bot brain works, ready for LINE
+For a local LINE test:
 
-### Test 3: Webhook receives POST
-With uvicorn still running, in another terminal:
-```powershell
-curl -X POST http://127.0.0.1:8000/webhooks/line `
-  -H "Content-Type: application/json" `
-  -d '{\"events\":[]}'
-```
-Should return `{"status":"ok"}` (empty events = valid but nothing to process)
-
-✓ If this works → webhook endpoint exists
-
----
-
-## Stage 2: ngrok + LINE webhook (local server, real LINE)
-
-### Test 4: LINE can reach your local server
 ```powershell
 ngrok http 8000
 ```
-Copy the https URL, then:
-**LINE Developers → Messaging API → Webhook URL** = `https://abc123.ngrok-free.app/webhooks/line`
 
-Click **Verify**. LINE will send a test POST.
+Set the webhook URL to `https://YOUR-ID.ngrok-free.app/webhooks/line`, verify
+the webhook, then send a text message. The server must verify the LINE
+signature before processing the event.
 
-✓ Green checkmark → LINE can reach you
-✗ Red X → check ngrok is running, URL is correct, uvicorn is running
-
-### Test 5: Send a real message
-1. Add your bot as a friend (QR code in LINE console)
-2. Send: `สวัสดี`
-3. Watch the uvicorn terminal
-
-You should see:
-```
-INFO: POST /webhooks/line
-INFO: Received 1 LINE event(s)
-INFO: Message event from user_id=U...
-```
-
-**In LINE chat:** bot replies in Thai (Pathumma's answer)
-
-✓ If bot replies → **everything works end-to-end locally**
-
----
-
-## Stage 3: Deployed on hackathon server
-
-### Test 6: Server health
-After `git push origin main` and pipeline finishes, open:
-https://team07.aiforthai.in.th/api/health
-
-Should see the same JSON as Test 1.
-
-✓ If this works → container is running on the server
-
-### Test 7: Webhook on production
-Update LINE webhook to:
-`https://team07.aiforthai.in.th/api/webhooks/line`
-
-Click **Verify** again.
-
-✓ Green → server webhook works
-
-### Test 8: Real message on production
-Send another message to the bot. This time it's processed by the server, not your laptop.
-
-Watch logs at: https://team07.aiforthai.in.th/logs/
-- Login: `team07`
-- Password: (set by organizers, check your email or ask)
-
-You'll see the same log pattern as Test 5.
-
-✓ Bot replies in LINE → **Phase 1 complete, production ready**
-
----
-
-## Common failure modes and how to spot them
-
-| Symptom | Where | Cause |
-|---------|-------|-------|
-| `/health` 503 | Server | Container not running (check pipeline logs) |
-| `/health` timeout | Server | Healthcheck failing (wrong bind address in container) |
-| Webhook verify fails | Both | Wrong URL, or signature mismatch (check `LINE_CHANNEL_SECRET`) |
-| Bot doesn't reply | Both | Check logs — likely Pathumma endpoint wrong or API key invalid |
-| Bot replies "config error" | Both | `AIFORTHAI_API_KEY` or `PATHUMMA_ENDPOINT` not set |
-| 400 signature error in logs | Both | `LINE_CHANNEL_SECRET` wrong or missing |
-
----
-
-## Quick validation order (copy this)
+For production use:
 
 ```text
-[ ] Test 1: /health returns 200
-[ ] Test 2: test_bot_local.py shows Thai reply
-[ ] Test 3: curl webhook returns ok
-[ ] Test 4: ngrok running, LINE verify ✓
-[ ] Test 5: message → bot replies locally
-[ ] Test 6: server /health returns 200
-[ ] Test 7: server webhook verify ✓
-[ ] Test 8: message → bot replies on server
+https://team07.aiforthai.in.th/api/webhooks/line
 ```
 
-When all 8 pass → Phase 1 done.
+Required masked CI variables are `APP_AIFORTHAI_API_KEY`,
+`APP_LINE_CHANNEL_ACCESS_TOKEN`, `APP_LINE_CHANNEL_SECRET`, and
+`APP_SESSION_SECRET`.
+
+## 5. Safety checks
+
+- Crisis text bypasses the LLM and recommends 1323.
+- Repeated concerning moods show support resources but do not claim to notify
+  a counselor automatically.
+- External AI processing is disclosed in the privacy screen.
+- The app does not claim AES-256 storage encryption, human-in-the-loop
+  escalation, facial emotion recognition, or automatic guardian email
+  verification unless those features are actually implemented.

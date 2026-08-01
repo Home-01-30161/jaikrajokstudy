@@ -401,6 +401,47 @@ html {
   border-color: rgba(45, 106, 111, 0.35);
 }
 
+/* The source design is a reference image, so keep it framed and secondary to
+   the mood controls instead of letting it compete with the main workflow. */
+.design-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.6fr);
+  align-items: stretch;
+  background: #fff;
+}
+.design-preview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: center;
+}
+.design-preview figcaption {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1.25rem 1.4rem;
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+.design-preview-kicker {
+  color: var(--teal);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+@media (max-width: 640px) {
+  .design-preview {
+    grid-template-columns: 1fr;
+  }
+  .design-preview figcaption {
+    padding: 1rem 1.1rem;
+  }
+}
+
 /* Editorial accent rule that draws itself on reveal. */
 .accent-rule {
   position: relative;

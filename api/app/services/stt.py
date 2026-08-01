@@ -22,7 +22,12 @@ def _scrub(text: str, secret: str) -> str:
     return text
 
 
-async def transcribe(audio_bytes: bytes) -> ServiceResult:
+async def transcribe(
+    audio_bytes: bytes,
+    *,
+    filename: str = "audio.webm",
+    content_type: str = "audio/webm",
+) -> ServiceResult:
     """Transcribe Thai speech to text.
 
     Prefers the TokenMind gateway (ptm-asr-1); falls back to the legacy AI for
@@ -31,7 +36,7 @@ async def transcribe(audio_bytes: bytes) -> ServiceResult:
     settings = get_settings()
 
     if settings.tokenmind_api_key:
-        result = await _transcribe_tokenmind(audio_bytes, settings)
+        result = await _transcribe_tokenmind(audio_bytes, settings, filename, content_type)
         if result.ok:
             return result
         logger.warning("TokenMind ASR failed (%s); falling back to partii", result.error)
@@ -40,14 +45,19 @@ async def transcribe(audio_bytes: bytes) -> ServiceResult:
         return ServiceResult(
             service="stt", ok=False, error="Missing TOKENMIND_API_KEY and AIFORTHAI_API_KEY"
         )
-    return await _transcribe_partii(audio_bytes, settings)
+    return await _transcribe_partii(audio_bytes, settings, filename, content_type)
 
 
-async def _transcribe_tokenmind(audio_bytes: bytes, settings) -> ServiceResult:
+async def _transcribe_tokenmind(
+    audio_bytes: bytes,
+    settings,
+    filename: str,
+    content_type: str,
+) -> ServiceResult:
     """OpenAI-compatible /audio/transcriptions call (ptm-asr-1)."""
     url = f"{settings.tokenmind_base_url.rstrip('/')}/audio/transcriptions"
     headers = {"Authorization": f"Bearer {settings.tokenmind_api_key}"}
-    files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
+    files = {"file": (filename, audio_bytes, content_type)}
     try:
         verify = not settings.insecure_tls
         async with httpx.AsyncClient(timeout=120.0, verify=verify) as client:
@@ -88,14 +98,19 @@ async def _transcribe_tokenmind(audio_bytes: bytes, settings) -> ServiceResult:
         return ServiceResult(service="stt", ok=False, error=str(exc))
 
 
-async def _transcribe_partii(audio_bytes: bytes, settings) -> ServiceResult:
+async def _transcribe_partii(
+    audio_bytes: bytes,
+    settings,
+    filename: str,
+    content_type: str,
+) -> ServiceResult:
     """Legacy AI for Thai Partii fallback."""
     url = f"{settings.aiforthai_base_url.rstrip('/')}/partii-webapi"
     headers = {
         "Apikey": settings.aiforthai_api_key,
         "Cache-Control": "no-cache",
     }
-    files = {"wavfile": ("audio.wav", audio_bytes, "audio/wav")}
+    files = {"wavfile": (filename, audio_bytes, content_type)}
     params = {"outputlevel": "--uttlevel", "outputformat": "--txt"}
 
     try:

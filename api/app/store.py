@@ -24,6 +24,7 @@ from pathlib import Path
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
+_MIN_SCHOOL_USERS = 5
 
 _DEFAULT_DIR = Path("/app/uploads")
 _lock = threading.Lock()
@@ -178,6 +179,15 @@ def school_overview() -> dict:
         conn = get_conn()
         users = conn.execute("SELECT COUNT(*) AS n FROM message_counts").fetchone()["n"]
         total = conn.execute("SELECT COUNT(*) AS n FROM mood_events").fetchone()["n"]
+        if users < _MIN_SCHOOL_USERS:
+            return {
+                "users": 0,
+                "readings": 0,
+                "distribution": {},
+                "stress_ratio": None,
+                "regular_ratio": None,
+                "suppressed": True,
+            }
         rows = conn.execute(
             "SELECT mood, COUNT(*) AS n FROM mood_events GROUP BY mood"
         ).fetchall()
@@ -195,6 +205,7 @@ def school_overview() -> dict:
             "distribution": distribution,
             "stress_ratio": round(stressed / total, 3) if total else 0.0,
             "regular_ratio": round(regulars / users, 3) if users else 0.0,
+            "suppressed": False,
         }
     except Exception:  # noqa: BLE001
         logger.exception("school_overview failed")
@@ -204,11 +215,12 @@ def school_overview() -> dict:
             "distribution": {},
             "stress_ratio": 0.0,
             "regular_ratio": 0.0,
+            "suppressed": True,
         }
 
 
 def export_user(user_id: str) -> dict:
-    """PDPA data-access: every row stored under this id.
+    """PDPA data-access for the current signed session.
 
     Only mood readings and usage counters exist to hand back. Chat text, images
     and audio are never written to disk, so there is no message body to export.
@@ -227,7 +239,6 @@ def export_user(user_id: str) -> dict:
         ).fetchone()
 
         return {
-            "user_id": user_id,
             "exported_at": _now(),
             "readings": [
                 {
@@ -248,19 +259,11 @@ def export_user(user_id: str) -> dict:
         }
     except Exception:  # noqa: BLE001
         logger.exception("export_user failed")
-        return {
-            "user_id": user_id,
-            "exported_at": _now(),
-            "readings": [],
-            "messages": 0,
-            "first_seen": None,
-            "last_seen": None,
-            "note": "ดึงข้อมูลไม่สำเร็จ",
-        }
+        raise
 
 
 def delete_user(user_id: str) -> int:
-    """PDPA erasure: drop every row for this id. Returns rows removed."""
+    """PDPA erasure for the current signed session. Returns rows removed."""
     try:
         conn = get_conn()
         uh = _hash_user(user_id)
@@ -275,4 +278,4 @@ def delete_user(user_id: str) -> int:
         return max(deleted, 0)
     except Exception:  # noqa: BLE001
         logger.exception("delete_user failed")
-        return 0
+        raise

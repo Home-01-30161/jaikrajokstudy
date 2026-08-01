@@ -26,8 +26,9 @@ Write-Host ""
 Write-Host "  APP_AIFORTHAI_API_KEY" -ForegroundColor White
 Write-Host "  APP_LINE_CHANNEL_ACCESS_TOKEN" -ForegroundColor White
 Write-Host "  APP_LINE_CHANNEL_SECRET" -ForegroundColor White
+Write-Host "  APP_SESSION_SECRET" -ForegroundColor White
 Write-Host ""
-$confirm = Read-Host "Have you set all 3 variables? (y/n)"
+$confirm = Read-Host "Have you set all 4 variables? (y/n)"
 if ($confirm -ne 'y') {
     Write-Host "Set them first, then re-run this script." -ForegroundColor Red
     exit 0

@@ -42,17 +42,24 @@ check:
       LO=$BASE; HI=$((BASE+9)); FAIL=0
 
       echo "== port binding =="
-      while read -r line; do
-        case "$line" in
-          *'${BASE'*|*'$BASE'*) echo "  ok (variable) $line" ;;
-          *127.0.0.1:*)
-            p=$(echo "$line" | sed -n 's/.*127\.0\.0\.1:\([0-9]\+\):.*/\1/p')
-            if [ -n "$p" ] && { [ "$p" -lt "$LO" ] || [ "$p" -gt "$HI" ]; }; then
-              echo "  FAIL port $p outside $TEAM range ($LO-$HI)"; FAIL=1
-            else echo "  ok $line"; fi ;;
-          *) echo "  FAIL not bound to 127.0.0.1 -> $line"; FAIL=1 ;;
-        esac
-      done < <(grep -E '^\s*-\s*"?[0-9.$][^:]*:[0-9$]' docker-compose.yml || true)
+      # Render interpolation first so ${BASE:-...} and ${BASE_1:-...}
+      # declarations are checked as the values the deploy will use.
+      # The real secret file is created in deploy; an empty placeholder keeps
+      # compose validation runnable on a clean runner.
+      test -f .env || touch .env
+      while read -r host_ip published; do
+        [ -n "$published" ] || continue
+        if [ "$host_ip" != "127.0.0.1" ]; then
+          echo "  FAIL not bound to 127.0.0.1 -> $host_ip:$published"; FAIL=1
+        elif ! [ "$published" -ge "$LO" ] 2>/dev/null || ! [ "$published" -le "$HI" ] 2>/dev/null; then
+          echo "  FAIL port $published outside $TEAM range ($LO-$HI)"; FAIL=1
+        else
+          echo "  ok $host_ip:$published"
+        fi
+      done < <(docker compose config | awk '
+        /host_ip:/ { host=$2 }
+        /published:/ { port=$2; gsub(/"/, "", port); if (host != "") print host, port; host="" }
+      ')
 
       echo "== bind mount =="
       for m in $(grep -oE '^\s*-\s*[./][^:]*:' docker-compose.yml | sed 's/^\s*-\s*//; s/:$//' || true); do
@@ -84,6 +91,7 @@ deploy:
   script:
     # secrets come from CI/CD Variables prefixed with APP_ (set them Masked)
     - printenv | grep '^APP_' > .env || true
+    - test -n "${APP_SESSION_SECRET:-}" || { echo "APP_SESSION_SECRET is required for production sessions"; exit 1; }
     - docker compose -p "$TEAM" up -d --build --remove-orphans
     - |
       echo "waiting for healthcheck..."

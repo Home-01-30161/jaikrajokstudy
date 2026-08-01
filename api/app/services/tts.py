@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import httpx
+from urllib.parse import urlsplit
 
 from app.config import get_settings
 from app.services.base import ServiceResult
@@ -132,7 +133,23 @@ async def _synthesize_vaja9(text: str, speaker: int, settings) -> ServiceResult:
                     raw=raw if isinstance(raw, dict) else {},
                 )
 
-            audio_resp = await client.get(wav_url, headers=headers)
+            parsed = urlsplit(str(wav_url))
+            allowed_host = urlsplit(settings.aiforthai_base_url).hostname
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.hostname != allowed_host
+                or parsed.username
+                or parsed.password
+            ):
+                logger.warning("Rejected TTS audio URL from upstream: %s", str(wav_url)[:200])
+                return ServiceResult(
+                    service="tts", ok=False, error="Audio URL is not an approved HTTPS URL"
+                )
+
+            # The audio URL is already returned by the provider; do not forward
+            # the API key to it, and do not follow redirects to another host.
+            audio_resp = await client.get(str(wav_url), follow_redirects=False)
             if audio_resp.status_code >= 400:
                 logger.warning("TTS download HTTP %s", audio_resp.status_code)
                 return ServiceResult(

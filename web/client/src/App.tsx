@@ -29,6 +29,7 @@ const IMG = {
     glasses: "/collage/glasses.png",
     redstar: "/collage/redstar.png",
     star: "/collage/star.png",
+    designPreview: "/collage/home-preview.jpg",
 };
 
 /* ============ DESIGN TOKENS ============ */
@@ -160,18 +161,10 @@ const RESPONSES: Record<string, string[]> = {
 };
 
 const TRANSPARENCY: Record<string, string> = {
-  เซลฟี่: "กำลังวิเคราะห์อารมณ์จากใบหน้าของคุณ (Face Recognition API)",
-  ข้อความ: "กำลังวิเคราะห์น้ำเสียงจากข้อความ (Sentiment Analysis API)",
+  เซลฟี่: "กำลังตรวจว่าภาพมีใบหน้าหรือไม่ (ไม่วิเคราะห์อารมณ์จากใบหน้า)",
+  ข้อความ: "กำลังวิเคราะห์ความรู้สึกจากข้อความ (Sentiment Analysis API)",
   เสียงพูด: "กำลังแปลงเสียงพูดเป็นข้อความ (Speech-to-Text API)",
   รูปการบ้าน: "กำลังอ่านข้อความจากภาพ (OCR API)",
-};
-
-const SELFIE_RESULTS = ["stressed", "tired", "neutral", "calm"];
-const SELFIE_NOTES: Record<string, string> = {
-  stressed: "สีหน้าดูเกร็งบริเวณคิ้วและรอบดวงตา มีสัญญาณของความเครียดสะสม",
-  tired: "สีหน้าดูเหนื่อยล้า มีร่องรอยของการพักผ่อนไม่เพียงพอ",
-  neutral: "สีหน้าอยู่ในเกณฑ์ปกติ ไม่พบสัญญาณผิดปกติชัดเจน",
-  calm: "สีหน้าดูผ่อนคลาย แววตาสดใส",
 };
 
 type Page = "login" | "onb1" | "onb2" | "guardian" | "privacy" | "app";
@@ -398,10 +391,6 @@ function SalmonBtn({ children, onClick, fullWidth = false }: {
 
 /* ============ LOGIN PAGE ============ */
 function LoginPage({ onNext }: { onNext: () => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "signup">("login");
-
   useEffect(() => {
     // Title screen stagger in
     gsap.fromTo(".login-img", { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power3.out" });
@@ -459,90 +448,20 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           <p className="text-xl font-semibold mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>Welcome To</p>
           <h1 className="text-5xl font-black mb-6" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red, lineHeight: 1.1 }}>JaiKraJok</h1>
 
-          <div
-            className="flex mb-5 rounded-2xl overflow-hidden"
-            style={{ border: "1.5px solid rgba(26,26,26,0.12)", background: "rgba(255,255,255,0.55)" }}
-          >
-            <button
-              onClick={() => setMode("login")}
-              className="flex-1 py-2.5 text-sm font-semibold transition-all"
-              style={{
-                background: mode === "login" ? T.white : "transparent",
-                color: T.black,
-                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
-                borderRight: "1.5px solid rgba(26,26,26,0.12)",
-              }}
-            >
-              Log In
-            </button>
-            <button
-              onClick={() => setMode("signup")}
-              className="flex-1 py-2.5 text-sm font-semibold transition-all"
-              style={{
-                background: mode === "signup" ? T.white : "transparent",
-                color: T.black,
-                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
-              }}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red }}>
-            Email
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl mb-4 outline-none transition-all focus:ring-2"
-            style={{
-              backgroundColor: "rgba(255,255,255,0.8)",
-              border: "1px solid rgba(0,0,0,0.05)",
-              color: T.black,
-              fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
-            }}
-          />
-
-          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red }}>
-            Password
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl mb-6 outline-none transition-all focus:ring-2"
-            style={{
-              backgroundColor: "rgba(255,255,255,0.8)",
-              border: "1px solid rgba(0,0,0,0.05)",
-              color: T.black,
-              fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
-            }}
-          />
-
-          <button
-            onClick={() => {
-              if (!email || !password) { toast("กรุณากรอกอีเมลและรหัสผ่าน"); return; }
-              onNext();
-            }}
+          <p className="text-sm text-center mb-4" style={{ color: "rgba(26,26,26,0.7)", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+            เริ่มใช้งานด้วยเซสชันแบบไม่ระบุตัวตน ไม่ต้องกรอกอีเมลหรือรหัสผ่าน
+          </p>
+          <button onClick={onNext}
             className="w-full py-3.5 rounded-full font-bold text-white text-base mb-3 transition-all active:scale-[0.97]"
             style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
           >
-            {mode === "login" ? "Log In" : "Sign Up"}
+            เริ่มใช้งาน
           </button>
 
-          <div className="text-center text-xs mb-3" style={{ color: "rgba(26,26,26,0.6)", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>or</div>
-
-          <button
-            className="w-full py-3 rounded-full font-bold text-base mb-3 transition-all active:scale-[0.97] bg-white flex items-center justify-center"
-            style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
-          >
-            Sign Up
-          </button>
 
           <button
             onClick={() => toast("ฟีเจอร์ Google Login กำลังพัฒนา")}
-            className="w-full py-3 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] flex items-center justify-center gap-2"
+            className="hidden"
             style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
           >
             Log In With Google
@@ -610,7 +529,9 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
   );
 }
 
-function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmail }: any) {
+function GuardianPage({ onNext }: { onNext: () => void }) {
+  const [confirmed, setConfirmed] = useState(false);
+
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
         <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
@@ -621,32 +542,30 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
           ขอความยินยอมจากผู้ปกครอง
         </h2>
         <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
-          เนื่องจากคุณอายุต่ำกว่า 13 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณ
+          เนื่องจากคุณอายุต่ำกว่า 20 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณ
         </p>
-        {!approved ? (
-          <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6">
+          <label className="flex items-start gap-3 text-sm leading-relaxed" style={{ color: "#4a4a4a", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
             <input
-              type="email"
-              placeholder="อีเมลผู้ปกครอง"
-              value={guardianEmail}
-              onChange={(e) => setGuardianEmail(e.target.value)}
-              className="w-full px-5 py-4 rounded-2xl outline-none focus:ring-2 text-base"
-              style={{ backgroundColor: "#EBE5DC", border: "2px solid #1a1a1a", color: "#1a1a1a", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              className="mt-1 h-4 w-4"
             />
-            <button onClick={onSend} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]" style={{ backgroundColor: "#1a1a1a", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
-              ส่งคำขอความยินยอม
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            <div className="p-5 rounded-2xl text-center" style={{ backgroundColor: "#E8F5E9", border: "2px solid #4CAF50", color: "#2E7D32", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", fontWeight: "bold" }}>
-              ✓ ได้รับความยินยอมแล้ว
-            </div>
-            <button onClick={onNext} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
-              ถัดไป
-            </button>
-          </div>
-        )}
+            <span>ฉันได้ให้ผู้ปกครองรับทราบและยินยอมให้ใช้บริการนี้แล้ว</span>
+          </label>
+          <p className="text-xs leading-relaxed" style={{ color: "#6b7280", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+            ระบบสาธิตนี้ยังไม่มีการส่งอีเมลหรือการตรวจสอบผู้ปกครองอัตโนมัติ โปรดให้ผู้ปกครองอยู่ด้วยและตรวจสอบข้อมูลก่อนใช้งาน
+          </p>
+          <button
+            onClick={onNext}
+            disabled={!confirmed}
+            className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: "#2D6A6F", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+          >
+            ยืนยันและถัดไป
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -672,10 +591,10 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
             fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
           }}
         >
-          <p className="mb-4">เราให้ความสำคัญกับความเป็นส่วนตัวของคุณ ข้อมูลทั้งหมดที่คุณแชร์ใน JaiKraJok จะถูกเก็บรักษาเป็นความลับและปลอดภัย</p>
-          <p className="mb-4">1. ข้อมูลส่วนบุคคลจะถูกใช้เพื่อปรับปรุงประสบการณ์ของคุณเท่านั้น</p>
-          <p className="mb-4">2. เราไม่มีนโยบายส่งต่อข้อมูลของคุณให้กับบุคคลที่สาม</p>
-          <p>3. คุณสามารถขอลบข้อมูลของคุณได้ตลอดเวลาผ่านเมนูตั้งค่า</p>
+          <p className="mb-4">JaiKraJok ใช้เซสชันแบบไม่ระบุตัวตนเพื่อแยกประวัติของคุณออกจากผู้ใช้อื่น</p>
+          <p className="mb-4">1. ข้อความ ภาพ และเสียงจะถูกส่งไปยังบริการ AI ที่จำเป็นต่อการวิเคราะห์ และไม่ถูกเก็บเป็นไฟล์ถาวรโดยแอปนี้</p>
+          <p className="mb-4">2. ระบบจะเก็บเฉพาะสรุปแนวโน้มอารมณ์และสถิติการใช้งานแบบรหัสแทนชื่อ</p>
+          <p>3. คุณสามารถส่งออกหรือลบข้อมูลแนวโน้มของเซสชันนี้ได้จากเมนูข้อมูล</p>
         </div>
         <button onClick={onNext} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
           <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>ยอมรับและเข้าสู่ระบบ</span>
@@ -685,24 +604,19 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
   );
 }
 
-/* ============ USER ID MANAGEMENT ============ */
-function getUserId(): string {
-  let uid = localStorage.getItem("jaikrajok_user_id");
-  if (!uid) {
-    uid = `u_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-    localStorage.setItem("jaikrajok_user_id", uid);
-  }
-  return uid;
-}
-
 /* ============ MAIN APP SHELL ============ */
-function AppShell() {
+function AppShell({ age, guardianConsent }: { age: string; guardianConsent: boolean }) {
   const [currentView, setCurrentView] = useState<AppView>("home");
-  const [age] = useState("16");
-  const [guardianConsent] = useState(true);
   const [mood, setMood] = useState<string>("calm");
-  const [lineNotify, setLineNotify] = useState(false);
-  const userId = getUserId();
+  const [sessionReady, setSessionReady] = useState(false);
+  const selfieInputRef = useRef<HTMLInputElement>(null);
+  const homeworkInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.createSession()
+      .then(() => setSessionReady(true))
+      .catch(() => toast.error("เริ่มเซสชันไม่สำเร็จ ลองโหลดหน้าใหม่อีกครั้ง"));
+  }, []);
 
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
@@ -751,19 +665,9 @@ function AppShell() {
   const noteMultimodal = useCallback((sourceLabel: string) => {
     setModesUsed((prev) => {
       const nextSet = new Set(prev).add(sourceLabel);
-      if (nextSet.size === 2 && !prev.has(sourceLabel)) {
-        setTimeout(() => {
-          setMessages((msgs) => [...msgs, {
-            id: Math.random().toString(),
-            role: "system",
-            text: `Pathumma LLM กำลังรวมข้อมูลจากหลายแหล่ง (${Array.from(nextSet).join(" + ")}) เพื่อให้คำแนะนำที่แม่นยำขึ้น`,
-            timestamp: Date.now(),
-          }]);
-        }, 600);
-      }
       return nextSet;
     });
-    const transNote = TRANSPARENCY[sourceLabel] || "กำลังวิเคราะห์ข้อมูลด้วย Pathumma LLM";
+    const transNote = TRANSPARENCY[sourceLabel] || "กำลังส่งข้อมูลไปยังบริการวิเคราะห์ที่เลือก";
     setTransparencyLogs((prev) => [transNote, ...prev.slice(0, 4)]);
   }, []);
 
@@ -771,13 +675,17 @@ function AppShell() {
   const sendMessage = useCallback(async (overrideText?: string, sourceLabel: string = "ข้อความ") => {
     const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim()) return;
+    if (!sessionReady) {
+      toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+      return;
+    }
     if (overrideText === undefined) setInputText("");
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
     noteMultimodal(sourceLabel);
     setIsAnalyzing(true);
 
     try {
-      const result = await api.sendMessage(userId, textToSend);
+      const result = await api.sendMessage(textToSend);
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
       pushTrend(result.mood, sourceLabel);
       if (result.crisis) {
@@ -788,62 +696,73 @@ function AppShell() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [inputText, noteMultimodal, pushTrend, userId]);
+  }, [inputText, noteMultimodal, pushTrend, sessionReady]);
 
-  const handleSelfie = async () => {
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "📷 ถ่ายเซลฟี่เพื่อวิเคราะห์สีหน้า", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
+  const analyzeSelfie = async (image: Blob, filename: string) => {
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "📷 ส่งภาพเพื่อเช็กว่ามีใบหน้าในภาพหรือไม่", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
     noteMultimodal("เซลฟี่");
     setIsAnalyzing(true);
 
-    // Mock: create a tiny 1x1 transparent PNG as placeholder
-    const mockBlob = new Blob([new Uint8Array([
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-      0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-      0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
-    ])], { type: "image/png" });
-
     try {
-      const result = await api.analyzeSelfie(userId, mockBlob);
-      const info = EMO[result.mood];
+      const result = await api.analyzeSelfie(image, filename);
       setMessages((prev) => [...prev, {
         id: Math.random().toString(),
         role: "bot",
         text: result.reply,
         timestamp: Date.now(),
         cardType: "emotion",
-        emotionData: { label: info.label, note: result.reply, color: info.color, bg: info.bg, text: info.text }
+        emotionData: { label: "ตรวจใบหน้า", note: result.reply, color: T.teal, bg: "#E3EAE0", text: "#3C5137" }
       }]);
-      pushTrend(result.mood, "เซลฟี่");
     } catch (err: any) {
-      toast.error(err.message || "วิเคราะห์เซลฟี่ไม่สำเร็จ");
+      toast.error(err.message || "วิเคราะห์ภาพไม่สำเร็จ");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
+  const handleSelfie = () => {
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+    selfieInputRef.current?.click();
+  };
+
+  const handleSelfieFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void analyzeSelfie(file, file.name || "selfie.jpg");
+  };
+
   const handleVoice = async () => {
-    noteMultimodal("เสียงพูด");
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      return toast.error("เบราว์เซอร์นี้ไม่รองรับการบันทึกเสียง");
+    }
+
+    let stream: MediaStream | null = null;
     setIsAnalyzing(true);
-
-    // Mock: create a tiny silent WebM audio blob
-    const mockAudioBlob = new Blob([new Uint8Array([
-      0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81, 0x01, 0x42, 0xF7, 0x81,
-      0x01, 0x42, 0xF2, 0x81, 0x04, 0x42, 0xF3, 0x81, 0x08, 0x42, 0x82, 0x84,
-      0x77, 0x65, 0x62, 0x6D
-    ])], { type: "audio/webm" });
-
+    noteMultimodal("เสียงพูด");
     try {
-      const result = await api.transcribeVoice(userId, mockAudioBlob);
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]
+        .find((mime) => MediaRecorder.isTypeSupported(mime));
+      const recorder = new MediaRecorder(stream, preferredMime ? { mimeType: preferredMime } : undefined);
+      const chunks: Blob[] = [];
+      const audio = await new Promise<Blob>((resolve, reject) => {
+        recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+        recorder.onerror = () => reject(new Error("บันทึกเสียงไม่สำเร็จ"));
+        recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
+        recorder.start();
+        window.setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 5000);
+        toast("กำลังบันทึกเสียงไม่เกิน 5 วินาที");
+      });
+      if (!audio.size) throw new Error("ไม่พบเสียงที่บันทึก");
+
+      const extension = audio.type.includes("mp4") ? "m4a" : "webm";
+      const result = await api.transcribeVoice(audio, `voice.${extension}`);
       if (result.transcript) {
         setMessages((prev) => [...prev, {
-          id: Math.random().toString(),
-          role: "user",
-          text: `🎤 (เสียงพูด): "${result.transcript}"`,
-          timestamp: Date.now(),
-          sourceTag: "เสียงพูด"
+          id: Math.random().toString(), role: "user", text: `🎤 (เสียงพูด): "${result.transcript}"`,
+          timestamp: Date.now(), sourceTag: "เสียงพูด"
         }]);
       }
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
@@ -851,35 +770,23 @@ function AppShell() {
     } catch (err: any) {
       toast.error(err.message || "แปลงเสียงไม่สำเร็จ");
     } finally {
+      stream?.getTracks().forEach((track) => track.stop());
       setIsAnalyzing(false);
     }
   };
 
-  const handleHomeworkPhoto = async () => {
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🖼️ แนบรูปถ่ายการบ้าน (Homework.jpg)", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
+  const analyzeHomework = async (image: Blob, filename: string) => {
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🖼️ ส่งรูปการบ้านให้ OCR อ่าน", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
     noteMultimodal("รูปการบ้าน");
     setIsAnalyzing(true);
 
-    // Mock: create a tiny 1x1 transparent PNG as placeholder
-    const mockBlob = new Blob([new Uint8Array([
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-      0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-      0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
-    ])], { type: "image/png" });
-
     try {
-      const result = await api.readHomework(userId, mockBlob);
+      const result = await api.readHomework(image, filename);
       if (result.detail) {
         setMessages((prev) => [...prev, {
-          id: Math.random().toString(),
-          role: "bot",
-          text: "อ่านโจทย์เรียบร้อยแล้ว",
-          timestamp: Date.now(),
-          cardType: "ocr",
-          ocrText: `"${result.detail}"`
+          id: Math.random().toString(), role: "bot", text: "อ่านข้อความจากภาพแล้ว", timestamp: Date.now(),
+          cardType: "ocr", ocrText: `"${result.detail}"`
         }]);
       }
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
@@ -891,6 +798,17 @@ function AppShell() {
     }
   };
 
+  const handleHomeworkPhoto = () => {
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+    homeworkInputRef.current?.click();
+  };
+
+  const handleHomeworkFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void analyzeHomework(file, file.name || "homework.jpg");
+  };
+
   const resetChat = () => {
     setMessages([{ id: "init_" + Date.now(), role: "bot", text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ", timestamp: Date.now() }]);
     setTrendData([]); setLogEntries([]); setConcernStreak(0); setModesUsed(new Set()); setTransparencyLogs([]); setMood("calm");
@@ -899,11 +817,9 @@ function AppShell() {
 
   const tryMode = (mode: "camera" | "keyboard" | "mic" | "photo") => {
     setCurrentView("chat");
-    setTimeout(() => {
-      if (mode === "camera") handleSelfie();
-      else if (mode === "mic") handleVoice();
-      else if (mode === "photo") handleHomeworkPhoto();
-    }, 300);
+    if (mode === "camera") handleSelfie();
+    else if (mode === "mic") void handleVoice();
+    else if (mode === "photo") handleHomeworkPhoto();
   };
 
   const navItems: { id: AppView; label: string; iconSrc: string }[] = [
@@ -924,6 +840,22 @@ function AppShell() {
 
   return (
     <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: T.cream }}>
+      <input
+        ref={selfieInputRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        className="hidden"
+        onChange={handleSelfieFile}
+      />
+      <input
+        ref={homeworkInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleHomeworkFile}
+      />
 
       {/* TOP CHECKERBOARD with salmon tab break */}
       <div className="fixed top-0 left-0 right-0 z-50 flex" style={{ height: "36px" }}>
@@ -1075,8 +1007,6 @@ function AppShell() {
                   onGoChat={() => setCurrentView("chat")}
                   onGoTrend={() => setCurrentView("trend")}
                   tryMode={tryMode}
-                  lineNotify={lineNotify}
-                  setLineNotify={setLineNotify}
                 />
               </PageWrapper>
             )}
@@ -1097,7 +1027,7 @@ function AppShell() {
                   concernStreak={concernStreak}
                   transparencyLogs={transparencyLogs}
                   onNotifyCounselor={() => {
-                    toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว ครูจะติดต่อกลับภายในวันนี้");
+                    toast("ระบบไม่ได้แจ้งครูอัตโนมัติ โปรดติดต่อผู้ใหญ่ที่ไว้ใจหรือสายด่วน 1323");
                     setShowEscalationModal(false);
                   }}
                 />
@@ -1108,18 +1038,26 @@ function AppShell() {
                 <TrendView
                   trendData={trendData}
                   logEntries={logEntries}
-                  onDeleteEntry={(id) => { setLogEntries((prev) => prev.filter((e) => e.id !== id)); toast("ลบรายการแล้ว"); }}
-                  onClearAll={() => {
-                    if (window.confirm("ยืนยันลบข้อมูลแนวโน้มอารมณ์ทั้งหมดของคุณ?")) {
+                  onClearAll={async () => {
+                    if (!window.confirm("ยืนยันลบข้อมูลแนวโน้มอารมณ์ทั้งหมดของคุณ?")) return;
+                    try {
+                      await api.deleteData();
                       setTrendData([]); setLogEntries([]); setConcernStreak(0);
                       toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
+                    } catch (err: any) {
+                      toast.error(err.message || "ลบข้อมูลไม่สำเร็จ");
                     }
                   }}
-                  onExport={() => {
-                    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries }, null, 2)], { type: "application/json" });
-                    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
-                    a.click(); URL.revokeObjectURL(a.href);
-                    toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
+                  onExport={async () => {
+                    try {
+                      const result = await api.exportData();
+                      const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+                      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
+                      a.click(); URL.revokeObjectURL(a.href);
+                      toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
+                    } catch (err: any) {
+                      toast.error(err.message || "ส่งออกข้อมูลไม่สำเร็จ");
+                    }
                   }}
                 />
               </PageWrapper>
@@ -1132,7 +1070,7 @@ function AppShell() {
                   guardianConsent={guardianConsent}
                   onExport={async () => {
                     try {
-                      const result = await api.exportData(userId);
+                      const result = await api.exportData();
                       const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
                       const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
                       a.click(); URL.revokeObjectURL(a.href);
@@ -1144,7 +1082,7 @@ function AppShell() {
                   onClearAll={async () => {
                     if (window.confirm("ยืนยันลบข้อมูลทั้งหมดของคุณ? การกระทำนี้ไม่สามารถย้อนกลับได้")) {
                       try {
-                        await api.deleteData(userId);
+                        await api.deleteData();
                         setTrendData([]); setLogEntries([]);
                         toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
                       } catch (err: any) {
@@ -1172,11 +1110,11 @@ function AppShell() {
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => { toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว"); setShowEscalationModal(false); }}
+                onClick={() => { toast("ระบบไม่ได้แจ้งครูอัตโนมัติ โปรดติดต่อผู้ใหญ่ที่ไว้ใจ"); setShowEscalationModal(false); }}
                 className="w-full py-3 rounded-2xl text-white font-bold transition-all active:scale-[0.97]"
                 style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
               >
-                แจ้งครูที่ปรึกษา
+                ดูแหล่งช่วยเหลือ
               </button>
               <a
                 href="tel:1323"
@@ -1202,15 +1140,13 @@ function AppShell() {
 
 /* ============ HOME VIEW ============ */
 function HomeView({
-  mood, setMood, onGoChat, onGoTrend, tryMode, lineNotify, setLineNotify,
+  mood, setMood, onGoChat, onGoTrend, tryMode,
 }: {
   mood: string;
   setMood: (v: string) => void;
   onGoChat: () => void;
   onGoTrend: () => void;
   tryMode: (mode: "camera" | "keyboard" | "mic" | "photo") => void;
-  lineNotify: boolean;
-  setLineNotify: (v: boolean) => void;
 }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "อรุณสวัสดิ์ค่ะ" : hour < 18 ? "สวัสดีตอนบ่ายค่ะ" : "สวัสดีตอนเย็นค่ะ";
@@ -1265,6 +1201,22 @@ function HomeView({
         </div>
       </div>
 
+      {/* A visual cue from the shared FrontEndB design source keeps the home view
+          connected to the collage language while loading the larger image only
+          after the primary controls are visible. */}
+      <figure className="design-preview surface overflow-hidden">
+        <img
+          src={IMG.designPreview}
+          alt="ตัวอย่างหน้าต้อนรับ JaiKrajok ในสไตล์คอลลาจบนกระดาษกริด"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption>
+          <span className="design-preview-kicker">DESIGN NOTE</span>
+          <span>แรงบันดาลใจจาก FrontEndB ที่ใช้ในประสบการณ์เริ่มต้นใช้งาน</span>
+        </figcaption>
+      </figure>
+
       {/* QUICK MOOD PICKER */}
       <div>
         <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
@@ -1300,7 +1252,7 @@ function HomeView({
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           {[
-            { id: "camera" as const, title: "ถ่ายเซลฟี่", desc: "Face Recognition API", iconSrc: IMG.bulb, bg: "#FDF5E6", border: "#F0E1C8" },
+            { id: "camera" as const, title: "ถ่ายเซลฟี่", desc: "Face detection API", iconSrc: IMG.bulb, bg: "#FDF5E6", border: "#F0E1C8" },
             { id: "keyboard" as const, title: "พิมพ์ความรู้สึก", desc: "Sentiment Analysis API", iconSrc: IMG.handPen, bg: "#F2F5E9", border: "#E0E8D3" },
             { id: "mic" as const, title: "พูดระบาย", desc: "Speech-to-Text API", iconSrc: IMG.amplifier, bg: "#FFF0F4", border: "#F5DBE4" },
             { id: "photo" as const, title: "ถ่ายรูปการบ้าน", desc: "OCR API", iconSrc: IMG.origamiStarsNoBg, bg: "#EBF3F5", border: "#D4E5E8" },
@@ -1407,14 +1359,16 @@ function HomeView({
         </div>
         <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-full border border-[#E2D9C2] shadow-sm z-10">
           <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-            รับการแจ้งเตือนผ่าน LINE
+            การแจ้งเตือนผ่าน LINE (ยังไม่เปิดใช้งาน)
           </span>
           <button
-            onClick={() => { setLineNotify(!lineNotify); toast(lineNotify ? "ปิดการแจ้งเตือนผ่าน LINE แล้ว" : "เปิดการแจ้งเตือนผ่าน LINE แล้ว"); }}
+            onClick={() => toast("การแจ้งเตือนผ่าน LINE ยังไม่เปิดใช้งาน")}
+            disabled
+            aria-label="การแจ้งเตือนผ่าน LINE ยังไม่เปิดใช้งาน"
             className="w-10 h-5 rounded-full flex items-center transition-colors px-0.5 relative"
-            style={{ backgroundColor: lineNotify ? "#00B900" : "#D1D5DB", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)" }}
+            style={{ backgroundColor: "#D1D5DB", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)", cursor: "not-allowed", opacity: 0.7 }}
           >
-            <div className={`w-4 h-4 bg-white rounded-full shadow transition-all absolute top-0.5`} style={{ left: lineNotify ? "22px" : "2px" }} />
+            <div className="w-4 h-4 bg-white rounded-full shadow transition-all absolute top-0.5" style={{ left: "2px" }} />
           </button>
         </div>
       </div>
@@ -1589,7 +1543,7 @@ function ChatView({
         <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
           <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>โหมดที่ใช้ได้</h4>
           <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
-            Face Recognition · Sentiment Analysis · Speech-to-Text · OCR ถูกส่งต่อให้ Pathumma LLM สังเคราะห์คำแนะนำเฉพาะบุคคล
+            Face detection ตรวจว่าภาพมีใบหน้าหรือไม่ ส่วนข้อความ เสียง และ OCR จะถูกส่งต่อไปยัง Pathumma เมื่อโหมดนั้นต้องใช้คำตอบจาก AI
           </p>
         </div>
 
@@ -1602,7 +1556,7 @@ function ChatView({
               <p className="text-xs" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#6B3B49" }}>อยากชวนคุยกับครูที่ปรึกษาหรือสายด่วน 1323 ไหม</p>
               <div className="flex gap-2 pt-1">
                 <button onClick={onNotifyCounselor} className="px-3 py-1.5 rounded-xl text-white text-xs font-bold" style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
-                  แจ้งครูที่ปรึกษา
+                  ดูแหล่งช่วยเหลือ
                 </button>
                 <a href="tel:1323" className="px-3 py-1.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#6B3B49", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                   โทร 1323
@@ -1611,7 +1565,7 @@ function ChatView({
             </div>
           ) : (
             <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
-              ยังไม่พบสัญญาณที่น่าเป็นห่วง ระบบจะแจ้งเตือนอัตโนมัติหากพบแนวโน้มต่อเนื่อง
+              ยังไม่พบสัญญาณที่น่าเป็นห่วง หากรู้สึกไม่ปลอดภัย โปรดติดต่อผู้ใหญ่ที่ไว้ใจหรือสายด่วน 1323
             </p>
           )}
         </div>
@@ -1637,23 +1591,28 @@ function ChatView({
 }
 
 /* ============ TREND VIEW ============ */
-function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport }: {
+function TrendView({ trendData, logEntries, onClearAll, onExport }: {
   trendData: TrendPoint[];
   logEntries: LogEntry[];
-  onDeleteEntry: (id: string) => void;
   onClearAll: () => void;
   onExport: () => void;
 }) {
-  const userId = getUserId();
   const [serverTrend, setServerTrend] = useState<TrendResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.trend(userId)
+    api.trend()
       .then(setServerTrend)
       .catch(() => toast.error("โหลดข้อมูลแนวโน้มไม่สำเร็จ"))
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, []);
+
+  const chartData = trendData.length > 0
+    ? trendData
+    : (serverTrend?.days ?? []).map((point, id) => {
+        const info = EMO[point.mood] || EMO.neutral;
+        return { id, valence: info.valence, color: info.color, key: point.mood, label: info.label };
+      });
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -1672,7 +1631,7 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
           </div>
           <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
             <span className="text-xl font-black block" style={{ color: T.teal }}>
-              {serverTrend.dominant_mood ? EMO[serverTrend.dominant_mood].emoji : "—"}
+              {serverTrend.dominant_mood ? (EMO[serverTrend.dominant_mood] || EMO.neutral).emoji : "—"}
             </span>
             <span className="text-xs text-gray-600 font-semibold">อารมณ์ส่วนใหญ่</span>
           </div>
@@ -1687,23 +1646,23 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
         <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มอารมณ์ในเซสชันนี้</h3>
-            <span className="text-xs font-mono text-gray-500">{trendData.length === 0 ? "ยังไม่มีข้อมูล" : `${trendData.length} จุดข้อมูล`}</span>
+            <span className="text-xs font-mono text-gray-500">{chartData.length === 0 ? "ยังไม่มีข้อมูล" : `${chartData.length} จุดข้อมูล`}</span>
           </div>
           <div className="relative h-44 w-full my-2">
             <svg viewBox="0 0 500 160" className="w-full h-full overflow-visible">
               <line x1="0" y1="140" x2="500" y2="140" stroke="#EDE6D3" strokeWidth="1" />
               <text x="0" y="18" fontFamily="'IBM Plex Mono', monospace" fontSize="10" fill="#888">ผ่อนคลาย</text>
               <text x="0" y="150" fontFamily="'IBM Plex Mono', monospace" fontSize="10" fill="#888">ตึงเครียด</text>
-              {trendData.length > 0 && (
+              {chartData.length > 0 && (
                 <>
                   <polyline fill="none" stroke="#6F6389" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                    points={trendData.map((d, idx) => {
-                      const stepX = trendData.length > 1 ? 460 / (trendData.length - 1) : 0;
+                    points={chartData.map((d, idx) => {
+                      const stepX = chartData.length > 1 ? 460 / (chartData.length - 1) : 0;
                       return `${30 + idx * stepX},${140 - d.valence * 110}`;
                     }).join(" ")}
                   />
-                  {trendData.map((d, idx) => {
-                    const stepX = trendData.length > 1 ? 460 / (trendData.length - 1) : 0;
+                  {chartData.map((d, idx) => {
+                    const stepX = chartData.length > 1 ? 460 / (chartData.length - 1) : 0;
                     return <circle key={d.id} cx={30 + idx * stepX} cy={140 - d.valence * 110} r="5.5" fill={d.color} stroke="#fff" strokeWidth="1.5" />;
                   })}
                 </>
@@ -1729,10 +1688,7 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
               logEntries.map((e) => (
                 <div key={e.id} className="flex items-center justify-between p-3 rounded-xl text-xs" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                   <span className="font-semibold text-gray-800">{e.label} · {e.source}</span>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-gray-400">{e.time}</span>
-                    <button onClick={() => onDeleteEntry(e.id)} className="text-gray-400 hover:text-red-500">🗑️</button>
-                  </div>
+                  <span className="font-mono text-gray-400">{e.time}</span>
                 </div>
               ))
             )}
@@ -1779,6 +1735,20 @@ function SchoolView() {
     );
   }
 
+  if (schoolData.suppressed) {
+    return (
+      <div className="space-y-6 max-w-4xl">
+        <div className="p-6 rounded-2xl text-center" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
+          <h3 className="font-bold text-base mb-2" style={{ color: T.black }}>ยังไม่แสดงข้อมูลภาพรวม</h3>
+          <p className="text-sm text-gray-600">ระบบจะแสดงสถิติเมื่อมีข้อมูลจากผู้ใช้อย่างน้อย 5 คน เพื่อป้องกันการระบุตัวตนจากอารมณ์ของบุคคลเดียว</p>
+        </div>
+      </div>
+    );
+  }
+
+  const stressRatio = schoolData.stress_ratio ?? 0;
+  const regularRatio = schoolData.regular_ratio ?? 0;
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="inline-block px-4 py-1.5 rounded-full text-xs font-mono font-bold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
@@ -1787,8 +1757,8 @@ function SchoolView() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { num: schoolData.readings.toString(), label: "การเช็คอินทั้งหมด" },
-          { num: `${Math.round(schoolData.stress_ratio * 100)}%`, label: "มีแนวโน้มเครียด/กังวล" },
-          { num: `${Math.round(schoolData.regular_ratio * 100)}%`, label: "อยู่ในเกณฑ์ปกติ-ผ่อนคลาย" },
+          { num: `${Math.round(stressRatio * 100)}%`, label: "มีแนวโน้มเครียด/กังวล" },
+          { num: `${Math.round(regularRatio * 100)}%`, label: "อยู่ในเกณฑ์ปกติ-ผ่อนคลาย" },
           { num: schoolData.users.toString(), label: "นักเรียนที่ใช้งาน" },
         ].map((stat, i) => (
           <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
@@ -1868,7 +1838,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               { label: "อายุที่ยืนยัน", value: age ? `${age} ปี` : "16 ปี" },
-              { label: "ความยินยอมผู้ปกครอง", value: guardianConsent ? "ได้รับความยินยอมแล้ว" : "รอดำเนินการ" },
+              { label: "ความยินยอมผู้ปกครอง", value: guardianConsent ? "ผู้ใช้ยืนยันแล้ว (ยังไม่ตรวจสอบ)" : "รอดำเนินการ" },
               { label: "เงื่อนไขการใช้งาน", value: "ยอมรับแล้ว" },
             ].map((item, i) => (
               <div key={i} className="p-4 rounded-xl" style={{ backgroundColor: "#E3EAE0", color: "#3C5137" }}>
@@ -1891,9 +1861,9 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
           </div>
           <div className="space-y-3">
             {[
-              { title: "พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA)", content: "ระบบปฏิบัติตาม PDPA อย่างเคร่งครัด ภาพใบหน้าประมวลผลแบบเรียลไทม์และไม่ถูกจัดเก็บลงเซิร์ฟเวอร์ ข้อมูลแนวโน้มอารมณ์จัดเก็บแบบไม่ระบุตัวตนโดยใช้รหัสแทนชื่อ และเข้ารหัสตามมาตรฐาน AES-256" },
-              { title: "นโยบายความเป็นส่วนตัว (สรุป)", content: "ข้อมูลที่เก็บมีเพียงแนวโน้มอารมณ์แบบไม่ระบุตัวตนเพื่อแสดงพัฒนาการของผู้ใช้เท่านั้น ไม่มีการขายหรือแบ่งปันข้อมูลส่วนบุคคลให้บุคคลที่สาม" },
-              { title: "ข้อกำหนดการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 13 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้งาน ผู้ใช้อายุต่ำกว่า 20 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนเก็บข้อมูล ระบบมีการจำกัดอัตราการใช้งาน" },
+              { title: "พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA)", content: "ภาพและเสียงถูกประมวลผลผ่านบริการ AI ตามโหมดที่เลือก และแอปนี้ไม่เก็บไฟล์ต้นฉบับถาวร ข้อมูลแนวโน้มอารมณ์ถูกเก็บด้วยรหัสเซสชันแบบ pseudonymous และยังไม่ได้เข้ารหัสระดับ AES-256" },
+              { title: "นโยบายความเป็นส่วนตัว (สรุป)", content: "ข้อมูลดิบถูกส่งไปยังผู้ให้บริการ AI ที่จำเป็นต่อการทำงาน ระบบเก็บเฉพาะแนวโน้มอารมณ์และตัวนับการใช้งานใน SQLite เพื่อแสดงผลและรองรับการส่งออกหรือลบข้อมูล" },
+              { title: "ข้อกำหนดการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 20 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้บริการตามขั้นตอนของแอป ระบบจำกัดความถี่คำขอพื้นฐานต่อไคลเอนต์ แต่ยังไม่ใช่ระบบป้องกันการใช้งานในทางที่ผิดแบบสมบูรณ์" },
             ].map((acc, i) => (
               <details key={i} className="p-4 rounded-2xl group" style={{ backgroundColor: T.white, border: "1.5px solid #EDE6D3" }}>
                 <summary className="font-bold text-sm cursor-pointer list-none flex justify-between items-center" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
@@ -1910,7 +1880,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
       {subTab === "ethics" && (
         <div className="space-y-4">
           <div className="p-6 rounded-2xl space-y-3" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
-            {["👁️ ระบบแสดงข้อความแจ้งเตือนทุกครั้งที่กำลังวิเคราะห์ข้อมูล (Transparent AI)", "🩺 AI ไม่มีหน้าที่วินิจฉัยโรคซึมเศร้าหรือโรคทางจิตเวชไม่ว่ากรณีใดๆ", "👥 มี Human-in-the-loop — กรณีฉุกเฉินจะแจ้งเตือนไปยังผู้ดูแลระบบที่เป็นมนุษย์แบบไม่ระบุตัวตน", "💖 ผลลัพธ์จากการวิเคราะห์เป็นข้อเสนอแนะเชิงบวก ไม่ใช่การตัดสิน ตีตรา หรือประเมินค่า", "🛡️ มี Rate Limiting และระบบตรวจจับกรองเนื้อหาที่ไม่เหมาะสม เพื่อป้องกันการใช้งานในทางที่ผิด"].map((text, i) => (
+            {["👁️ ระบบแสดงข้อความว่าโหมดใดกำลังถูกวิเคราะห์ (Transparent AI)", "🩺 AI ไม่มีหน้าที่วินิจฉัยโรคซึมเศร้าหรือโรคทางจิตเวช", "📞 ระบบแนะนำสายด่วน 1323 และผู้ใหญ่ที่ไว้ใจ แต่ยังไม่แจ้งผู้ดูแลให้อัตโนมัติ", "💖 ผลลัพธ์เป็นข้อเสนอแนะ ไม่ใช่การตัดสินหรือตีตรา", "🛡️ API จำกัดความถี่คำขอและขนาดไฟล์ แต่ยังไม่มีตัวกรองเนื้อหาครบวงจร"].map((text, i) => (
               <div key={i} className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{text}</div>
             ))}
           </div>
@@ -1931,8 +1901,8 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
           {[
             { layer: "ชั้น 1", title: "User Interface", desc: "LINE Official Account และ Web Application — พิมพ์ ถ่ายเซลฟี่ พูด หรือถ่ายรูปการบ้าน" },
             { layer: "ชั้น 2", title: "API Gateway", desc: "ตรวจสอบสิทธิ์ กระจายคำขอไปยังบริการที่ถูกต้อง บันทึก Log แบบไม่ระบุตัวตน" },
-            { layer: "ชั้น 3", title: "AI Services · AI for Thai", desc: "Face Recognition · Sentiment Analysis · Speech-to-Text · OCR · Pathumma LLM (โมเดลหลัก)" },
-            { layer: "ชั้น 4", title: "Data Storage", desc: "เก็บประวัติแนวโน้มอารมณ์แบบไม่ระบุตัวตน เข้ารหัส AES-256 ปฏิบัติตาม PDPA" },
+            { layer: "ชั้น 3", title: "AI Services · AI for Thai", desc: "Face detection (presence only) · Sentiment Analysis · Speech-to-Text · OCR · Pathumma LLM" },
+            { layer: "ชั้น 4", title: "Data Storage", desc: "SQLite เก็บแนวโน้มอารมณ์ด้วยรหัสเซสชันแบบ pseudonymous; ไฟล์ต้นฉบับภาพและเสียงไม่ถูกเก็บถาวรโดยแอป" },
           ].map((item, i) => (
             <div key={i} className="p-5 rounded-2xl flex items-center gap-4" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
               <span className="px-3 py-1 rounded-full text-xs font-mono font-bold text-white shrink-0" style={{ backgroundColor: T.teal }}>{item.layer}</span>
@@ -1947,7 +1917,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
 
       {subTab === "limits" && (
         <div className="p-6 rounded-2xl space-y-3" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
-          {["⚠️ การวิเคราะห์อารมณ์จากใบหน้าอาจคลาดเคลื่อนในสภาพแสงน้อย หรือเมื่อใส่หน้ากากอนามัย", "⚠️ การวิเคราะห์ความรู้สึกจากข้อความอาจไม่ครอบคลุมภาษาเฉพาะกลุ่มหรือภาษาถิ่นบางรูปแบบ", "⚠️ ระบบนี้เป็นเครื่องมือเสริม ไม่สามารถแทนที่การปรึกษาจิตแพทย์หรือนักจิตวิทยา", "⚠️ อาจยังไม่สามารถตรวจจับอารมณ์เชิงซ้อนที่เกิดจากหลายสาเหตุพร้อมกันได้อย่างแม่นยำ", "⚠️ ประสิทธิภาพขึ้นอยู่กับคุณภาพการเชื่อมต่ออินเทอร์เน็ต เนื่องจากเรียกใช้ API แบบเรียลไทม์"].map((text, i) => (
+            {["⚠️ โหมดเซลฟี่ตรวจเฉพาะการมีใบหน้า ไม่ได้วิเคราะห์อารมณ์จากสีหน้า", "⚠️ การวิเคราะห์ความรู้สึกจากข้อความอาจไม่ครอบคลุมภาษาเฉพาะกลุ่มหรือภาษาถิ่นบางรูปแบบ", "⚠️ ระบบนี้เป็นเครื่องมือเสริม ไม่สามารถแทนที่การปรึกษาจิตแพทย์หรือนักจิตวิทยา", "⚠️ อาจยังไม่สามารถตรวจจับอารมณ์เชิงซ้อนที่เกิดจากหลายสาเหตุพร้อมกันได้อย่างแม่นยำ", "⚠️ ประสิทธิภาพขึ้นอยู่กับคุณภาพการเชื่อมต่ออินเทอร์เน็ต เนื่องจากเรียกใช้ API แบบเรียลไทม์"].map((text, i) => (
             <div key={i} className="p-3.5 rounded-xl text-xs font-semibold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{text}</div>
           ))}
         </div>
@@ -1974,8 +1944,7 @@ const PageWrapper = ({ children, pageKey }: { children: React.ReactNode, pageKey
 export default function App() {
   const [page, setPage] = useState<Page>("login");
   const [age, setAge] = useState("");
-  const [guardianEmail, setGuardianEmail] = useState("");
-  const [guardianApproved, setGuardianApproved] = useState(false);
+  const [guardianConsent, setGuardianConsent] = useState(false);
 
   // Global click ripple effect
   useEffect(() => {
@@ -2027,7 +1996,7 @@ export default function App() {
             setAge={setAge}
             onNext={() => {
               const ageNum = parseInt(age);
-              setPage(ageNum < 13 ? "guardian" : "privacy");
+              setPage(ageNum < 20 ? "guardian" : "privacy");
             }}
           />
         </PageWrapper>
@@ -2035,19 +2004,19 @@ export default function App() {
       {page === "guardian" && (
         <PageWrapper pageKey="guardian">
           <GuardianPage
-            approved={guardianApproved}
-            onSend={() => {
-              if (!guardianEmail || !guardianEmail.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
-              setTimeout(() => setGuardianApproved(true), 1200);
+            onNext={() => {
+              setGuardianConsent(true);
+              setPage("privacy");
             }}
-            onNext={() => setPage("privacy")}
-            guardianEmail={guardianEmail}
-            setGuardianEmail={setGuardianEmail}
           />
         </PageWrapper>
       )}
       {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={() => setPage("app")} /></PageWrapper>}
-      {page === "app" && <PageWrapper pageKey="app"><AppShell /></PageWrapper>}
+      {page === "app" && (
+        <PageWrapper pageKey="app">
+          <AppShell age={age} guardianConsent={guardianConsent || Number(age) >= 20} />
+        </PageWrapper>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -27,10 +27,14 @@ app = FastAPI(
 # CORS for web frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=[
+        origin.strip()
+        for origin in settings.cors_origins.split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
 app.include_router(line_router)
@@ -40,6 +44,9 @@ app.include_router(web_router)
 @app.get("/health")
 async def health() -> dict:
     """Required by the deploy pipeline: must return 200 when ready."""
+    session_configured = bool(settings.session_secret) or settings.app_env.lower() != "production"
+    if not session_configured:
+        raise HTTPException(status_code=503, detail="SESSION_SECRET is not configured")
     return {
         "status": "ok",
         "app": "jaikrajok",
@@ -49,6 +56,7 @@ async def health() -> dict:
             settings.line_channel_access_token and settings.line_channel_secret
         ),
         "aiforthai_key_set": bool(settings.aiforthai_api_key),
+        "session_configured": session_configured,
     }
 
 # Serve frontend (must be after all routes, or it catches /health too)
