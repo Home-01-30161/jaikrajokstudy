@@ -96,28 +96,56 @@ const TIMEOUT_MS = 120_000; // the LLM can legitimately take over a minute
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  console.group(`🌐 API Request: ${init.method || 'GET'} ${path}`);
+  console.log('📤 Request URL:', `${API_BASE}${path}`);
+  console.log('⚙️ Request options:', { ...init, signal: undefined });
+  const startTime = performance.now();
+
   try {
     const resp = await fetch(`${API_BASE}${path}`, {
       ...init,
       credentials: "include",
       signal: controller.signal,
     });
+
+    const elapsed = Math.round(performance.now() - startTime);
+    console.log(`⏱️ Response time: ${elapsed}ms`);
+    console.log(`📥 Status: ${resp.status} ${resp.statusText}`);
+
     if (!resp.ok) {
       let detail = `HTTP ${resp.status}`;
       try {
         const body = await resp.json();
+        console.error('❌ Error response body:', body);
         if (body?.detail) detail = String(body.detail);
       } catch {
         /* non-JSON error body; keep the status text */
       }
+      console.groupEnd();
       throw new ApiError(resp.status, detail);
     }
-    return (await resp.json()) as T;
+
+    const data = (await resp.json()) as T;
+    console.log('✅ Response data:', data);
+    console.groupEnd();
+    return data;
   } catch (err) {
-    if (err instanceof ApiError) throw err;
+    const elapsed = Math.round(performance.now() - startTime);
+    console.log(`⏱️ Failed after: ${elapsed}ms`);
+
+    if (err instanceof ApiError) {
+      console.error('❌ API Error:', err.message);
+      console.groupEnd();
+      throw err;
+    }
     if (err instanceof DOMException && err.name === "AbortError") {
+      console.error('⏰ Request timeout after', TIMEOUT_MS / 1000, 'seconds');
+      console.groupEnd();
       throw new ApiError(408, "คำขอใช้เวลานานเกินไป");
     }
+    console.error('🔌 Network error:', err);
+    console.groupEnd();
     throw new ApiError(0, "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้");
   } finally {
     clearTimeout(timer);
