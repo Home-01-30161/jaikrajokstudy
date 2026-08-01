@@ -57,8 +57,22 @@ check:
           echo "  ok $host_ip:$published"
         fi
       done < <(docker compose config | awk '
-        /host_ip:/ { host=$2 }
-        /published:/ { port=$2; gsub(/"/, "", port); if (host != "") print host, port; host="" }
+        # Emit each port block once it is complete. In recent compose versions
+        # host_ip sorts before published; in older ones it comes after, and a
+        # port without any host binding (e.g. "20060:8000") has no host_ip line
+        # at all. Flushing on the next block start (and at EOF) handles all
+        # three cases: host_ip missing means the port is NOT bound to 127.0.0.1.
+        function flush() {
+          if (pub != "") {
+            if (host == "") host = "0.0.0.0"
+            print host, pub
+            pub = ""; host = ""
+          }
+        }
+        /^\s*- mode:/ { flush() }
+        /published:/ { pub = $2; gsub(/"/, "", pub) }
+        /host_ip:/ { host = $2 }
+        END { flush() }
       ')
 
       echo "== bind mount =="
