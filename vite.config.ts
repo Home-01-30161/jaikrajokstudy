@@ -203,6 +203,23 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
+/* Copy CollagePics into the built bundle so /collage/* resolves in production */
+function vitePluginCollageBuild(): Plugin {
+  const collagePicsDir = path.resolve(PROJECT_ROOT, "CollagePics");
+  return {
+    name: "collage-pics-build",
+    closeBundle() {
+      const outDir = path.resolve(PROJECT_ROOT, "dist", "public", "collage");
+      fs.mkdirSync(outDir, { recursive: true });
+      for (const f of fs.readdirSync(collagePicsDir)) {
+        const src = path.join(collagePicsDir, f);
+        if (!fs.statSync(src).isFile()) continue;
+        fs.copyFileSync(src, path.join(outDir, f));
+      }
+    },
+  };
+}
+
 /* Serve CollagePics directory at /collage/ */
 function vitePluginCollagePics(): Plugin {
   const collagePicsDir = path.resolve(PROJECT_ROOT, "CollagePics");
@@ -238,7 +255,7 @@ function vitePluginCollagePics(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics()];
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics(), vitePluginCollageBuild()];
 
 export default defineConfig({
   plugins,

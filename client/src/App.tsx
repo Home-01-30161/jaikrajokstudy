@@ -167,8 +167,8 @@ const TRANSPARENCY: Record<string, string> = {
 
 const SELFIE_RESULTS = ["stressed", "tired", "neutral", "calm"];
 const SELFIE_NOTES: Record<string, string> = {
-  stressed: "สีหน้าดูเกร็งบริเวณคิ้วและรอบดวงตา มีสัญญาณของความเครียดสะสม",
-  tired: "สีหน้าดูเหนื่อยล้า มีร่องรอยของการพักผ่อนไม่เพียงพอ",
+  stressed: "กระจกสังเกตสีหน้าดูเกร็งบริเวณคิ้วและรอบดวงตา อาจมีสัญญาณของความเครียดสะสม",
+  tired: "กระจกสังเกตสีหน้าดูเหนื่อยล้า อาจกำลังพักผ่อนไม่เพียงพอ",
   neutral: "สีหน้าอยู่ในเกณฑ์ปกติ ไม่พบสัญญาณผิดปกติชัดเจน",
   calm: "สีหน้าดูผ่อนคลาย แววตาสดใส",
 };
@@ -703,12 +703,107 @@ function AppShell() {
   const [inputText, setInputText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
-  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const [trendData, setTrendData] = useState<TrendPoint[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("jaikrajok:trend") || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+  const [logEntries, setLogEntries] = useState<LogEntry[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("jaikrajok:logs") || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
   const [concernStreak, setConcernStreak] = useState(0);
   const [modesUsed, setModesUsed] = useState<Set<string>>(new Set());
   const [transparencyLogs, setTransparencyLogs] = useState<string[]>([]);
   const [showEscalationModal, setShowEscalationModal] = useState(false);
+  const escalationShownRef = useRef(false);
+  const [showSupportStrip, setShowSupportStrip] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const escalationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem("jaikrajok:trend", JSON.stringify(trendData)); } catch { /* storage full or blocked */ }
+  }, [trendData]);
+
+  useEffect(() => {
+    try { localStorage.setItem("jaikrajok:logs", JSON.stringify(logEntries)); } catch { /* storage full or blocked */ }
+  }, [logEntries]);
+
+  useEffect(() => {
+    if (concernStreak >= 3 && !escalationShownRef.current) {
+      escalationShownRef.current = true;
+      const t = setTimeout(() => setShowEscalationModal(true), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [concernStreak]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    setSidebarOpen(false);
+    menuButtonRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarOpen || isDesktop) return;
+    const firstNav = drawerRef.current?.querySelector("nav button");
+    if (firstNav instanceof HTMLElement) firstNav.focus();
+  }, [sidebarOpen, isDesktop]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeDrawer(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen, closeDrawer]);
+
+  useEffect(() => {
+    if (showEscalationModal) {
+      escalationRef.current?.focus();
+    } else {
+      document.getElementById("chat-input")?.focus();
+    }
+  }, [showEscalationModal]);
+
+  useEffect(() => {
+    if (!showEscalationModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setShowEscalationModal(false); return; }
+      if (e.key !== "Tab") return;
+      const el = escalationRef.current;
+      if (!el) return;
+      const focusables = Array.from(el.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])'));
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === el)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showEscalationModal]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSidebarOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const speakText = (text: string) => {
     if (!("speechSynthesis" in window)) { toast("เบราว์เซอร์นี้ไม่รองรับ Text-to-Speech"); return; }
@@ -729,11 +824,8 @@ function AppShell() {
     });
     const nowStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
     setLogEntries((prev) => [{ id: Math.random().toString(), time: nowStr, label: info.label, source: sourceLabel, key }, ...prev.slice(0, 19)]);
-    setConcernStreak((prevStreak) => {
-      const newStreak = info.concern ? prevStreak + 1 : 0;
-      if (newStreak >= 3) setTimeout(() => setShowEscalationModal(true), 1200);
-      return newStreak;
-    });
+    setConcernStreak((prevStreak) => (info.concern ? prevStreak + 1 : 0));
+    if (info.concern) setShowSupportStrip(true);
   }, []);
 
   const noteMultimodal = useCallback((sourceLabel: string) => {
@@ -820,8 +912,10 @@ function AppShell() {
   };
 
   const resetChat = () => {
+    if (!window.confirm("ยืนยันเริ่มการสนทนาใหม่? บันทึกแนวโน้มอารมณ์และรายการของคุณจะถูกลบออกจากอุปกรณ์นี้")) return;
     setMessages([{ id: "init_" + Date.now(), role: "bot", text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ", timestamp: Date.now() }]);
-    setTrendData([]); setLogEntries([]); setConcernStreak(0); setModesUsed(new Set()); setTransparencyLogs([]); setMood("calm");
+    setTrendData([]); setLogEntries([]); setConcernStreak(0); setModesUsed(new Set()); setTransparencyLogs([]); setMood("calm"); setShowSupportStrip(false);
+    escalationShownRef.current = false;
     toast("เริ่มการสนทนาใหม่แล้ว");
   };
 
@@ -856,10 +950,26 @@ function AppShell() {
       {/* TOP CHECKERBOARD with salmon tab break */}
       <div className="fixed top-0 left-0 right-0 z-50 flex" style={{ height: "36px" }}>
         {/* Checker left of active tab */}
-        <div className="flex overflow-hidden" style={{ flex: "0 0 230px" }}>
+        <div className="relative flex overflow-hidden w-12 md:w-[230px]">
           {Array.from({ length: 16 }).map((_, i) => (
             <div key={i} style={{ flex: 1, background: i % 2 === 0 ? T.black : T.white }} />
           ))}
+          {/* Mobile menu button */}
+          <button
+            ref={menuButtonRef}
+            onClick={() => setSidebarOpen(true)}
+            aria-label="เปิดเมนู"
+            aria-expanded={sidebarOpen}
+            aria-controls="app-sidebar"
+            className="md:hidden absolute inset-y-0 left-0 w-12 flex items-center justify-center transition-colors hover:bg-black/15"
+            style={{ color: T.salmon }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+          </button>
         </div>
         {/* Active page label tab (salmon) */}
         <div
@@ -884,8 +994,25 @@ function AppShell() {
       </div>
 
       <div className="flex flex-1" style={{ paddingTop: "36px" }}>
-        {/* LEFT SIDEBAR — pure black, curved right edge */}
-        <div className="fixed left-0 z-40 flex flex-col overflow-hidden" style={{ top: "36px", bottom: 0, width: "230px" }}>
+        {/* Mobile drawer scrim */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/45 md:hidden"
+            onClick={closeDrawer}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* LEFT SIDEBAR — pure black, curved right edge; drawer on mobile */}
+        <div
+          ref={drawerRef}
+          id="app-sidebar"
+          role={isDesktop ? undefined : "dialog"}
+          aria-modal={isDesktop ? undefined : sidebarOpen}
+          aria-hidden={!isDesktop && !sidebarOpen}
+          className={`fixed left-0 z-40 flex flex-col overflow-hidden transition-transform duration-300 ease-in-out ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
+          style={{ top: "36px", bottom: 0, width: "230px" }}
+        >
           {/* Black body */}
           <div
             className="relative flex flex-col h-full"
@@ -925,6 +1052,7 @@ function AppShell() {
                       key={item.id}
                       onClick={() => {
                         setCurrentView(item.id);
+                        closeDrawer();
                         // GSAP pop animation on click
                         const el = document.getElementById(`nav-icon-${item.id}`);
                         if (el) gsap.fromTo(el, { scale: 0.7, rotate: -15 }, { scale: 1, rotate: 0, duration: 0.5, ease: "elastic.out(1.2, 0.5)" });
@@ -981,12 +1109,12 @@ function AppShell() {
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="flex-1 min-h-screen" style={{ marginLeft: "230px" }}>
+        <div className="flex-1 min-h-screen md:ml-[230px]">
           {/* Graph paper background */}
           <div
-            className="fixed pointer-events-none"
+            className="fixed pointer-events-none left-0 md:left-[230px]"
             style={{
-              left: "230px", top: "36px", right: 0, bottom: 0,
+              top: "36px", right: 0, bottom: 0,
               background: `linear-gradient(${T.gridLine} 1px, transparent 1px), linear-gradient(90deg, ${T.gridLine} 1px, transparent 1px)`,
               backgroundSize: "28px 28px",
               backgroundColor: T.cream,
@@ -994,7 +1122,7 @@ function AppShell() {
             }}
           />
 
-          <div className="relative z-10 px-8 py-7">
+          <div className="relative z-10 px-5 py-6 md:px-8 md:py-7">
             {currentView === "home" && (
               <PageWrapper pageKey="home">
                 <HomeView
@@ -1005,6 +1133,47 @@ function AppShell() {
                   tryMode={tryMode}
                   lineNotify={lineNotify}
                   setLineNotify={setLineNotify}
+                  trendData={trendData}
+                  onMoodTap={(key: string) => {
+                    const info = EMO[key] || EMO.neutral;
+                    setMood(key);
+                    const openingLines: Record<string, string> = {
+                      stressed: "วันนี้รู้สึกเครียด / กังวลอยู่นิดหน่อยค่ะ",
+                      sad: "วันนี้ใจมันท้อแท้อยู่เลยค่ะ",
+                      tired: "วันนี้รู้สึกเหนื่อยล้ามากค่ะ",
+                      neutral: "วันนี้รู้สึกปกติดีค่ะ",
+                      calm: "วันนี้ใจสงบผ่อนคลายค่ะ",
+                      positive: "วันนี้รู้สึกสดใส มีความสุขมากค่ะ",
+                    };
+                    const openingText = openingLines[key] || "วันนี้เป็นยังไงบ้าง";
+                    setMessages((prev) => [
+                      ...prev,
+                      {
+                        id: Math.random().toString(),
+                        role: "user" as const,
+                        text: `${info.emoji} ${openingText}`,
+                        timestamp: Date.now(),
+                        sourceTag: "อารมณ์แท็บ",
+                      },
+                    ]);
+                    noteMultimodal("ข้อความ");
+                    setIsAnalyzing(true);
+                    setTimeout(() => {
+                      const list = RESPONSES[key] || RESPONSES.neutral;
+                      setMessages((prev) => [
+                        ...prev,
+                        {
+                          id: Math.random().toString(),
+                          role: "bot" as const,
+                          text: list[Math.floor(Math.random() * list.length)],
+                          timestamp: Date.now(),
+                        },
+                      ]);
+                      setIsAnalyzing(false);
+                      pushTrend(key, "อารมณ์แท็บ");
+                    }, 900);
+                    setCurrentView("chat");
+                  }}
                 />
               </PageWrapper>
             )}
@@ -1024,8 +1193,10 @@ function AppShell() {
                   mood={mood}
                   concernStreak={concernStreak}
                   transparencyLogs={transparencyLogs}
+                  supportStrip={showSupportStrip}
+                  onDismissSupport={() => setShowSupportStrip(false)}
                   onNotifyCounselor={() => {
-                    toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว ครูจะติดต่อกลับภายในวันนี้");
+                    toast("ส่งการแจ้งเตือนถึงครูที่ปรึกษาแล้ว (โหมดสาธิต)");
                     setShowEscalationModal(false);
                   }}
                 />
@@ -1079,10 +1250,18 @@ function AppShell() {
 
       {/* ESCALATION MODAL */}
       {showEscalationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+        <div
+          ref={escalationRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="escalation-title"
+          tabIndex={-1}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 outline-none"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+        >
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" style={{ border: `2px solid ${T.salmon}` }}>
             <div className="text-4xl mb-3">🤝</div>
-            <h3 className="text-xl font-bold mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+            <h3 id="escalation-title" className="text-xl font-bold mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
               เราสังเกตว่าช่วงนี้ใจคุณหนักอยู่หลายครั้ง
             </h3>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
@@ -1090,7 +1269,7 @@ function AppShell() {
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => { toast("แจ้งครูที่ปรึกษาเรียบร้อยแล้ว"); setShowEscalationModal(false); }}
+                onClick={() => { toast("ส่งการแจ้งเตือนถึงครูที่ปรึกษาแล้ว (โหมดสาธิต)"); setShowEscalationModal(false); }}
                 className="w-full py-3 rounded-2xl text-white font-bold transition-all active:scale-[0.97]"
                 style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
               >
@@ -1120,7 +1299,7 @@ function AppShell() {
 
 /* ============ HOME VIEW ============ */
 function HomeView({
-  mood, setMood, onGoChat, onGoTrend, tryMode, lineNotify, setLineNotify,
+  mood, setMood, onGoChat, onGoTrend, tryMode, lineNotify, setLineNotify, trendData, onMoodTap,
 }: {
   mood: string;
   setMood: (v: string) => void;
@@ -1129,10 +1308,35 @@ function HomeView({
   tryMode: (mode: "camera" | "keyboard" | "mic" | "photo") => void;
   lineNotify: boolean;
   setLineNotify: (v: boolean) => void;
+  trendData: TrendPoint[];
+  onMoodTap: (key: string) => void;
 }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "อรุณสวัสดิ์ค่ะ" : hour < 18 ? "สวัสดีตอนบ่ายค่ะ" : "สวัสดีตอนเย็นค่ะ";
   const moods = Object.entries(EMO);
+
+  // ── Context strip helpers ──────────────────────────────────────────
+  const todayThai = new Date().toLocaleDateString("th-TH", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  // Streak = consecutive tail entries that are NOT "concern" keys — simplified:
+  // count how many of the last N distinct sessions exist (session = logEntry; we approximate
+  // with trendData length as a "check-ins today" proxy and use the real concern streak from props via mood)
+  const checkinCount = trendData.length;
+  const streakLabel = checkinCount >= 1
+    ? checkinCount === 1 ? "เช็คอิน 1 ครั้งวันนี้" : `เช็คอิน ${checkinCount} ครั้งวันนี้`
+    : null;
+
+  // 7-slot history: fill from trendData (last 7 points), pad with nulls on the left
+  const HISTORY_SLOTS = 7;
+  const recentPoints = trendData.slice(-HISTORY_SLOTS);
+  const historyDots: (TrendPoint | null)[] = [
+    ...Array(Math.max(0, HISTORY_SLOTS - recentPoints.length)).fill(null),
+    ...recentPoints,
+  ];
 
   return (
     <div className="space-y-7 max-w-4xl">
@@ -1183,39 +1387,22 @@ function HomeView({
         </div>
       </div>
 
-      {/* QUICK MOOD PICKER */}
-      <div>
-        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-          วันนี้รู้สึกยังไง?
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-          {moods.map(([key, emo], idx) => {
-            const rotations = ["rotate-[-2deg]", "rotate-[1deg]", "rotate-[-1deg]", "rotate-[2deg]", "rotate-[0deg]", "rotate-[-3deg]"];
-            const rot = rotations[idx % rotations.length];
-            return (
-            <button
-              key={key}
-              onClick={() => setMood(key)}
-              className={`p-4 rounded-xl text-center transition-all duration-300 transform hover:-translate-y-2 hover:shadow-xl active:scale-95 ${rot}`}
-              style={{
-                backgroundColor: mood === key ? "#DCEAE8" : T.white,
-                border: mood === key ? `3px solid ${T.teal}` : "1px solid #EDE6D3",
-                boxShadow: mood === key ? "0 8px 0px rgba(45,106,111,0.2)" : "0 4px 10px rgba(0,0,0,0.05)",
-                fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
-              }}
-            >
-              <span className="text-4xl block mb-2 drop-shadow-sm">{emo.emoji}</span>
-              <span className="text-[11px] font-bold block uppercase tracking-wide" style={{ color: mood === key ? T.teal : T.black }}>{emo.label}</span>
-            </button>
-          )})}
-        </div>
-      </div>
+
 
       {/* 4 MODE CARDS */}
       <div>
-        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-          วิธีระบายความรู้สึก · เลือกวิธีที่ถนัดได้เลย
-        </h3>
+        <div className="flex items-center gap-3 mb-3">
+          <h3 className="text-base font-bold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+            วิธีระบายความรู้สึก · เลือกวิธีที่ถนัดได้เลย
+          </h3>
+          <img
+            src={IMG.star}
+            alt=""
+            aria-hidden="true"
+            className="w-8 h-8 object-contain -rotate-12 flex-shrink-0"
+            style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.18))" }}
+          />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           {[
             { id: "camera" as const, title: "ถ่ายเซลฟี่", desc: "Face Recognition API", iconSrc: IMG.bulb, bg: "#FDF5E6", border: "#F0E1C8" },
@@ -1296,7 +1483,6 @@ function HomeView({
       </div>
 
       {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
-      {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
       <div
         className="p-6 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative mt-4"
         style={{ 
@@ -1344,7 +1530,7 @@ function HomeView({
 function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
-  mood, concernStreak, transparencyLogs, onNotifyCounselor,
+  mood, concernStreak, transparencyLogs, supportStrip, onDismissSupport, onNotifyCounselor,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -1359,6 +1545,8 @@ function ChatView({
   mood: string;
   concernStreak: number;
   transparencyLogs: string[];
+  supportStrip: boolean;
+  onDismissSupport: () => void;
   onNotifyCounselor: () => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
@@ -1415,7 +1603,7 @@ function ChatView({
                   style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
                 >
                   <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                    ผลการสะท้อนจากใบหน้า · {msg.emotionData.label}
+                    ผลการประเมินเบื้องต้นจากใบหน้า · {msg.emotionData.label}
                   </p>
                   <p>{msg.emotionData.note}</p>
                 </div>
@@ -1457,6 +1645,41 @@ function ChatView({
           )}
         </div>
 
+        {/* Support strip — appears after the first concern log, stays quiet */}
+        {supportStrip && (
+          <div className="px-4 pt-3">
+            <div
+              className="flex items-center justify-between gap-3 p-3.5 rounded-2xl text-xs leading-relaxed"
+              style={{ backgroundColor: "#FFF3EE", border: "1.5px dashed #E3A48E" }}
+            >
+              <p style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6E3826" }}>
+                รู้สึกหนักใจอยู่ใช่ไหม? กระจกอยู่ตรงนี้เสมอ — มีคนที่พร้อมฟังคุณตลอด 24 ชม. ด้วยนะ
+              </p>
+              <a
+                href="tel:1323"
+                className="flex-shrink-0 px-3 py-2 rounded-full font-bold text-[11px] flex items-center gap-1.5 transition-all active:scale-[0.97]"
+                style={{ backgroundColor: T.red, color: T.white, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+                โทร 1323
+              </a>
+              <button
+                onClick={onDismissSupport}
+                aria-label="ปิดข้อความนี้"
+                className="flex-shrink-0 p-1.5 rounded-lg transition-colors hover:bg-black/5"
+                style={{ color: "#A85F73" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Input toolbar */}
         <div className="p-4 space-y-3" style={{ borderTop: `2px solid ${T.teal}`, backgroundColor: T.white }}>
           <div className="flex items-center gap-2">
@@ -1480,6 +1703,7 @@ function ChatView({
           </div>
           <div className="flex gap-2">
             <input
+              id="chat-input"
               type="text"
               placeholder="พิมพ์ความรู้สึกของคุณ..."
               value={inputText}
@@ -1568,7 +1792,7 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
         {/* SVG trend chart */}
         <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มอารมณ์ในเซสชันนี้</h3>
+            <h3 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มอารมณ์ของคุณ</h3>
             <span className="text-xs font-mono text-gray-500">{trendData.length === 0 ? "ยังไม่มีข้อมูล" : `${trendData.length} จุดข้อมูล`}</span>
           </div>
           <div className="relative h-44 w-full my-2">
@@ -1606,7 +1830,7 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
           <h3 className="font-bold text-base mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>ประวัติการเช็คอิน</h3>
           <div className="flex-1 overflow-y-auto max-h-48 space-y-2 pr-1" style={{ scrollbarWidth: "thin" }}>
             {logEntries.length === 0 ? (
-              <div className="text-center text-xs text-gray-400 py-8" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>ยังไม่มีประวัติการเช็คอินในเซสชันนี้</div>
+              <div className="text-center text-xs text-gray-400 py-8" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>ยังไม่มีประวัติการเช็คอิน</div>
             ) : (
               logEntries.map((e) => (
                 <div key={e.id} className="flex items-center justify-between p-3 rounded-xl text-xs" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
