@@ -32,13 +32,13 @@ const IMG = {
 
 /* ============ DESIGN TOKENS ============ */
 const T = {
-  cream: "#F3EEE1",
-  black: "#1A1A1A",
-  salmon: "#FFB5A7",
-  teal: "#2D6A6F",
+  cream: "#08090A",
+  black: "#08090A",
+  salmon: "#FF3366",
+  teal: "#FF3366",
   red: "#C41E3A",
-  white: "#FFFFFF",
-  gridLine: "rgba(160,150,130,0.14)",
+  white: "#F0EFE9",
+  gridLine: "rgba(240,239,233,0.04)",
 };
 
 /* ============ EMOJI / MOOD DATA ============ */
@@ -402,9 +402,9 @@ function LoginPage({ onNext }: { onNext: () => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
 
   useEffect(() => {
-    // Title screen stagger in
-    gsap.fromTo(".login-img", { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power3.out" });
-    gsap.fromTo(".login-form", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)", delay: 0.3 });
+    // Title screen entrance
+    gsap.fromTo(".login-img", { x: -30 }, { x: 0, duration: 1.0, ease: "power3.out" });
+    gsap.fromTo(".login-form", { y: 20 }, { y: 0, duration: 0.8, ease: "back.out(1.2)", delay: 0.2 });
   }, []);
 
   return (
@@ -416,7 +416,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
         className="absolute left-0 top-0 bottom-0 z-0 login-img"
         style={{
           width: "55%",
-          backgroundColor: T.cream,
+          backgroundColor: "#E5E0D8", // Light background for collage visibility
         }}
       >
         <img
@@ -1297,7 +1297,6 @@ function AppShell() {
   );
 }
 
-/* ============ HOME VIEW ============ */
 function HomeView({
   mood, setMood, onGoChat, onGoTrend, tryMode, lineNotify, setLineNotify, trendData, onMoodTap,
 }: {
@@ -1311,220 +1310,362 @@ function HomeView({
   trendData: TrendPoint[];
   onMoodTap: (key: string) => void;
 }) {
+  const [hoveredMode, setHoveredMode] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Hero entrance animation
+    gsap.fromTo("#hv-kicker", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out" });
+    gsap.fromTo("#hv-headline", { y: 30 }, { y: 0, duration: 0.9, ease: "power3.out", delay: 0.1 });
+    gsap.fromTo("#hv-body", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.2 });
+    gsap.fromTo("#hv-ctas", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.3 });
+    gsap.fromTo("#hv-img", { scale: 0.95 }, { scale: 1, duration: 1.0, ease: "power2.out", delay: 0.2 });
+    gsap.fromTo(".hv-strip", { y: 30 }, { y: 0, duration: 0.8, stagger: 0.1, ease: "power3.out", delay: 0.4 });
+  }, []);
+
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "อรุณสวัสดิ์ค่ะ" : hour < 18 ? "สวัสดีตอนบ่ายค่ะ" : "สวัสดีตอนเย็นค่ะ";
-  const moods = Object.entries(EMO);
+  const greeting = hour < 12 ? "อรุณสวัสดิ์" : hour < 18 ? "สวัสดีตอนบ่าย" : "สวัสดีตอนเย็น";
+  const todayThai = new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" });
 
-  // ── Context strip helpers ──────────────────────────────────────────
-  const todayThai = new Date().toLocaleDateString("th-TH", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const SF = "'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', sans-serif";
 
-  // Streak = consecutive tail entries that are NOT "concern" keys — simplified:
-  // count how many of the last N distinct sessions exist (session = logEntry; we approximate
-  // with trendData length as a "check-ins today" proxy and use the real concern streak from props via mood)
-  const checkinCount = trendData.length;
-  const streakLabel = checkinCount >= 1
-    ? checkinCount === 1 ? "เช็คอิน 1 ครั้งวันนี้" : `เช็คอิน ${checkinCount} ครั้งวันนี้`
-    : null;
-
-  // 7-slot history: fill from trendData (last 7 points), pad with nulls on the left
-  const HISTORY_SLOTS = 7;
-  const recentPoints = trendData.slice(-HISTORY_SLOTS);
-  const historyDots: (TrendPoint | null)[] = [
-    ...Array(Math.max(0, HISTORY_SLOTS - recentPoints.length)).fill(null),
-    ...recentPoints,
+  const modes = [
+    { id: "camera" as const, th: "ถ่ายเซลฟี่", sub: "บอกเราผ่านรูป", img: IMG.origamiStars },
+    { id: "keyboard" as const, th: "พิมพ์ความรู้สึก", sub: "ระบายความในใจ", img: IMG.handPen },
+    { id: "mic" as const, th: "พูดระบาย", sub: "ให้เราฟัง", img: IMG.megaphone },
+    { id: "photo" as const, th: "ถ่ายรูปการบ้าน", sub: "ให้เราช่วยดู", img: IMG.booksStack }
   ];
 
+  const PINK = "#FF3366";           // Outstanding premium hot pink
+  const BLACK = "#08090A";          // Near-pure black
+  const OFFWHITE = "#F0EFE9";       // Warm white for primary text
+  const MUTED = "rgba(240,239,233,0.38)"; // Muted secondary text
+
   return (
-    <div className="space-y-7 max-w-4xl">
-      {/* HERO CARD */}
-      <div
-        className="p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden"
+    // Break-out wrapper
+    <div style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem" }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
+
+      {/* ── HERO ── */}
+      <section
+        id="hv-hero"
         style={{
-          background: "#fefdfa",
-          backgroundImage: "radial-gradient(#e0d6c8 1px, transparent 1px)",
-          backgroundSize: "20px 20px",
-          borderRadius: "16px",
-          border: "2px solid #DED3C1",
-          boxShadow: "4px 8px 0px rgba(222,211,193,0.4), 0 4px 24px rgba(0,0,0,0.06)",
+          background: BLACK,
+          minHeight: "calc(100vh - 36px)",
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          overflow: "hidden",
         }}
       >
-        <div className="flex items-center gap-5 z-10">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center text-4xl flex-shrink-0 -mt-2 -ml-2 shadow-lg z-10 relative"
-            style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `3px solid ${T.white}` }}
-          >
-            {EMO[mood]?.emoji || "😌"}
-            <div className="absolute inset-0 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] pointer-events-none"></div>
+        {/* Fine grid overlay — Code Resolution style */}
+        <div aria-hidden="true" style={{
+          position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none",
+          backgroundImage: `linear-gradient(rgba(240,239,233,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(240,239,233,0.04) 1px, transparent 1px)`,
+          backgroundSize: "60px 60px",
+        }} />
+
+        {/* Top bar — date + status */}
+        <div id="hv-kicker" style={{
+          position: "relative", zIndex: 2,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "2rem clamp(1.5rem, 5vw, 4rem)",
+          borderBottom: "1px solid rgba(240,239,233,0.07)"
+        }}>
+          <span style={{ fontFamily: SF, fontSize: "0.72rem", fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", color: MUTED }}>
+            {todayThai}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: PINK, boxShadow: `0 0 8px ${PINK}` }} />
+            <span style={{ fontFamily: SF, fontSize: "0.72rem", fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", color: MUTED }}>กำลังทำงาน</span>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-              {greeting}
-            </h2>
-            <p className="text-sm mt-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
-              วันนี้อยากให้กระจกฟังอะไรบ้าง จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ
+        </div>
+
+        {/* Main hero content */}
+        <div style={{
+          position: "relative", zIndex: 2,
+          flex: 1,
+          display: "flex", flexDirection: "column", justifyContent: "center",
+          padding: "3rem clamp(1.5rem, 5vw, 4rem) 0",
+        }}>
+          {/* Giant headline */}
+          <h1
+            id="hv-headline"
+            style={{
+              fontFamily: SF,
+              fontSize: "clamp(3.5rem, 10vw, 10rem)",
+              fontWeight: 800,
+              lineHeight: 0.95,
+              letterSpacing: "-0.04em",
+              color: OFFWHITE,
+              margin: "0 0 2.5rem",
+              maxWidth: "18ch",
+            }}
+          >
+            กระจก
+            <br />
+            <span style={{ color: PINK, WebkitTextStroke: "0px" }}>สะท้อนใจ</span>
+          </h1>
+
+          {/* Sub-row: body + CTAs side by side */}
+          <div id="hv-body" style={{ display: "flex", alignItems: "flex-end", gap: "3rem", flexWrap: "wrap", borderTop: "1px solid rgba(240,239,233,0.08)", paddingTop: "2rem" }}>
+            <p style={{
+              fontFamily: SF, fontSize: "clamp(0.95rem, 1.8vw, 1.15rem)",
+              lineHeight: 1.6, color: MUTED,
+              maxWidth: "38ch", margin: 0, flex: "1 1 260px"
+            }}>
+              พื้นที่ส่วนตัวเพื่อบันทึกความรู้สึก — พิมพ์ พูด หรือถ่ายภาพ กระจกรับฟังทุกอย่าง
             </p>
+            <div id="hv-ctas" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", flex: "0 0 auto" }}>
+              <button
+                onClick={onGoChat}
+                style={{
+                  fontFamily: SF, fontWeight: 700, fontSize: "0.9rem",
+                  background: PINK, color: BLACK,
+                  border: "none", borderRadius: "9999px",
+                  padding: "0.9rem 2rem", cursor: "pointer",
+                  letterSpacing: "-0.01em",
+                  display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                  transition: "transform 0.2s, box-shadow 0.2s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.03)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 0 24px ${PINK}55`; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+              >
+                เริ่มคุยกับกระจก
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+              <button
+                onClick={onGoTrend}
+                style={{
+                  fontFamily: SF, fontWeight: 600, fontSize: "0.9rem",
+                  background: "transparent", color: OFFWHITE,
+                  border: "1px solid rgba(240,239,233,0.2)", borderRadius: "9999px",
+                  padding: "0.9rem 2rem", cursor: "pointer",
+                  letterSpacing: "-0.01em",
+                  transition: "border-color 0.2s, color 0.2s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = PINK; (e.currentTarget as HTMLButtonElement).style.color = PINK; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(240,239,233,0.2)"; (e.currentTarget as HTMLButtonElement).style.color = OFFWHITE; }}
+              >
+                ดูแนวโน้มของฉัน
+              </button>
+            </div>
           </div>
         </div>
-        <div className="flex gap-3 flex-shrink-0 z-10">
-          <button
-            onClick={onGoChat}
-            className="px-5 py-2.5 rounded-full text-white font-bold text-sm transition-all hover:scale-105 active:scale-95"
-            style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 4px 12px rgba(45,106,111,0.3)" }}
-          >
-            💬 เริ่มคุยกับกระจก
-          </button>
-          <button
-            onClick={onGoTrend}
-            className="px-4 py-2.5 rounded-full font-semibold text-sm transition-all hover:bg-gray-50 active:scale-95"
-            style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", backgroundColor: T.white, border: "2px solid #E2D9C2" }}
-          >
-            📈 ดูแนวโน้มของฉัน
-          </button>
+
+        {/* Hero bottom: collage image + scroll indicator */}
+        <div style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 clamp(1.5rem, 5vw, 4rem) 0" }}>
+          <div id="hv-img" style={{ display: "flex", alignItems: "flex-end" }}>
+            <img
+              src={IMG.glasses}
+              alt=""
+              aria-hidden="true"
+              style={{
+                width: "clamp(180px, 25vw, 380px)",
+                objectFit: "contain",
+                filter: `drop-shadow(0 0 60px ${PINK}33)`,
+                mixBlendMode: "luminosity",
+                opacity: 0.85,
+              }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", paddingBottom: "2rem", gap: "0.5rem" }}>
+            <div style={{ width: "1px", height: "3rem", background: "rgba(240,239,233,0.2)" }} />
+            <span style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 500, letterSpacing: "0.15em", textTransform: "uppercase", color: MUTED, writingMode: "vertical-rl", transform: "rotate(180deg)" }}>เลื่อนลง</span>
+          </div>
         </div>
+      </section>
+
+      {/* ── MODE GALLERY HEADER ── */}
+      <div className="hv-strip" style={{
+        background: BLACK,
+        borderTop: `1px solid rgba(240,239,233,0.07)`,
+        borderBottom: `1px solid rgba(240,239,233,0.07)`,
+        padding: "1.25rem clamp(1.5rem, 5vw, 4rem)",
+        display: "flex", alignItems: "center", justifyContent: "space-between"
+      }}>
+        <p style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 500, letterSpacing: "0.2em", textTransform: "uppercase", color: MUTED, margin: 0 }}>เลือกวิธีบอกเรา</p>
+        <p style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 500, letterSpacing: "0.2em", textTransform: "uppercase", color: MUTED, margin: 0 }}>04 โหมด</p>
       </div>
 
+      {/* ── MODE GALLERY (ACCORDION) ── */}
+      <div
+        className="hv-strip"
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          height: "clamp(520px, 72vh, 760px)",
+          background: BLACK,
+          overflow: "hidden"
+        }}
+      >
+        {modes.map((item, idx) => {
+          const isHovered = hoveredMode === item.id;
+          const isAnyHovered = hoveredMode !== null;
+          const flexGrow = isHovered ? 3.5 : isAnyHovered ? 0.4 : 1;
 
-
-      {/* 4 MODE CARDS */}
-      <div>
-        <div className="flex items-center gap-3 mb-3">
-          <h3 className="text-base font-bold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-            วิธีระบายความรู้สึก · เลือกวิธีที่ถนัดได้เลย
-          </h3>
-          <img
-            src={IMG.star}
-            alt=""
-            aria-hidden="true"
-            className="w-8 h-8 object-contain -rotate-12 flex-shrink-0"
-            style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.18))" }}
-          />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-          {[
-            { id: "camera" as const, title: "ถ่ายเซลฟี่", desc: "Face Recognition API", iconSrc: IMG.bulb, bg: "#FDF5E6", border: "#F0E1C8" },
-            { id: "keyboard" as const, title: "พิมพ์ความรู้สึก", desc: "Sentiment Analysis API", iconSrc: IMG.handPen, bg: "#F2F5E9", border: "#E0E8D3" },
-            { id: "mic" as const, title: "พูดระบาย", desc: "Speech-to-Text API", iconSrc: IMG.amplifier, bg: "#FFF0F4", border: "#F5DBE4" },
-            { id: "photo" as const, title: "ถ่ายรูปการบ้าน", desc: "OCR API", iconSrc: IMG.origamiStarsNoBg, bg: "#EBF3F5", border: "#D4E5E8" },
-          ].map((item, idx) => {
-            const rots = ["rotate-[1deg]", "rotate-[-1deg]", "rotate-[2deg]", "rotate-[-2deg]"];
-            const r = rots[idx % rots.length];
-            const cardId = `action-card-${item.id}`;
-            const imgId = `action-img-${item.id}`;
-            return (
+          return (
             <button
               key={item.id}
-              id={cardId}
-              onClick={(e) => {
-                tryMode(item.id);
-                // GSAP burst ripple on click
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ripple = document.createElement("div");
-                ripple.style.cssText = `position:fixed;left:${rect.left + rect.width/2}px;top:${rect.top + rect.height/2}px;width:12px;height:12px;border-radius:50%;background:${item.border};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
-                document.body.appendChild(ripple);
-                gsap.fromTo(ripple,
-                  { scale: 0, opacity: 0.8 },
-                  { scale: 9, opacity: 0, duration: 0.7, ease: "expo.out", onComplete: () => ripple.remove() }
-                );
-                // GSAP pop the image
-                const imgEl = document.getElementById(imgId);
-                if (imgEl) gsap.fromTo(imgEl, { scale: 0.8, rotate: -10 }, { scale: 1, rotate: 0, duration: 0.6, ease: "elastic.out(1.3, 0.4)" });
-              }}
-              onMouseEnter={() => {
-                const imgEl = document.getElementById(imgId);
-                if (imgEl) gsap.to(imgEl, { y: -8, rotate: 5, duration: 0.4, ease: "power2.out" });
-                const card = document.getElementById(cardId);
-                if (card) gsap.to(card, { y: -6, duration: 0.3, ease: "power2.out" });
-              }}
-              onMouseLeave={() => {
-                const imgEl = document.getElementById(imgId);
-                if (imgEl) gsap.to(imgEl, { y: 0, rotate: 0, duration: 0.4, ease: "elastic.out(1, 0.5)" });
-                const card = document.getElementById(cardId);
-                if (card) gsap.to(card, { y: 0, duration: 0.35, ease: "power2.inOut" });
-              }}
-              className={`p-6 rounded-none text-center group transition-colors duration-200 ${r}`}
+              onClick={() => tryMode(item.id)}
+              onMouseEnter={() => setHoveredMode(item.id)}
+              onMouseLeave={() => setHoveredMode(null)}
+              onFocus={() => setHoveredMode(item.id)}
+              onBlur={() => setHoveredMode(null)}
+              aria-label={`${item.th} — ${item.sub}`}
               style={{
-                backgroundColor: item.bg,
-                border: `1px solid ${item.border}`,
-                boxShadow: `4px 4px 0px ${item.border}, 0 10px 20px rgba(0,0,0,0.05)`,
+                flex: flexGrow,
+                transition: "flex 0.65s cubic-bezier(0.25, 1, 0.25, 1)",
+                background: "transparent",
                 position: "relative",
-                willChange: "transform",
+                cursor: "pointer",
+                padding: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                minWidth: 0,
+                border: "none",
+                outline: "none",
+                borderRight: idx < 3 ? "1px solid rgba(240,239,233,0.06)" : "none",
               }}
             >
-              {/* Tape visual */}
-              <div className="absolute top-[-10px] left-1/2 -translate-x-1/2 w-12 h-6 bg-white/40 border border-white/60 shadow-sm rotate-[-2deg]" style={{backdropFilter: "blur(2px)"}}></div>
-              
-              <div className="bg-white rounded-sm aspect-square flex items-center justify-center mb-4 shadow-inner overflow-hidden" style={{ border: `1px solid ${item.border}` }}>
-                <img
-                  id={imgId}
-                  src={item.iconSrc}
-                  alt=""
-                  style={{
-                    width: "85%",
-                    height: "85%",
-                    objectFit: "contain",
-                    display: "block",
-                    willChange: "transform",
-                  }}
-                />
+              {/* Lime glow on hover */}
+              <div style={{
+                position: "absolute", inset: 0,
+                background: `radial-gradient(ellipse at 50% 70%, ${PINK}12 0%, transparent 65%)`,
+                opacity: isHovered ? 1 : 0,
+                transition: "opacity 0.5s ease",
+                zIndex: 0
+              }} />
+              {/* Darkening overlay for siblings */}
+              <div style={{
+                position: "absolute", inset: 0,
+                background: "rgba(8,9,10,0.7)",
+                opacity: isAnyHovered && !isHovered ? 1 : 0,
+                transition: "opacity 0.55s ease",
+                zIndex: 1
+              }} />
+
+              {/* Card index */}
+              <div style={{
+                position: "absolute", top: "1.25rem", left: "1.5rem",
+                fontFamily: SF, fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.16em",
+                color: isHovered ? PINK : OFFWHITE,
+                opacity: isAnyHovered && !isHovered ? 0.15 : isHovered ? 1 : 0.3,
+                transition: "all 0.45s ease",
+                zIndex: 5
+              }}>{String(idx + 1).padStart(2, "0")}</div>
+
+              {/* Collage image */}
+              <img
+                src={item.img}
+                alt={item.th}
+                style={{
+                  width: "clamp(120px, 18vw, 240px)",
+                  height: "clamp(120px, 18vw, 240px)",
+                  objectFit: "contain",
+                  transition: "all 0.65s cubic-bezier(0.25, 1, 0.25, 1)",
+                  transform: isHovered ? "scale(1.14) translateY(-6px)" : "scale(1)",
+                  filter: isHovered
+                    ? `drop-shadow(0 28px 44px rgba(0,0,0,0.8)) drop-shadow(0 0 30px ${PINK}44) brightness(1.1)`
+                    : "drop-shadow(0 10px 22px rgba(0,0,0,0.5)) brightness(0.95) grayscale(0.15)",
+                  zIndex: 2,
+                  position: "relative",
+                  flexShrink: 0
+                }}
+              />
+
+              {/* Default bottom label */}
+              <div style={{
+                position: "absolute", bottom: 0, left: 0, right: 0,
+                padding: "2.5rem 1.5rem 1.5rem",
+                background: "linear-gradient(to top, rgba(8,9,10,0.95) 0%, transparent 100%)",
+                transition: "all 0.45s ease",
+                opacity: isHovered ? 0 : 1,
+                transform: isHovered ? "translateY(8px)" : "translateY(0)",
+                zIndex: 3,
+                textAlign: "center"
+              }}>
+                <p style={{ fontFamily: SF, fontSize: "clamp(0.65rem, 1.4vw, 0.82rem)", fontWeight: 600, color: OFFWHITE, textTransform: "uppercase", letterSpacing: "0.15em", margin: 0 }}>
+                  {item.th}
+                </p>
               </div>
-              <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-                {item.title}
-              </h4>
-              <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#888" }}>
-                {item.desc}
-              </p>
+
+              {/* Hover reveal: large title + CTA */}
+              <div style={{
+                position: "absolute", bottom: 0, left: 0, right: 0,
+                padding: "3rem 2rem 2rem",
+                background: "linear-gradient(to top, rgba(8,9,10,0.98) 0%, rgba(8,9,10,0.65) 55%, transparent 100%)",
+                transition: "all 0.6s cubic-bezier(0.25, 1, 0.25, 1)",
+                opacity: isHovered ? 1 : 0,
+                transform: isHovered ? "translateY(0)" : "translateY(20px)",
+                pointerEvents: "none",
+                zIndex: 4,
+                textAlign: "left"
+              }}>
+                <p style={{ fontFamily: SF, fontSize: "clamp(0.6rem, 1vw, 0.72rem)", fontWeight: 600, letterSpacing: "0.22em", textTransform: "uppercase", color: PINK, margin: "0 0 0.5rem" }}>
+                  {item.sub}
+                </p>
+                <h2 style={{ fontFamily: SF, fontSize: "clamp(1.5rem, 3.5vw, 3rem)", fontWeight: 800, lineHeight: 1, letterSpacing: "-0.03em", color: OFFWHITE, margin: "0 0 1rem" }}>
+                  {item.th}
+                </h2>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: PINK, color: BLACK, borderRadius: "9999px", padding: "0.4rem 1rem", fontSize: "0.75rem", fontWeight: 700, fontFamily: SF }}>
+                  เริ่มเลย
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+              </div>
+
+              {/* Divider */}
+              {idx < 3 && (
+                <div style={{
+                  position: "absolute", right: 0, top: "10%", height: "80%", width: "1px",
+                  background: "rgba(240,239,233,0.06)",
+                  zIndex: 5
+                }} />
+              )}
             </button>
-          )})}
-        </div>
+          );
+        })}
       </div>
 
-      {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
-      <div
-        className="p-6 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative mt-4"
-        style={{ 
-          backgroundColor: "#F9F8F5", 
-          border: "2px dashed #C8BEAC",
-          backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(200, 190, 172, 0.05) 10px, rgba(200, 190, 172, 0.05) 20px)"
-        }}
-      >
-        {/* Pin visual */}
-        <div className="absolute top-3 right-5 w-3 h-3 rounded-full bg-[#A85F73] shadow-[0_2px_4px_rgba(0,0,0,0.3)] z-10">
-          <div className="w-1 h-1 bg-white/60 rounded-full absolute top-[1px] left-[1px]"></div>
-        </div>
-
+      {/* ── FOOTER: LINE Notify ── */}
+      <div className="hv-strip" style={{
+        background: BLACK,
+        borderTop: "1px solid rgba(240,239,233,0.07)",
+        padding: "1.75rem clamp(1.5rem, 5vw, 4rem)",
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1.5rem", flexWrap: "wrap"
+      }}>
         <div>
-          <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-            ช่องทางการเข้าถึง
-          </h4>
-          <div className="flex gap-3 mt-3 flex-wrap">
-            <span className="px-4 py-1.5 text-[#00B900] text-xs font-bold rounded-sm border border-[#00B900] bg-white shadow-sm" style={{transform: "rotate(-1deg)"}}>
-              💚 LINE Official Account
-            </span>
-            <span className="px-4 py-1.5 text-blue-600 text-xs font-bold rounded-sm border border-blue-600 bg-white shadow-sm" style={{transform: "rotate(1deg)"}}>
-              🌐 Web Application (หน้านี้)
-            </span>
-          </div>
+          <p style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: MUTED, margin: "0 0 0.25rem" }}>การแจ้งเตือน</p>
+          <p style={{ fontFamily: SF, fontSize: "0.95rem", fontWeight: 600, color: OFFWHITE, margin: 0 }}>รับการแจ้งเตือนผ่าน LINE</p>
         </div>
-        <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-full border border-[#E2D9C2] shadow-sm z-10">
-          <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-            รับการแจ้งเตือนผ่าน LINE
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <span style={{ fontFamily: SF, fontSize: "0.8rem", fontWeight: 600, color: lineNotify ? PINK : MUTED }}>
+            {lineNotify ? "เปิดอยู่" : "ปิดอยู่"}
           </span>
           <button
-            onClick={() => { setLineNotify(!lineNotify); toast(lineNotify ? "ปิดการแจ้งเตือนผ่าน LINE แล้ว" : "เปิดการแจ้งเตือนผ่าน LINE แล้ว"); }}
-            className="w-10 h-5 rounded-full flex items-center transition-colors px-0.5 relative"
-            style={{ backgroundColor: lineNotify ? "#00B900" : "#D1D5DB", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)" }}
+            onClick={() => { setLineNotify(!lineNotify); toast(lineNotify ? "ปิดการแจ้งเตือน LINE แล้ว" : "เปิดการแจ้งเตือน LINE แล้ว"); }}
+            aria-label="สลับการแจ้งเตือน LINE"
+            style={{
+              width: "52px", height: "28px", borderRadius: "9999px", border: "none",
+              background: lineNotify ? PINK : "rgba(240,239,233,0.12)",
+              cursor: "pointer", position: "relative", transition: "background 0.3s ease",
+            }}
           >
-            <div className={`w-4 h-4 bg-white rounded-full shadow transition-all absolute top-0.5`} style={{ left: lineNotify ? "22px" : "2px" }} />
+            <div style={{
+              width: "20px", height: "20px", borderRadius: "50%", background: lineNotify ? BLACK : "rgba(240,239,233,0.6)",
+              position: "absolute", top: "4px", transition: "left 0.3s ease",
+              left: lineNotify ? "28px" : "4px",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+            }} />
           </button>
         </div>
       </div>
     </div>
   );
 }
+
 
 /* ============ CHAT VIEW ============ */
 function ChatView({
@@ -2030,17 +2171,8 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
 
 /* ============ MAIN APP ============ */
 // Page transition wipe effect wrapper
-const PageWrapper = ({ children, pageKey }: { children: React.ReactNode, pageKey: string }) => {
-  const elRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (elRef.current) {
-      gsap.fromTo(elRef.current,
-        { clipPath: "inset(0 100% 0 0)" },
-        { clipPath: "inset(0 0% 0 0)", duration: 0.6, ease: "power3.inOut" }
-      );
-    }
-  }, [pageKey]);
-  return <div ref={elRef} className="h-full w-full">{children}</div>;
+const PageWrapper = ({ children }: { children: React.ReactNode, pageKey: string }) => {
+  return <div className="h-full w-full">{children}</div>;
 };
 
 export default function App() {
