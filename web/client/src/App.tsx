@@ -167,6 +167,15 @@ interface LogEntry {
   key: Mood;
 }
 
+interface TransparencyLog {
+  id: string;
+  timestamp: string;
+  service: string;
+  description: string;
+  duration?: number;
+  status: "processing" | "success" | "error";
+}
+
 /* ============ ICON COMPONENTS ============ */
 function CameraIcon({ size = 16 }: { size?: number }) {
   return (
@@ -291,6 +300,44 @@ function AlertIcon({ size = 16 }: { size?: number }) {
     </svg>
   );
 }
+
+function CheckIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function XIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function ClockIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function ServerIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+      <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+      <line x1="6" y1="6" x2="6.01" y2="6" />
+      <line x1="6" y1="18" x2="6.01" y2="18" />
+    </svg>
+  );
+}
+
 
 /* ============ CRISIS ALERT COMPONENT ============ */
 function CrisisAlert({ onDismiss, onCall1323 }: { onDismiss: () => void; onCall1323: () => void }) {
@@ -790,6 +837,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [concernStreak, setConcernStreak] = useState(0);
   const [transparencyLogs, setTransparencyLogs] = useState<string[]>([]);
+  const [detailedTransparencyLogs, setDetailedTransparencyLogs] = useState<TransparencyLog[]>([]);
   const [showEscalationModal, setShowEscalationModal] = useState(false);
   const [showCrisisAlert, setShowCrisisAlert] = useState(false);
   const [crisisDetected, setCrisisDetected] = useState(false);
@@ -909,6 +957,27 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const noteMultimodal = useCallback((sourceLabel: string) => {
     const transNote = TRANSPARENCY[sourceLabel] || "กำลังวิเคราะห์ข้อมูลด้วย Pathumma LLM";
     setTransparencyLogs((prev) => [transNote, ...prev.slice(0, 4)]);
+
+    // Add detailed transparency log
+    const logId = Math.random().toString();
+    const timestamp = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const serviceMap: Record<string, string> = {
+      "เซลฟี่": "Face Detection (AIFORTHAI)",
+      "ข้อความ": "Sentiment Analysis (AIFORTHAI)",
+      "เสียงพูด": "Speech-to-Text (TokenMind ptm-asr-1)",
+      "รูปการบ้าน": "OCR (AIFORTHAI)",
+    };
+
+    setDetailedTransparencyLogs((prev) => [
+      {
+        id: logId,
+        timestamp,
+        service: serviceMap[sourceLabel] || "Pathumma LLM (TokenMind thaillm-8b)",
+        description: transNote,
+        status: "processing",
+      },
+      ...prev.slice(0, 9),
+    ]);
   }, []);
 
   const sendMessage = useCallback(async (overrideText?: string, sourceLabel: string = "ข้อความ") => {
@@ -927,8 +996,19 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     noteMultimodal(sourceLabel);
     setIsAnalyzing(true);
 
+    const startTime = Date.now();
     try {
       const result = await api.sendMessage(textToSend.trim());
+      const duration = Date.now() - startTime;
+
+      // Update last log to success
+      setDetailedTransparencyLogs((prev) => {
+        if (prev.length === 0) return prev;
+        const updated = [...prev];
+        updated[0] = { ...updated[0], status: "success", duration };
+        return updated;
+      });
+
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
       pushTrend(result.mood, sourceLabel);
       setDataRevision((revision) => revision + 1);
@@ -941,6 +1021,14 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
         setShowCrisisAlert(true);
       }
     } catch (error) {
+      // Update last log to error
+      setDetailedTransparencyLogs((prev) => {
+        if (prev.length === 0) return prev;
+        const updated = [...prev];
+        updated[0] = { ...updated[0], status: "error" };
+        return updated;
+      });
+
       toast.error(error instanceof Error ? error.message : "ส่งข้อความไม่สำเร็จ");
     } finally {
       setIsAnalyzing(false);
@@ -1073,7 +1161,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const resetChat = () => {
     if (!window.confirm("ยืนยันเริ่มการสนทนาใหม่? ประวัติที่จัดเก็บบนเซิร์ฟเวอร์จะยังอยู่จนกว่าคุณจะลบจากเมนูข้อมูล")) return;
     setMessages([{ id: "init_" + Date.now(), role: "bot", text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ", timestamp: Date.now() }]);
-    setTrendData([]); setLogEntries([]); setConcernStreak(0); setTransparencyLogs([]); setMood("calm"); setShowSupportStrip(false);
+    setTrendData([]); setLogEntries([]); setConcernStreak(0); setTransparencyLogs([]); setDetailedTransparencyLogs([]); setMood("calm"); setShowSupportStrip(false);
     escalationShownRef.current = false;
     toast("เริ่มการสนทนาใหม่แล้ว");
   };
@@ -1383,6 +1471,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                   showCrisisAlert={showCrisisAlert}
                   onDismissCrisis={() => setShowCrisisAlert(false)}
                   crisisDetected={crisisDetected}
+                  detailedTransparencyLogs={detailedTransparencyLogs}
                 />
               </PageWrapper>
             )}
@@ -1862,7 +1951,7 @@ function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, concernStreak, transparencyLogs, supportStrip, onDismissSupport, onNotifyCounselor,
-  showCrisisAlert, onDismissCrisis, crisisDetected,
+  showCrisisAlert, onDismissCrisis, crisisDetected, detailedTransparencyLogs,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -1883,6 +1972,7 @@ function ChatView({
   showCrisisAlert: boolean;
   onDismissCrisis: () => void;
   crisisDetected: boolean;
+  detailedTransparencyLogs: TransparencyLog[];
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -2119,19 +2209,101 @@ function ChatView({
 
         {/* Transparency logs */}
         <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-          <h4 className="font-bold text-sm mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>บันทึกความโปร่งใส</h4>
-          {transparencyLogs.length === 0 ? (
-            <p className="text-xs text-gray-400" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>ยังไม่มีการเรียกใช้ API</p>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-bold text-sm" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+              การใช้งาน AI แบบโปร่งใส
+            </h4>
+            <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs" style={{ backgroundColor: "#F0F9FF", color: "#0369A1", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600 }}>
+              <EyeIcon size={12} />
+              {detailedTransparencyLogs.length} บันทึก
+            </div>
+          </div>
+
+          {detailedTransparencyLogs.length === 0 ? (
+            <div className="text-center py-6">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3" style={{ backgroundColor: "#F5F5F5" }}>
+                <ServerIcon size={20} />
+              </div>
+              <p className="text-xs text-gray-400" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+                ยังไม่มีการเรียกใช้ AI<br />
+                <span className="text-[10px]">ระบบจะแสดงรายละเอียดทุกครั้งที่ส่งข้อมูลไปวิเคราะห์</span>
+              </p>
+            </div>
           ) : (
-            <div className="space-y-2">
-              {transparencyLogs.map((log, i) => (
-                <div key={i} className="text-xs font-mono text-gray-600 p-2 rounded-xl flex items-center gap-2" style={{ backgroundColor: "#f5f5f5", border: "1px solid #e5e5e5" }}>
-                  <EyeIcon size={12} />
-                  <span>{log}</span>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {detailedTransparencyLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="p-3 rounded-xl border transition-all"
+                  style={{
+                    backgroundColor: log.status === "processing" ? "#FFFBEB" : log.status === "success" ? "#F0FDF4" : "#FEF2F2",
+                    borderColor: log.status === "processing" ? "#FDE68A" : log.status === "success" ? "#BBF7D0" : "#FECACA",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-shrink-0">
+                        {log.status === "processing" && (
+                          <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#F59E0B" }} />
+                        )}
+                        {log.status === "success" && (
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ backgroundColor: "#10B981" }}>
+                            <CheckIcon size={10} />
+                          </div>
+                        )}
+                        {log.status === "error" && (
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ backgroundColor: "#EF4444" }}>
+                            <XIcon size={10} />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#1F2937" }}>
+                          {log.service}
+                        </p>
+                        <p className="text-[10px]" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6B7280" }}>
+                          {log.description}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-1 text-[10px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#9CA3AF" }}>
+                        <ClockIcon size={10} />
+                        {log.timestamp}
+                      </div>
+                      {log.duration !== undefined && (
+                        <div className="text-[10px] font-bold" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#059669" }}>
+                          {log.duration}ms
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {log.status === "success" && (
+                    <div className="mt-2 pt-2 border-t text-[10px]" style={{ borderColor: "#BBF7D0", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#065F46" }}>
+                      ✓ ข้อมูลได้รับการวิเคราะห์แล้ว ระบบไม่เก็บเนื้อหาต้นฉบับ
+                    </div>
+                  )}
+                  {log.status === "error" && (
+                    <div className="mt-2 pt-2 border-t text-[10px]" style={{ borderColor: "#FECACA", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#991B1B" }}>
+                      ✗ เกิดข้อผิดพลาด ลองใหม่อีกครั้ง
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
+
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: "#E5E7EB" }}>
+            <div className="flex items-start gap-2">
+              <div className="flex-shrink-0 mt-0.5">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3B82F6" }} />
+              </div>
+              <p className="text-[10px] leading-relaxed" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6B7280" }}>
+                <strong style={{ color: "#1F2937" }}>นโยบายความเป็นส่วนตัว:</strong> ระบบส่งข้อมูลไป API เพื่อวิเคราะห์ แต่ไม่เก็บเนื้อหาต้นฉบับไว้ในฐานข้อมูล เก็บเฉพาะผลอารมณ์และเวลาเท่านั้น
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
