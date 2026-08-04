@@ -1,9 +1,8 @@
-﻿# JaiKrajok — team07 (Phase 1: LINE + web chat, no DB yet)
+# JaiKrajok — team07
 #
 # base = 20000 + (7 - 1) * 10 = 20060
-#   20060 -> frontend  (static files served by the api app at "/")
-#   20061 -> api       (LINE webhook + /health)
-# Both point at the same container:8000 because one FastAPI app serves both.
+#   20060 -> frontend  (V3 React application on container port 3000)
+#   20061 -> api       (FastAPI on container port 8000)
 #
 # TEAM / BASE / BASE_1 are injected by GitLab CI variables.
 name: ${TEAM:-team07}
@@ -20,13 +19,24 @@ x-common: &common
   networks: [app]
 
 services:
+  frontend:
+    <<: *common
+    build: ./web
+    ports:
+      - "127.0.0.1:${BASE:-20060}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
   api:
     <<: *common
     build: ./api
     ports:
-      # frontend (static files served by this same app at "/")
-      - "127.0.0.1:${BASE:-20060}:8000"
-      # api
       - "127.0.0.1:${BASE_1:-20061}:8000"
     env_file:
       - .env
@@ -35,7 +45,11 @@ services:
       APP_ENV: production
       LOG_LEVEL: INFO
       TEAM: ${TEAM:-team07}
-      CORS_ORIGINS: https://${TEAM:-team07}.aiforthai.in.th,http://localhost:3000
+      CORS_ORIGINS: https://${TEAM:-team07}.aiforthai.in.th
+      # Production must never inherit local TLS-debug overrides from .env.
+      INSECURE_TLS: "0"
+      PYTHONHTTPSVERIFY: "1"
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:
@@ -47,8 +61,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: "2.0"
+          memory: 4G
+          cpus: "4.0"
 
 networks:
   app:

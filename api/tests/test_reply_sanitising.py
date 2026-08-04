@@ -7,7 +7,7 @@ intermittently, so the output filter is what actually holds the guarantee.
 
 import pytest
 
-from app.services.pathumma import _strip_emoji, _strip_reasoning
+from app.services.pathumma import _extract_text, _strip_emoji, _strip_reasoning
 
 
 @pytest.mark.parametrize(
@@ -51,3 +51,7 @@ def test_reasoning_block_removed_before_emoji_filter() -> None:
 def test_unclosed_reasoning_block_yields_empty() -> None:
     """Hitting max_tokens mid-thought leaves no usable answer."""
     assert _strip_reasoning("<think>still thinking about") == ""
+
+
+def test_unknown_success_payload_is_not_rendered_to_the_student() -> None:
+    assert _extract_text({"error": "provider returned an unexpected shape"}) == ""

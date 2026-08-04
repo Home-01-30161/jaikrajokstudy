@@ -25,7 +25,9 @@ async def extract_text(image_bytes: bytes) -> ServiceResult:
     files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(
+            timeout=30.0, verify=not settings.insecure_tls
+        ) as client:
             resp = await client.post(url, headers=headers, files=files)
             try:
                 raw = resp.json()

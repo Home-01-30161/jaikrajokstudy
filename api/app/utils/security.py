@@ -17,9 +17,11 @@ from app.config import get_settings
 
 SESSION_COOKIE = "jaikrajok_session"
 _SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
+_MIN_PRODUCTION_SECRET_CHARS = 32
 _DEV_SESSION_SECRET = secrets.token_urlsafe(32)
 _RATE_WINDOW_SECONDS = 60.0
 _RATE_LIMITS = {"GET": 60, "POST": 20, "DELETE": 20}
+_RATE_MAX_BUCKETS = 10_000
 _rate_lock = threading.Lock()
 _rate_windows: dict[str, deque[float]] = {}
 
@@ -31,6 +33,14 @@ def new_request_id() -> str:
 def _session_secret() -> bytes:
     settings = get_settings()
     if settings.session_secret:
+        if (
+            settings.app_env.lower() == "production"
+            and len(settings.session_secret) < _MIN_PRODUCTION_SECRET_CHARS
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="Session signing key must be at least 32 characters",
+            )
         return settings.session_secret.encode("utf-8")
     if settings.app_env.lower() == "production":
         raise HTTPException(status_code=503, detail="Session signing key is not configured")
@@ -123,6 +133,21 @@ def enforce_rate_limit(request: Request) -> None:
     key = f"{identity}:{method}:{request.url.path}"
 
     with _rate_lock:
+        if key not in _rate_windows and len(_rate_windows) >= _RATE_MAX_BUCKETS:
+            cutoff = now - _RATE_WINDOW_SECONDS
+            for stale_key, stale_window in list(_rate_windows.items()):
+                while stale_window and stale_window[0] <= cutoff:
+                    stale_window.popleft()
+                if not stale_window:
+                    _rate_windows.pop(stale_key, None)
+
+            if len(_rate_windows) >= _RATE_MAX_BUCKETS:
+                oldest_key = min(
+                    _rate_windows,
+                    key=lambda bucket_key: _rate_windows[bucket_key][-1],
+                )
+                _rate_windows.pop(oldest_key, None)
+
         window = _rate_windows.setdefault(key, deque())
         cutoff = now - _RATE_WINDOW_SECONDS
         while window and window[0] <= cutoff:

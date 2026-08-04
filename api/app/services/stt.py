@@ -114,7 +114,9 @@ async def _transcribe_partii(
     params = {"outputlevel": "--uttlevel", "outputformat": "--txt"}
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(
+            timeout=60.0, verify=not settings.insecure_tls
+        ) as client:
             resp = await client.post(url, headers=headers, files=files, data=params)
             try:
                 raw = resp.json()

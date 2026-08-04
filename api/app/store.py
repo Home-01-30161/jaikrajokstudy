@@ -128,35 +128,36 @@ def user_trend(user_id: str, days: int = 7) -> dict:
         conn = get_conn()
         uh = _hash_user(user_id)
         since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
-        rows = conn.execute(
-            "SELECT substr(created_at, 1, 10) AS day, mood, COUNT(*) AS n"
-            " FROM mood_events WHERE user_hash = ? AND substr(created_at, 1, 10) >= ?"
-            " GROUP BY day, mood ORDER BY day",
-            (uh, since),
-        ).fetchall()
+        with _lock:
+            rows = conn.execute(
+                "SELECT substr(created_at, 1, 10) AS day, mood, COUNT(*) AS n"
+                " FROM mood_events WHERE user_hash = ? AND substr(created_at, 1, 10) >= ?"
+                " GROUP BY day, mood ORDER BY day",
+                (uh, since),
+            ).fetchall()
+
+            counters = conn.execute(
+                "SELECT messages, first_seen FROM message_counts WHERE user_hash = ?",
+                (uh,),
+            ).fetchone()
+
+            overall = conn.execute(
+                "SELECT mood, COUNT(*) AS n FROM mood_events WHERE user_hash = ?"
+                " GROUP BY mood ORDER BY n DESC LIMIT 1",
+                (uh,),
+            ).fetchone()
+
+            active_days = conn.execute(
+                "SELECT COUNT(DISTINCT substr(created_at, 1, 10)) AS d"
+                " FROM mood_events WHERE user_hash = ?",
+                (uh,),
+            ).fetchone()
 
         by_day: dict[str, tuple[str, int]] = {}
         for r in rows:
             prev = by_day.get(r["day"])
             if prev is None or r["n"] > prev[1]:
                 by_day[r["day"]] = (r["mood"], r["n"])
-
-        counters = conn.execute(
-            "SELECT messages, first_seen FROM message_counts WHERE user_hash = ?",
-            (uh,),
-        ).fetchone()
-
-        overall = conn.execute(
-            "SELECT mood, COUNT(*) AS n FROM mood_events WHERE user_hash = ?"
-            " GROUP BY mood ORDER BY n DESC LIMIT 1",
-            (uh,),
-        ).fetchone()
-
-        active_days = conn.execute(
-            "SELECT COUNT(DISTINCT substr(created_at, 1, 10)) AS d"
-            " FROM mood_events WHERE user_hash = ?",
-            (uh,),
-        ).fetchone()
 
         return {
             "days": [
@@ -177,27 +178,28 @@ def school_overview() -> dict:
     """Anonymous aggregate across all users. Empty until real traffic exists."""
     try:
         conn = get_conn()
-        users = conn.execute("SELECT COUNT(*) AS n FROM message_counts").fetchone()["n"]
-        total = conn.execute("SELECT COUNT(*) AS n FROM mood_events").fetchone()["n"]
-        if users < _MIN_SCHOOL_USERS:
-            return {
-                "users": 0,
-                "readings": 0,
-                "distribution": {},
-                "stress_ratio": None,
-                "regular_ratio": None,
-                "suppressed": True,
-            }
-        rows = conn.execute(
-            "SELECT mood, COUNT(*) AS n FROM mood_events GROUP BY mood"
-        ).fetchall()
-        distribution = {r["mood"]: r["n"] for r in rows}
+        with _lock:
+            users = conn.execute("SELECT COUNT(*) AS n FROM message_counts").fetchone()["n"]
+            total = conn.execute("SELECT COUNT(*) AS n FROM mood_events").fetchone()["n"]
+            if users < _MIN_SCHOOL_USERS:
+                return {
+                    "users": 0,
+                    "readings": 0,
+                    "distribution": {},
+                    "stress_ratio": None,
+                    "regular_ratio": None,
+                    "suppressed": True,
+                }
+            rows = conn.execute(
+                "SELECT mood, COUNT(*) AS n FROM mood_events GROUP BY mood"
+            ).fetchall()
+            distribution = {r["mood"]: r["n"] for r in rows}
 
-        stressed = distribution.get("stressed", 0) + distribution.get("sad", 0)
-        # Users with more than a handful of readings count as regulars.
-        regulars = conn.execute(
-            "SELECT COUNT(*) AS n FROM message_counts WHERE messages >= 5"
-        ).fetchone()["n"]
+            stressed = distribution.get("stressed", 0) + distribution.get("sad", 0)
+            # Users with more than a handful of readings count as regulars.
+            regulars = conn.execute(
+                "SELECT COUNT(*) AS n FROM message_counts WHERE messages >= 5"
+            ).fetchone()["n"]
 
         return {
             "users": users,
@@ -228,15 +230,16 @@ def export_user(user_id: str) -> dict:
     try:
         conn = get_conn()
         uh = _hash_user(user_id)
-        rows = conn.execute(
-            "SELECT mood, source, confidence, created_at FROM mood_events"
-            " WHERE user_hash = ? ORDER BY created_at",
-            (uh,),
-        ).fetchall()
-        counters = conn.execute(
-            "SELECT messages, first_seen, last_seen FROM message_counts WHERE user_hash = ?",
-            (uh,),
-        ).fetchone()
+        with _lock:
+            rows = conn.execute(
+                "SELECT mood, source, confidence, created_at FROM mood_events"
+                " WHERE user_hash = ? ORDER BY created_at",
+                (uh,),
+            ).fetchall()
+            counters = conn.execute(
+                "SELECT messages, first_seen, last_seen FROM message_counts WHERE user_hash = ?",
+                (uh,),
+            ).fetchone()
 
         return {
             "exported_at": _now(),

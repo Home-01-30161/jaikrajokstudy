@@ -18,7 +18,7 @@ async def analyze_sentiment(text: str) -> ServiceResult:
         result.sentiment = SentimentResult(
             label=result.label,
             polarity=result.label,
-            score=result.score or 0.5
+            score=result.score if result.score is not None else 0.5,
         )
     return result
 
@@ -37,7 +37,9 @@ async def analyze_text(text: str) -> ServiceResult:
     data = {"text": text}
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(
+            timeout=30.0, verify=not settings.insecure_tls
+        ) as client:
             resp = await client.post(url, headers=headers, data=data)
             try:
                 raw = resp.json()
@@ -82,8 +84,11 @@ def _normalize_score(score: object) -> float | None:
 
 
 def _parse_sentiment(raw: dict) -> tuple[str | None, float | None]:
-    sentiment = raw.get("sentiment") or raw.get("polarity") or raw.get("label")
-    score = raw.get("score") or raw.get("confidence")
+    sentiment = next(
+        (raw[key] for key in ("sentiment", "polarity", "label") if raw.get(key) is not None),
+        None,
+    )
+    score = raw.get("score") if raw.get("score") is not None else raw.get("confidence")
     if isinstance(sentiment, dict):
         label = sentiment.get("polarity") or sentiment.get("label")
         score = sentiment.get("score", score)

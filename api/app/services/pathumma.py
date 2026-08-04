@@ -163,7 +163,9 @@ async def _generate_textqa(prompt: str, settings) -> ServiceResult:
 
     url = settings.pathumma_endpoint or PATHUMMA_TEXTQA_URL
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(
+            timeout=60.0, verify=not settings.insecure_tls
+        ) as client:
             resp = await client.post(url, headers=headers, files=form)
             try:
                 raw = resp.json()
@@ -182,6 +184,10 @@ async def _generate_textqa(prompt: str, settings) -> ServiceResult:
             text = _strip_emoji(
                 _strip_reasoning(_extract_text(raw if isinstance(raw, dict) else {}))
             )
+            if not text:
+                return ServiceResult(
+                    service="pathumma", ok=False, error="empty or unrecognised reply"
+                )
             return ServiceResult(
                 service="pathumma",
                 ok=True,
@@ -208,4 +214,4 @@ def _extract_text(raw: dict) -> str:
     for key in ("content", "response", "output", "text", "result", "generated_text"):
         if raw.get(key):
             return str(raw[key]).strip()
-    return str(raw)[:2000]
+    return ""

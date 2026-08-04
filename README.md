@@ -23,7 +23,9 @@ but inputs are sent to the configured external AI services for processing.
 - `api/tests/`: unit and API boundary tests.
 - `web/client/src/`: React frontend source.
 - `api/app/frontend/`: committed Vite production output served by FastAPI.
-- `docker-compose.yml`: production container and persistent upload/database volume.
+- `web/Dockerfile`: production frontend image listening on container port 3000.
+- `docker-compose.yml`: separate frontend/API services and the persistent
+  upload/SQLite volume required by the hackathon platform.
 - `docs/`: deployment and testing notes.
 
 ## Local Development
@@ -52,6 +54,11 @@ uvicorn app.main:app --reload --port 8000
 
 Run the frontend separately with `npm run dev`; Vite proxies `/api` to the
 FastAPI server.
+
+The production compose deployment publishes only `127.0.0.1:20060` for the
+frontend and `127.0.0.1:20061` for the API. The public reverse proxy exposes
+them as `https://team07.aiforthai.in.th/` and
+`https://team07.aiforthai.in.th/api/`.
 
 ## Security Notes
 

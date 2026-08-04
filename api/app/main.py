@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -10,6 +10,7 @@ from app.api.webhooks.line import router as line_router
 from app.api.web_chat import router as web_router
 from app.config import get_settings
 from app.utils.logging import setup_logging
+from app.utils.security import new_request_id
 
 setup_logging()
 settings = get_settings()
@@ -37,6 +38,34 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = (
+        "camera=(self), microphone=(self), geolocation=()"
+    )
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: blob:; "
+        "media-src 'self' blob:; "
+        "connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; "
+        "form-action 'self'"
+    )
+    response.headers["X-Request-ID"] = new_request_id()
+    if settings.app_env.lower() == "production":
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
+    return response
+
 app.include_router(line_router)
 app.include_router(web_router)
 
@@ -44,9 +73,15 @@ app.include_router(web_router)
 @app.get("/health")
 async def health() -> dict:
     """Required by the deploy pipeline: must return 200 when ready."""
-    session_configured = bool(settings.session_secret) or settings.app_env.lower() != "production"
+    session_configured = (
+        len(settings.session_secret) >= 32
+        or settings.app_env.lower() != "production"
+    )
     if not session_configured:
-        raise HTTPException(status_code=503, detail="SESSION_SECRET is not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="SESSION_SECRET must be configured with at least 32 characters",
+        )
     return {
         "status": "ok",
         "app": "jaikrajok",

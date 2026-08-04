@@ -105,7 +105,7 @@ deploy:
   script:
     # secrets come from CI/CD Variables prefixed with APP_ (set them Masked)
     - printenv | grep '^APP_' > .env || true
-    - test -n "${APP_SESSION_SECRET:-}" || { echo "APP_SESSION_SECRET is required for production sessions"; exit 1; }
+    - test "${#APP_SESSION_SECRET}" -ge 32 || { echo "APP_SESSION_SECRET must be at least 32 characters"; exit 1; }
     - docker compose -p "$TEAM" up -d --build --remove-orphans
     - |
       echo "waiting for healthcheck..."
@@ -125,12 +125,29 @@ deploy:
         docker compose -p "$TEAM" logs --tail=200 --no-color api
         exit 1
       fi
+      FRONTEND_CID=$(docker compose -p "$TEAM" ps -q frontend)
+      echo "frontend container: $FRONTEND_CID"
+      frontend_st=none
+      for i in $(seq 1 20); do
+        frontend_st=$(docker inspect -f '{{.State.Health.Status}}' "$FRONTEND_CID" 2>/dev/null || echo none)
+        [ "$frontend_st" = "healthy" ] && { echo "frontend healthy"; break; }
+        echo "  [$i/20] status=$frontend_st"
+        sleep 3
+      done
+      docker compose -p "$TEAM" ps
+      if [ "$frontend_st" != "healthy" ]; then
+        echo "frontend never became healthy - last 200 log lines:"
+        docker compose -p "$TEAM" logs --tail=200 --no-color frontend
+        exit 1
+      fi
     - |
       # The job runs in its own container, so the host loopback where compose
       # published ${BASE_1} is not reachable from here. Verify /health from
       # inside the api container instead.
       docker compose -p "$TEAM" exec -T api curl -fsS http://localhost:8000/health \
         && echo " <- /health OK"
+      docker compose -p "$TEAM" exec -T frontend wget -qO- http://localhost:3000/healthz \
+        && echo " <- frontend /healthz OK"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 

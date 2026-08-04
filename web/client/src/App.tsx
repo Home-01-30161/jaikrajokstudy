@@ -2,7 +2,13 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
-import { api, type ChatResult, type AnalysisResult, type TrendResult, type SchoolResult, type ExportResult, type Mood } from "@/lib/api";
+import {
+  api,
+  type ExportResult,
+  type Mood,
+  type SchoolResult,
+  type TrendResult,
+} from "@/lib/api";
 
 /* ============ IMAGE PATHS ============ */
 const IMG = {
@@ -29,18 +35,17 @@ const IMG = {
     glasses: "/collage/glasses.png",
     redstar: "/collage/redstar.png",
     star: "/collage/star.png",
-    designPreview: "/collage/home-preview.jpg",
 };
 
 /* ============ DESIGN TOKENS ============ */
 const T = {
-  cream: "#F3EEE1",
-  black: "#1A1A1A",
-  salmon: "#FFB5A7",
-  teal: "#2D6A6F",
+  cream: "#F5F0E8",
+  black: "#08090A",
+  salmon: "#FF3366",
+  teal: "#FF3366",
   red: "#C41E3A",
-  white: "#FFFFFF",
-  gridLine: "rgba(160,150,130,0.14)",
+  white: "#F0EFE9",
+  gridLine: "rgba(26,20,10,0.08)",
 };
 
 /* ============ EMOJI / MOOD DATA ============ */
@@ -56,7 +61,7 @@ interface MoodInfo {
   concern: boolean;
 }
 
-const EMO: Record<string, MoodInfo> = {
+const EMO: Record<Mood, MoodInfo> = {
   stressed: {
     label: "เครียด / กังวล",
     emoji: "😣",
@@ -125,44 +130,9 @@ const EMO: Record<string, MoodInfo> = {
   },
 };
 
-const KEYWORDS: Record<string, string[]> = {
-  stressed: ["เครียด", "กังวล", "กลัว", "สอบ", "ทำไม่ทัน", "หนัก", "กดดัน", "วิตก", "แย่แล้ว", "ไม่ทัน"],
-  sad: ["เศร้า", "ท้อ", "ผิดหวัง", "ร้องไห้", "แย่", "เบื่อ", "หมดหวัง", "น้อยใจ"],
-  tired: ["เหนื่อย", "ง่วง", "หมดแรง", "ไม่มีแรง", "อ่อนเพลีย", "นอนไม่พอ", "ล้า", "หมดไฟ"],
-  positive: ["ดีใจ", "สนุก", "มีความสุข", "โล่งใจ", "ผ่านไปได้", "ภูมิใจ", "สำเร็จ", "ทำได้แล้ว"],
-  calm: ["สงบ", "โอเค", "ปกติ", "สบายใจ", "ผ่อนคลาย"],
-};
-
-const RESPONSES: Record<string, string[]> = {
-  stressed: [
-    "เข้าใจนะ ความกดดันแบบนี้เป็นเรื่องปกติมากสำหรับช่วงใกล้สอบ ลองพักสายตาสัก 5 นาที แล้วเลือกทำโจทย์ที่มั่นใจที่สุดก่อนได้ไหม กระจกอยู่เป็นเพื่อนด้วยนะ",
-    "ฟังดูหนักใจไม่น้อยเลย ลองหายใจเข้าลึกๆ ช้าๆ สัก 3 ครั้ง แล้วค่อยแบ่งงานเป็นชิ้นเล็กๆ ทีละอย่างนะ",
-  ],
-  sad: [
-    "ขอบคุณที่กล้าเล่าให้ฟังนะ ความรู้สึกแบบนี้ไม่ผิดเลย อยากให้รู้ว่ามีที่นี่ให้ระบายได้เสมอ",
-    "บางวันก็เป็นแบบนี้แหละ ให้ตัวเองได้เศร้าได้บ้างก็ได้ ลองเล่าเพิ่มได้ไหมว่าเกิดอะไรขึ้น",
-  ],
-  tired: [
-    "ร่างกายกำลังบอกว่าต้องการพักนะ ลองงีบสัก 20 นาที หรือลุกไปเดินยืดเส้นยืดสายก่อนได้ไหม",
-    "เหนื่อยล้าสะสมแบบนี้ ถ้าฝืนต่อไปสมองจะจำเนื้อหาได้ยากขึ้นนะ ลองพักจริงจังสักครู่กัน",
-  ],
-  neutral: [
-    "รับทราบนะ ถ้ามีอะไรอยากเล่าเพิ่มเติม หรืออยากให้ช่วยดูการบ้านก็บอกกระจกได้เลย",
-    "โอเคเลย กระจกอยู่ตรงนี้ พร้อมฟังทุกเรื่องไม่ว่าจะเรื่องเรียนหรือเรื่องทั่วไป",
-  ],
-  calm: [
-    "ดีใจที่วันนี้ใจสงบนะ รักษาจังหวะแบบนี้ไว้แล้วค่อยๆ ทบทวนบทเรียนไปทีละนิดได้เลย",
-    "สบายใจแบบนี้ดีมากเลย ถ้าพร้อมแล้วอยากให้กระจกช่วยทบทวนเรื่องไหนก่อนไหม",
-  ],
-  positive: [
-    "เก่งมากเลย! ความรู้สึกดีๆ แบบนี้ให้ตัวเองได้ภูมิใจไปกับมันเต็มที่นะ",
-    "สุดยอดเลย กระจกดีใจไปด้วยนะ ลองเก็บความรู้สึกนี้ไว้เป็นกำลังใจสำหรับตอนที่เหนื่อยด้วย",
-  ],
-};
-
 const TRANSPARENCY: Record<string, string> = {
-  เซลฟี่: "กำลังตรวจว่าภาพมีใบหน้าหรือไม่ (ไม่วิเคราะห์อารมณ์จากใบหน้า)",
-  ข้อความ: "กำลังวิเคราะห์ความรู้สึกจากข้อความ (Sentiment Analysis API)",
+  เซลฟี่: "กำลังตรวจว่ามีใบหน้าในภาพหรือไม่ ระบบไม่วิเคราะห์อารมณ์จากสีหน้า",
+  ข้อความ: "กำลังวิเคราะห์น้ำเสียงจากข้อความ (Sentiment Analysis API)",
   เสียงพูด: "กำลังแปลงเสียงพูดเป็นข้อความ (Speech-to-Text API)",
   รูปการบ้าน: "กำลังอ่านข้อความจากภาพ (OCR API)",
 };
@@ -185,7 +155,7 @@ interface TrendPoint {
   id: number;
   valence: number;
   color: string;
-  key: string;
+  key: Mood;
   label: string;
 }
 
@@ -194,8 +164,222 @@ interface LogEntry {
   time: string;
   label: string;
   source: string;
-  key: string;
+  key: Mood;
 }
+
+/* ============ ICON COMPONENTS ============ */
+function CameraIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function MicIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  );
+}
+
+function ImageIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </svg>
+  );
+}
+
+function SpeakerIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+    </svg>
+  );
+}
+
+function RefreshIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </svg>
+  );
+}
+
+function LightbulbIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18h6" />
+      <path d="M10 22h4" />
+      <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
+    </svg>
+  );
+}
+
+function EyeIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function DownloadIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function TrashIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+function SendIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  );
+}
+
+function HandshakeIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a4 4 0 0 1 8 0 4 4 0 0 1 8 0z" />
+    </svg>
+  );
+}
+
+function PhoneIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
+function AlertIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+/* ============ CRISIS ALERT COMPONENT ============ */
+function CrisisAlert({ onDismiss, onCall1323 }: { onDismiss: () => void; onCall1323: () => void }) {
+  return (
+    <div
+      className="fixed top-0 left-0 right-0 z-50 mx-auto mt-4 max-w-2xl"
+      style={{
+        animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+      }}
+    >
+      <div
+        className="mx-4 rounded-2xl p-6 shadow-2xl"
+        style={{
+          backgroundColor: "#FEF2F2",
+          border: "2px solid #EF4444",
+        }}
+      >
+        <div className="flex items-start gap-4">
+          <div
+            className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: "#FEE2E2" }}
+          >
+            <AlertIcon size={24} />
+          </div>
+          <div className="flex-1">
+            <h3
+              className="font-bold text-lg mb-2"
+              style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#991B1B" }}
+            >
+              เราสังเกตเห็นว่าคุณอาจกำลังลำบากใจมาก
+            </h3>
+            <p
+              className="text-sm mb-4"
+              style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#7F1D1D" }}
+            >
+              คุณไม่ได้อยู่คนเดียว มีผู้เชี่ยวชาญพร้อมช่วยเหลือคุณตลอด 24 ชั่วโมง
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={onCall1323}
+                className="flex items-center justify-center gap-2 px-5 py-3 rounded-full font-bold text-sm transition-all"
+                style={{
+                  backgroundColor: "#EF4444",
+                  color: "#FFFFFF",
+                  fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                  border: "none",
+                  boxShadow: "0 4px 12px rgba(239, 68, 68, 0.3)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#DC2626";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                  e.currentTarget.style.boxShadow = "0 6px 16px rgba(239, 68, 68, 0.4)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "#EF4444";
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(239, 68, 68, 0.3)";
+                }}
+              >
+                <PhoneIcon size={18} />
+                โทร 1323 (สายด่วนสุขภาพจิต)
+              </button>
+              <button
+                onClick={onDismiss}
+                className="px-5 py-3 rounded-full font-semibold text-sm transition-all"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  color: "#991B1B",
+                  fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                  border: "1.5px solid #FCA5A5",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#FEE2E2";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "#FFFFFF";
+                }}
+              >
+                ฉันโอเค ขอบคุณ
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 
 /* ============ CHECKERSTRIP ============ */
 function CheckerStrip({ className = "" }: { className?: string }) {
@@ -392,9 +576,8 @@ function SalmonBtn({ children, onClick, fullWidth = false }: {
 /* ============ LOGIN PAGE ============ */
 function LoginPage({ onNext }: { onNext: () => void }) {
   useEffect(() => {
-    // Title screen stagger in
-    gsap.fromTo(".login-img", { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power3.out" });
-    gsap.fromTo(".login-form", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)", delay: 0.3 });
+    gsap.fromTo(".login-img", { x: -30 }, { x: 0, duration: 1.0, ease: "power3.out" });
+    gsap.fromTo(".login-form", { y: 20 }, { y: 0, duration: 0.8, ease: "back.out(1.2)", delay: 0.2 });
   }, []);
 
   return (
@@ -406,7 +589,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
         className="absolute left-0 top-0 bottom-0 z-0 login-img"
         style={{
           width: "55%",
-          backgroundColor: T.cream,
+          backgroundColor: "#E5E0D8", // Light background for collage visibility
         }}
       >
         <img
@@ -427,8 +610,8 @@ function LoginPage({ onNext }: { onNext: () => void }) {
       {/* RIGHT: black panel with form card */}
       <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-10 pointer-events-none" style={{ width: "45%" }}>
         {/* Hand-pen collage */}
-        <div className="fixed bottom-[-150px] right-[-150px] z-40 pointer-events-none" style={{ width: "1200px" }}>
-          <img src={IMG.hand} alt="" className="w-full h-auto" />
+        <div className="fixed bottom-0 right-0 z-10 pointer-events-none" style={{ width: "150px" }}>
+          <img src={IMG.hand} alt="" className="w-full h-auto opacity-80" />
         </div>
       </div>
       
@@ -446,31 +629,20 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           }}
         >
           <p className="text-xl font-semibold mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>Welcome To</p>
-          <h1 className="text-5xl font-black mb-6" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red, lineHeight: 1.1 }}>JaiKraJok</h1>
-
-          <p className="text-sm text-center mb-4" style={{ color: "rgba(26,26,26,0.7)", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
-            เริ่มใช้งานด้วยเซสชันแบบไม่ระบุตัวตน ไม่ต้องกรอกอีเมลหรือรหัสผ่าน
+          <h1 className="text-5xl font-black mb-5" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.red, lineHeight: 1.1 }}>JaiKraJok</h1>
+          <p className="text-sm leading-relaxed mb-6" style={{ color: "rgba(26,26,26,0.72)", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+            เริ่มใช้งานด้วยเซสชันแบบไม่ระบุตัวตน เราไม่ขอชื่อ อีเมล หรือรหัสผ่าน
           </p>
-          <button onClick={onNext}
-            className="w-full py-3.5 rounded-full font-bold text-white text-base mb-3 transition-all active:scale-[0.97]"
-            style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
-          >
-            เริ่มใช้งาน
-          </button>
-
+          <div className="rounded-2xl p-4 mb-6 text-sm" style={{ background: "rgba(255,255,255,0.62)", color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+            ข้อความ ภาพ และเสียงจะถูกส่งไปยังบริการ AI เฉพาะเมื่อคุณเลือกใช้งานโหมดนั้น
+          </div>
 
           <button
-            onClick={() => toast("ฟีเจอร์ Google Login กำลังพัฒนา")}
-            className="hidden"
+            onClick={onNext}
+            className="w-full py-3.5 rounded-full font-bold text-white text-base transition-all active:scale-[0.97]"
             style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
           >
-            Log In With Google
-            <svg width="16" height="16" viewBox="0 0 48 48">
-              <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
-              <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
-              <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
-              <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
-            </svg>
+            เริ่มใช้งานแบบไม่ระบุตัวตน
           </button>
         </div>
       </div>
@@ -483,7 +655,7 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
         <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
         <img src={IMG.origamiStarsNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
-        <img src={IMG.hand} className="absolute bottom-[-100px] right-[-100px] w-[800px] h-auto pointer-events-none z-20" alt="" />
+        <img src={IMG.hand} className="absolute bottom-[-40px] right-[-40px] w-[420px] h-auto pointer-events-none z-0 opacity-70" alt="" />
         <img src={IMG.redstar} className="absolute top-16 right-24 w-16 h-auto pointer-events-none z-0" alt="" />
         <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
         <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
@@ -501,6 +673,7 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
 }
 
 function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => void; onNext: () => void }) {
+  const valid = Boolean(age && Number(age) > 0 && Number(age) < 120);
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
         <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
@@ -515,13 +688,15 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
         </p>
         <input
           type="number"
+          min="1"
+          max="119"
           value={age}
           onChange={(e) => setAge(e.target.value)}
           placeholder="ระบุอายุของคุณ"
           className="w-full px-5 py-4 rounded-2xl mb-10 outline-none focus:ring-2 text-lg text-center"
           style={{ backgroundColor: "#EBE5DC", border: "2px solid #1a1a1a", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}
         />
-        <button onClick={() => { if (!age || parseInt(age) <= 0) return; onNext(); }} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
+        <button onClick={onNext} disabled={!valid} className="px-8 py-3 rounded-full transition-all active:scale-[0.97] disabled:opacity-50" style={{ backgroundColor: "#2D6A6F" }}>
           <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>ถัดไป</span>
         </button>
       </div>
@@ -531,7 +706,6 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
 
 function GuardianPage({ onNext }: { onNext: () => void }) {
   const [confirmed, setConfirmed] = useState(false);
-
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
         <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
@@ -539,39 +713,25 @@ function GuardianPage({ onNext }: { onNext: () => void }) {
         <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0 " alt="" />
         <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
         <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-          ขอความยินยอมจากผู้ปกครอง
+          ก่อนเริ่ม ขอให้ผู้ใหญ่รับทราบ
         </h2>
         <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
-          เนื่องจากคุณอายุต่ำกว่า 20 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณ
+          หากคุณอายุต่ำกว่า 20 ปี ควรใช้งานโดยมีผู้ปกครองหรือผู้ใหญ่ที่ไว้ใจรับทราบร่วมกัน
         </p>
-        <div className="flex flex-col gap-6">
-          <label className="flex items-start gap-3 text-sm leading-relaxed" style={{ color: "#4a4a4a", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
-              className="mt-1 h-4 w-4"
-            />
-            <span>ฉันได้ให้ผู้ปกครองรับทราบและยินยอมให้ใช้บริการนี้แล้ว</span>
-          </label>
-          <p className="text-xs leading-relaxed" style={{ color: "#6b7280", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
-            ระบบสาธิตนี้ยังไม่มีการส่งอีเมลหรือการตรวจสอบผู้ปกครองอัตโนมัติ โปรดให้ผู้ปกครองอยู่ด้วยและตรวจสอบข้อมูลก่อนใช้งาน
-          </p>
-          <button
-            onClick={onNext}
-            disabled={!confirmed}
-            className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ backgroundColor: "#2D6A6F", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
-          >
-            ยืนยันและถัดไป
-          </button>
-        </div>
+        <label className="flex gap-3 items-start p-5 rounded-2xl mb-6" style={{ backgroundColor: "#EBE5DC", color: "#1a1a1a", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />
+          <span>ฉันได้บอกผู้ปกครองหรือผู้ใหญ่ที่ไว้ใจแล้ว และเข้าใจว่าใจกระจกไม่ใช่บริการฉุกเฉินหรือผู้เชี่ยวชาญสุขภาพจิต</span>
+        </label>
+        <button onClick={onNext} disabled={!confirmed} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] disabled:opacity-50" style={{ backgroundColor: "#2D6A6F", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+          ยืนยันและไปต่อ
+        </button>
       </div>
     </div>
   );
 }
 
 function PrivacyPage({ onNext }: { onNext: () => void }) {
+  const [accepted, setAccepted] = useState(false);
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
         <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
@@ -591,12 +751,16 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
             fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
           }}
         >
-          <p className="mb-4">JaiKraJok ใช้เซสชันแบบไม่ระบุตัวตนเพื่อแยกประวัติของคุณออกจากผู้ใช้อื่น</p>
-          <p className="mb-4">1. ข้อความ ภาพ และเสียงจะถูกส่งไปยังบริการ AI ที่จำเป็นต่อการวิเคราะห์ และไม่ถูกเก็บเป็นไฟล์ถาวรโดยแอปนี้</p>
-          <p className="mb-4">2. ระบบจะเก็บเฉพาะสรุปแนวโน้มอารมณ์และสถิติการใช้งานแบบรหัสแทนชื่อ</p>
-          <p>3. คุณสามารถส่งออกหรือลบข้อมูลแนวโน้มของเซสชันนี้ได้จากเมนูข้อมูล</p>
+          <p className="mb-4">เราใช้เซสชันแบบไม่ระบุตัวตนและไม่ขอชื่อจริง โรงเรียน หรือข้อมูลติดต่อ</p>
+          <p className="mb-4">1. ข้อความ ภาพ และเสียงจะถูกส่งไปยังบริการ AI ภายนอกเฉพาะเมื่อคุณเลือกใช้โหมดนั้น</p>
+          <p className="mb-4">2. แอปไม่บันทึกเนื้อหาแชท ภาพ หรือเสียงลงฐานข้อมูล แต่บันทึกผลอารมณ์ เวลา แหล่งที่มา และจำนวนการใช้งาน</p>
+          <p>3. คุณสามารถส่งออกหรือลบข้อมูลที่จัดเก็บได้จากเมนูความปลอดภัยและข้อมูล</p>
         </div>
-        <button onClick={onNext} className="px-8 py-3 rounded-full transition-all active:scale-[0.97]" style={{ backgroundColor: "#2D6A6F" }}>
+        <label className="flex gap-3 items-start mb-6 text-sm" style={{ color: "#1a1a1a", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+          <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-1" />
+          <span>ฉันอ่านสรุปนี้แล้วและต้องการเริ่มใช้งาน</span>
+        </label>
+        <button onClick={onNext} disabled={!accepted} className="px-8 py-3 rounded-full transition-all active:scale-[0.97] disabled:opacity-50" style={{ backgroundColor: "#2D6A6F" }}>
           <span style={{ color: "#ffffff", fontWeight: "bold", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>ยอมรับและเข้าสู่ระบบ</span>
         </button>
       </div>
@@ -607,16 +771,9 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
 /* ============ MAIN APP SHELL ============ */
 function AppShell({ age, guardianConsent }: { age: string; guardianConsent: boolean }) {
   const [currentView, setCurrentView] = useState<AppView>("home");
-  const [mood, setMood] = useState<string>("calm");
+  const [mood, setMood] = useState<Mood>("calm");
   const [sessionReady, setSessionReady] = useState(false);
-  const selfieInputRef = useRef<HTMLInputElement>(null);
-  const homeworkInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    api.createSession()
-      .then(() => setSessionReady(true))
-      .catch(() => toast.error("เริ่มเซสชันไม่สำเร็จ ลองโหลดหน้าใหม่อีกครั้ง"));
-  }, []);
+  const [dataRevision, setDataRevision] = useState(0);
 
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
@@ -632,9 +789,99 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [concernStreak, setConcernStreak] = useState(0);
-  const [modesUsed, setModesUsed] = useState<Set<string>>(new Set());
   const [transparencyLogs, setTransparencyLogs] = useState<string[]>([]);
   const [showEscalationModal, setShowEscalationModal] = useState(false);
+  const [showCrisisAlert, setShowCrisisAlert] = useState(false);
+  const [crisisDetected, setCrisisDetected] = useState(false);
+  const escalationShownRef = useRef(false);
+  const [showSupportStrip, setShowSupportStrip] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const escalationRef = useRef<HTMLDivElement>(null);
+  const selfieInputRef = useRef<HTMLInputElement>(null);
+  const homeworkInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.createSession()
+      .then(() => {
+        if (!cancelled) setSessionReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("เริ่มเซสชันไม่สำเร็จ โปรดลองโหลดหน้าใหม่");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (concernStreak >= 3 && !escalationShownRef.current) {
+      escalationShownRef.current = true;
+      const t = setTimeout(() => setShowEscalationModal(true), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [concernStreak]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    setSidebarOpen(false);
+    menuButtonRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarOpen || isDesktop) return;
+    const firstNav = drawerRef.current?.querySelector("nav button");
+    if (firstNav instanceof HTMLElement) firstNav.focus();
+  }, [sidebarOpen, isDesktop]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeDrawer(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen, closeDrawer]);
+
+  useEffect(() => {
+    if (showEscalationModal) {
+      escalationRef.current?.focus();
+    } else {
+      document.getElementById("chat-input")?.focus();
+    }
+  }, [showEscalationModal]);
+
+  useEffect(() => {
+    if (!showEscalationModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setShowEscalationModal(false); return; }
+      if (e.key !== "Tab") return;
+      const el = escalationRef.current;
+      if (!el) return;
+      const focusables = Array.from(el.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])'));
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === el)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showEscalationModal]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSidebarOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const speakText = (text: string) => {
     if (!("speechSynthesis" in window)) { toast("เบราว์เซอร์นี้ไม่รองรับ Text-to-Speech"); return; }
@@ -643,11 +890,11 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     u.lang = "th-TH";
     u.rate = 0.98;
     window.speechSynthesis.speak(u);
-    toast("🔊 กำลังอ่านข้อความเสียง...");
+    toast("กำลังอ่านข้อความเสียง...");
   };
 
-  const pushTrend = useCallback((key: string, sourceLabel: string) => {
-    const info = EMO[key] || EMO.neutral;
+  const pushTrend = useCallback((key: Mood, sourceLabel: string) => {
+    const info = EMO[key];
     setMood(key);
     setTrendData((prev) => {
       const nextId = prev.length > 0 ? prev[prev.length - 1].id + 1 : 1;
@@ -655,28 +902,24 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     });
     const nowStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
     setLogEntries((prev) => [{ id: Math.random().toString(), time: nowStr, label: info.label, source: sourceLabel, key }, ...prev.slice(0, 19)]);
-    setConcernStreak((prevStreak) => {
-      const newStreak = info.concern ? prevStreak + 1 : 0;
-      if (newStreak >= 3) setTimeout(() => setShowEscalationModal(true), 1200);
-      return newStreak;
-    });
+    setConcernStreak((prevStreak) => (info.concern ? prevStreak + 1 : 0));
+    if (info.concern) setShowSupportStrip(true);
   }, []);
 
   const noteMultimodal = useCallback((sourceLabel: string) => {
-    setModesUsed((prev) => {
-      const nextSet = new Set(prev).add(sourceLabel);
-      return nextSet;
-    });
-    const transNote = TRANSPARENCY[sourceLabel] || "กำลังส่งข้อมูลไปยังบริการวิเคราะห์ที่เลือก";
+    const transNote = TRANSPARENCY[sourceLabel] || "กำลังวิเคราะห์ข้อมูลด้วย Pathumma LLM";
     setTransparencyLogs((prev) => [transNote, ...prev.slice(0, 4)]);
   }, []);
-
 
   const sendMessage = useCallback(async (overrideText?: string, sourceLabel: string = "ข้อความ") => {
     const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim()) return;
     if (!sessionReady) {
-      toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+      toast("กำลังเตรียมเซสชัน โปรดลองอีกครั้งในอีกสักครู่");
+      return;
+    }
+    if (isAnalyzing) {
+      toast("กรุณารอให้คำขอก่อนหน้าเสร็จก่อน");
       return;
     }
     if (overrideText === undefined) setInputText("");
@@ -685,22 +928,27 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     setIsAnalyzing(true);
 
     try {
-      const result = await api.sendMessage(textToSend);
+      const result = await api.sendMessage(textToSend.trim());
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
       pushTrend(result.mood, sourceLabel);
-      if (result.crisis) {
-        setTimeout(() => setShowEscalationModal(true), 800);
+      setDataRevision((revision) => revision + 1);
+      if (result.degraded.length > 0) {
+        toast("บางบริการ AI ขัดข้องชั่วคราว ระบบใช้ผลสำรองแทน");
       }
-    } catch (err: any) {
-      toast.error(err.message || "ส่งข้อความไม่สำเร็จ");
+      if (result.crisis) {
+        setShowEscalationModal(true);
+        setCrisisDetected(true);
+        setShowCrisisAlert(true);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ส่งข้อความไม่สำเร็จ");
     } finally {
       setIsAnalyzing(false);
     }
-  }, [inputText, noteMultimodal, pushTrend, sessionReady]);
+  }, [inputText, isAnalyzing, noteMultimodal, pushTrend, sessionReady]);
 
   const analyzeSelfie = async (image: Blob, filename: string) => {
-    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "📷 ส่งภาพเพื่อเช็กว่ามีใบหน้าในภาพหรือไม่", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "ส่งภาพเพื่อตรวจว่ามีใบหน้าในภาพหรือไม่", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
     noteMultimodal("เซลฟี่");
     setIsAnalyzing(true);
 
@@ -712,17 +960,25 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
         text: result.reply,
         timestamp: Date.now(),
         cardType: "emotion",
-        emotionData: { label: "ตรวจใบหน้า", note: result.reply, color: T.teal, bg: "#E3EAE0", text: "#3C5137" }
+        emotionData: {
+          label: "ตรวจใบหน้า",
+          note: result.detail || result.reply,
+          color: T.salmon,
+          bg: "#F1DEE3",
+          text: "#6B3B49",
+        },
       }]);
-    } catch (err: any) {
-      toast.error(err.message || "วิเคราะห์ภาพไม่สำเร็จ");
+      if (!result.ok) toast.error(result.error || "วิเคราะห์ภาพไม่สำเร็จ");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "วิเคราะห์ภาพไม่สำเร็จ");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const handleSelfie = () => {
-    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน โปรดลองอีกครั้งในอีกสักครู่");
+    if (isAnalyzing) return toast("กรุณารอให้คำขอก่อนหน้าเสร็จก่อน");
     selfieInputRef.current?.click();
   };
 
@@ -733,7 +989,8 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   };
 
   const handleVoice = async () => {
-    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน โปรดลองอีกครั้งในอีกสักครู่");
+    if (isAnalyzing) return toast("กรุณารอให้คำขอก่อนหน้าเสร็จก่อน");
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       return toast.error("เบราว์เซอร์นี้ไม่รองรับการบันทึกเสียง");
     }
@@ -760,15 +1017,17 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
       const extension = audio.type.includes("mp4") ? "m4a" : "webm";
       const result = await api.transcribeVoice(audio, `voice.${extension}`);
       if (result.transcript) {
-        setMessages((prev) => [...prev, {
-          id: Math.random().toString(), role: "user", text: `🎤 (เสียงพูด): "${result.transcript}"`,
-          timestamp: Date.now(), sourceTag: "เสียงพูด"
-        }]);
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: `(เสียงพูด) “${result.transcript}”`, timestamp: Date.now(), sourceTag: "เสียงพูด" }]);
       }
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
-      pushTrend(result.mood, "เสียงพูด");
-    } catch (err: any) {
-      toast.error(err.message || "แปลงเสียงไม่สำเร็จ");
+      if (result.ok) {
+        pushTrend(result.mood, "เสียงพูด");
+        setDataRevision((revision) => revision + 1);
+      } else {
+        toast.error(result.error || "แปลงเสียงไม่สำเร็จ");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "แปลงเสียงไม่สำเร็จ");
     } finally {
       stream?.getTracks().forEach((track) => track.stop());
       setIsAnalyzing(false);
@@ -776,30 +1035,32 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   };
 
   const analyzeHomework = async (image: Blob, filename: string) => {
-    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🖼️ ส่งรูปการบ้านให้ OCR อ่าน", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "ส่งรูปการบ้านให้ใจกระจกอ่านข้อความ", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
     noteMultimodal("รูปการบ้าน");
     setIsAnalyzing(true);
 
     try {
       const result = await api.readHomework(image, filename);
       if (result.detail) {
-        setMessages((prev) => [...prev, {
-          id: Math.random().toString(), role: "bot", text: "อ่านข้อความจากภาพแล้ว", timestamp: Date.now(),
-          cardType: "ocr", ocrText: `"${result.detail}"`
-        }]);
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: "อ่านข้อความจากภาพแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `“${result.detail}”` }]);
       }
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
-      pushTrend(result.mood, "รูปการบ้าน");
-    } catch (err: any) {
-      toast.error(err.message || "อ่านการบ้านไม่สำเร็จ");
+      if (result.ok) {
+        pushTrend(result.mood, "รูปการบ้าน");
+        setDataRevision((revision) => revision + 1);
+      } else {
+        toast.error(result.error || "อ่านการบ้านไม่สำเร็จ");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "อ่านการบ้านไม่สำเร็จ");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const handleHomeworkPhoto = () => {
-    if (!sessionReady) return toast("กำลังเตรียมเซสชัน ลองอีกครั้งในอีกสักครู่นะ");
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน โปรดลองอีกครั้งในอีกสักครู่");
+    if (isAnalyzing) return toast("กรุณารอให้คำขอก่อนหน้าเสร็จก่อน");
     homeworkInputRef.current?.click();
   };
 
@@ -810,16 +1071,55 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   };
 
   const resetChat = () => {
+    if (!window.confirm("ยืนยันเริ่มการสนทนาใหม่? ประวัติที่จัดเก็บบนเซิร์ฟเวอร์จะยังอยู่จนกว่าคุณจะลบจากเมนูข้อมูล")) return;
     setMessages([{ id: "init_" + Date.now(), role: "bot", text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ", timestamp: Date.now() }]);
-    setTrendData([]); setLogEntries([]); setConcernStreak(0); setModesUsed(new Set()); setTransparencyLogs([]); setMood("calm");
+    setTrendData([]); setLogEntries([]); setConcernStreak(0); setTransparencyLogs([]); setMood("calm"); setShowSupportStrip(false);
+    escalationShownRef.current = false;
     toast("เริ่มการสนทนาใหม่แล้ว");
   };
 
   const tryMode = (mode: "camera" | "keyboard" | "mic" | "photo") => {
     setCurrentView("chat");
-    if (mode === "camera") handleSelfie();
-    else if (mode === "mic") void handleVoice();
-    else if (mode === "photo") handleHomeworkPhoto();
+    setTimeout(() => {
+      if (mode === "camera") handleSelfie();
+      else if (mode === "mic") void handleVoice();
+      else if (mode === "photo") handleHomeworkPhoto();
+    }, 300);
+  };
+
+  const exportStoredData = async () => {
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน โปรดลองอีกครั้งในอีกสักครู่");
+    try {
+      const result: ExportResult = await api.exportData();
+      const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = "jaikrajok-my-data.json";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(href), 0);
+      toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ส่งออกข้อมูลไม่สำเร็จ");
+    }
+  };
+
+  const deleteStoredData = async () => {
+    if (!window.confirm("ยืนยันลบข้อมูลทั้งหมดที่จัดเก็บสำหรับเซสชันนี้? การกระทำนี้ไม่สามารถย้อนกลับได้")) return;
+    if (!sessionReady) return toast("กำลังเตรียมเซสชัน โปรดลองอีกครั้งในอีกสักครู่");
+    try {
+      await api.deleteData();
+      setTrendData([]);
+      setLogEntries([]);
+      setConcernStreak(0);
+      setShowSupportStrip(false);
+      setDataRevision((revision) => revision + 1);
+      toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ลบข้อมูลไม่สำเร็จ");
+    }
   };
 
   const navItems: { id: AppView; label: string; iconSrc: string }[] = [
@@ -860,10 +1160,26 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
       {/* TOP CHECKERBOARD with salmon tab break */}
       <div className="fixed top-0 left-0 right-0 z-50 flex" style={{ height: "36px" }}>
         {/* Checker left of active tab */}
-        <div className="flex overflow-hidden" style={{ flex: "0 0 230px" }}>
+        <div className="relative flex overflow-hidden w-12 md:w-[230px]">
           {Array.from({ length: 16 }).map((_, i) => (
             <div key={i} style={{ flex: 1, background: i % 2 === 0 ? T.black : T.white }} />
           ))}
+          {/* Mobile menu button */}
+          <button
+            ref={menuButtonRef}
+            onClick={() => setSidebarOpen(true)}
+            aria-label="เปิดเมนู"
+            aria-expanded={sidebarOpen}
+            aria-controls="app-sidebar"
+            className="md:hidden absolute inset-y-0 left-0 w-12 flex items-center justify-center transition-colors hover:bg-black/15"
+            style={{ color: T.salmon }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+          </button>
         </div>
         {/* Active page label tab (salmon) */}
         <div
@@ -888,8 +1204,25 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
       </div>
 
       <div className="flex flex-1" style={{ paddingTop: "36px" }}>
-        {/* LEFT SIDEBAR — pure black, curved right edge */}
-        <div className="fixed left-0 z-40 flex flex-col overflow-hidden" style={{ top: "36px", bottom: 0, width: "230px" }}>
+        {/* Mobile drawer scrim */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/45 md:hidden"
+            onClick={closeDrawer}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* LEFT SIDEBAR — pure black, curved right edge; drawer on mobile */}
+        <div
+          ref={drawerRef}
+          id="app-sidebar"
+          role={isDesktop ? undefined : "dialog"}
+          aria-modal={isDesktop ? undefined : sidebarOpen}
+          aria-hidden={!isDesktop && !sidebarOpen}
+          className={`fixed left-0 z-40 flex flex-col overflow-hidden transition-transform duration-300 ease-in-out ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
+          style={{ top: "36px", bottom: 0, width: "230px" }}
+        >
           {/* Black body */}
           <div
             className="relative flex flex-col h-full"
@@ -901,7 +1234,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
               style={{ width: "32px", zIndex: 1 }}
             >
               <svg viewBox="0 0 32 100" preserveAspectRatio="none" className="w-full h-full block">
-                <path d="M32,0 L32,100 C20,80 0,60 0,35 C0,20 12,8 32,0 Z" fill={T.cream} />
+                <path d="M32,0 L32,100 C20,80 0,60 0,35 C0,20 12,8 32,0 Z" fill="#F5F0E8" />
               </svg>
             </div>
 
@@ -929,6 +1262,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                       key={item.id}
                       onClick={() => {
                         setCurrentView(item.id);
+                        closeDrawer();
                         // GSAP pop animation on click
                         const el = document.getElementById(`nav-icon-${item.id}`);
                         if (el) gsap.fromTo(el, { scale: 0.7, rotate: -15 }, { scale: 1, rotate: 0, duration: 0.5, ease: "elastic.out(1.2, 0.5)" });
@@ -985,12 +1319,12 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="flex-1 min-h-screen" style={{ marginLeft: "230px" }}>
+        <div className="flex-1 min-h-screen md:ml-[230px]">
           {/* Graph paper background */}
           <div
-            className="fixed pointer-events-none"
+            className="fixed pointer-events-none left-0 md:left-[230px]"
             style={{
-              left: "230px", top: "36px", right: 0, bottom: 0,
+              top: "36px", right: 0, bottom: 0,
               background: `linear-gradient(${T.gridLine} 1px, transparent 1px), linear-gradient(90deg, ${T.gridLine} 1px, transparent 1px)`,
               backgroundSize: "28px 28px",
               backgroundColor: T.cream,
@@ -998,7 +1332,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
             }}
           />
 
-          <div className="relative z-10 px-8 py-7">
+          <div className="relative z-10 px-5 py-6 md:px-8 md:py-7">
             {currentView === "home" && (
               <PageWrapper pageKey="home">
                 <HomeView
@@ -1007,6 +1341,20 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                   onGoChat={() => setCurrentView("chat")}
                   onGoTrend={() => setCurrentView("trend")}
                   tryMode={tryMode}
+                  trendData={trendData}
+                  onMoodTap={(key: Mood) => {
+                    setMood(key);
+                    const openingLines: Record<Mood, string> = {
+                      stressed: "วันนี้รู้สึกเครียด / กังวลอยู่นิดหน่อยค่ะ",
+                      sad: "วันนี้ใจมันท้อแท้อยู่เลยค่ะ",
+                      tired: "วันนี้รู้สึกเหนื่อยล้ามากค่ะ",
+                      neutral: "วันนี้รู้สึกปกติดีค่ะ",
+                      calm: "วันนี้ใจสงบผ่อนคลายค่ะ",
+                      positive: "วันนี้รู้สึกสดใส มีความสุขมากค่ะ",
+                    };
+                    setCurrentView("chat");
+                    void sendMessage(openingLines[key], "อารมณ์แท็บ");
+                  }}
                 />
               </PageWrapper>
             )}
@@ -1026,10 +1374,15 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                   mood={mood}
                   concernStreak={concernStreak}
                   transparencyLogs={transparencyLogs}
+                  supportStrip={showSupportStrip}
+                  onDismissSupport={() => setShowSupportStrip(false)}
                   onNotifyCounselor={() => {
                     toast("ระบบไม่ได้แจ้งครูอัตโนมัติ โปรดติดต่อผู้ใหญ่ที่ไว้ใจหรือสายด่วน 1323");
                     setShowEscalationModal(false);
                   }}
+                  showCrisisAlert={showCrisisAlert}
+                  onDismissCrisis={() => setShowCrisisAlert(false)}
+                  crisisDetected={crisisDetected}
                 />
               </PageWrapper>
             )}
@@ -1038,58 +1391,21 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                 <TrendView
                   trendData={trendData}
                   logEntries={logEntries}
-                  onClearAll={async () => {
-                    if (!window.confirm("ยืนยันลบข้อมูลแนวโน้มอารมณ์ทั้งหมดของคุณ?")) return;
-                    try {
-                      await api.deleteData();
-                      setTrendData([]); setLogEntries([]); setConcernStreak(0);
-                      toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
-                    } catch (err: any) {
-                      toast.error(err.message || "ลบข้อมูลไม่สำเร็จ");
-                    }
-                  }}
-                  onExport={async () => {
-                    try {
-                      const result = await api.exportData();
-                      const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
-                      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
-                      a.click(); URL.revokeObjectURL(a.href);
-                      toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
-                    } catch (err: any) {
-                      toast.error(err.message || "ส่งออกข้อมูลไม่สำเร็จ");
-                    }
-                  }}
+                  sessionReady={sessionReady}
+                  refreshKey={dataRevision}
+                  onClearAll={() => { void deleteStoredData(); }}
+                  onExport={() => { void exportStoredData(); }}
                 />
               </PageWrapper>
             )}
-            {currentView === "school" && <PageWrapper pageKey="school"><SchoolView /></PageWrapper>}
+            {currentView === "school" && <PageWrapper pageKey="school"><SchoolView sessionReady={sessionReady} refreshKey={dataRevision} /></PageWrapper>}
             {currentView === "safety" && (
               <PageWrapper pageKey="safety">
                 <SafetyView
                   age={age}
                   guardianConsent={guardianConsent}
-                  onExport={async () => {
-                    try {
-                      const result = await api.exportData();
-                      const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
-                      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
-                      a.click(); URL.revokeObjectURL(a.href);
-                      toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
-                    } catch (err: any) {
-                      toast.error(err.message || "ส่งออกข้อมูลไม่สำเร็จ");
-                    }
-                  }}
-                  onClearAll={async () => {
-                    if (window.confirm("ยืนยันลบข้อมูลทั้งหมดของคุณ? การกระทำนี้ไม่สามารถย้อนกลับได้")) {
-                      try {
-                        await api.deleteData();
-                        setTrendData([]); setLogEntries([]);
-                        toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
-                      } catch (err: any) {
-                        toast.error(err.message || "ลบข้อมูลไม่สำเร็จ");
-                      }
-                    }
-                  }}
+                  onExport={() => { void exportStoredData(); }}
+                  onClearAll={() => { void deleteStoredData(); }}
                 />
               </PageWrapper>
             )}
@@ -1099,10 +1415,20 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
 
       {/* ESCALATION MODAL */}
       {showEscalationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+        <div
+          ref={escalationRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="escalation-title"
+          tabIndex={-1}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 outline-none"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+        >
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl" style={{ border: `2px solid ${T.salmon}` }}>
-            <div className="text-4xl mb-3">🤝</div>
-            <h3 className="text-xl font-bold mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+            <div className="text-4xl mb-3 flex justify-center">
+              <HandshakeIcon size={48} />
+            </div>
+            <h3 id="escalation-title" className="text-xl font-bold mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
               เราสังเกตว่าช่วงนี้ใจคุณหนักอยู่หลายครั้ง
             </h3>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
@@ -1110,18 +1436,21 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => { toast("ระบบไม่ได้แจ้งครูอัตโนมัติ โปรดติดต่อผู้ใหญ่ที่ไว้ใจ"); setShowEscalationModal(false); }}
+                onClick={() => { toast("โปรดติดต่อครู ผู้ปกครอง หรือผู้ใหญ่ที่ไว้ใจด้วยตนเอง"); setShowEscalationModal(false); }}
                 className="w-full py-3 rounded-2xl text-white font-bold transition-all active:scale-[0.97]"
                 style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
               >
-                ดูแหล่งช่วยเหลือ
+                ฉันจะติดต่อผู้ใหญ่ที่ไว้ใจ
               </button>
               <a
                 href="tel:1323"
-                className="block text-center w-full py-3 rounded-2xl font-bold transition-all"
+                className="block text-center w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2"
                 style={{ color: T.red, border: `2px solid ${T.red}`, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
               >
-                📞 โทรสายด่วน 1323
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+                โทรสายด่วน 1323
               </a>
               <button
                 onClick={() => setShowEscalationModal(false)}
@@ -1138,249 +1467,402 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   );
 }
 
-/* ============ HOME VIEW ============ */
 function HomeView({
-  mood, setMood, onGoChat, onGoTrend, tryMode,
+  mood, setMood, onGoChat, onGoTrend, tryMode, trendData, onMoodTap,
 }: {
-  mood: string;
-  setMood: (v: string) => void;
+  mood: Mood;
+  setMood: (v: Mood) => void;
   onGoChat: () => void;
   onGoTrend: () => void;
   tryMode: (mode: "camera" | "keyboard" | "mic" | "photo") => void;
+  trendData: TrendPoint[];
+  onMoodTap: (key: Mood) => void;
 }) {
+  const [hoveredMode, setHoveredMode] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Hero entrance animation
+    gsap.fromTo("#hv-kicker", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out" });
+    gsap.fromTo("#hv-headline", { y: 30 }, { y: 0, duration: 0.9, ease: "power3.out", delay: 0.1 });
+    gsap.fromTo("#hv-body", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.2 });
+    gsap.fromTo("#hv-ctas", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.3 });
+    gsap.fromTo("#hv-img", { scale: 0.95 }, { scale: 1, duration: 1.0, ease: "power2.out", delay: 0.2 });
+    gsap.fromTo(".hv-strip", { y: 30 }, { y: 0, duration: 0.8, stagger: 0.1, ease: "power3.out", delay: 0.4 });
+  }, []);
+
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "อรุณสวัสดิ์ค่ะ" : hour < 18 ? "สวัสดีตอนบ่ายค่ะ" : "สวัสดีตอนเย็นค่ะ";
-  const moods = Object.entries(EMO);
+  const greeting = hour < 12 ? "อรุณสวัสดิ์" : hour < 18 ? "สวัสดีตอนบ่าย" : "สวัสดีตอนเย็น";
+  const todayThai = new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" });
+
+  const SF = "'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', sans-serif";
+
+  const modes = [
+    { id: "camera" as const, th: "ถ่ายเซลฟี่", sub: "บอกเราผ่านรูป", img: IMG.origamiStars },
+    { id: "keyboard" as const, th: "พิมพ์ความรู้สึก", sub: "ระบายความในใจ", img: IMG.handPen },
+    { id: "mic" as const, th: "พูดระบาย", sub: "ให้เราฟัง", img: IMG.megaphone },
+    { id: "photo" as const, th: "ถ่ายรูปการบ้าน", sub: "ให้เราช่วยดู", img: IMG.booksStack }
+  ];
+
+  const PINK = "#FF3366";
+  const BLACK = "#08090A";
+  const CREAM = "#F5F0E8";
+  const INK = "#1A140A";            // Deep warm ink for text on cream
+  const INK_MUTED = "rgba(26,20,10,0.45)";
+  const GRID = "rgba(26,20,10,0.07)";
+  const SERIF = "'Playfair Display', 'Noto Serif Thai', Georgia, serif";
 
   return (
-    <div className="space-y-7 max-w-4xl">
-      {/* HERO CARD */}
-      <div
-        className="p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden"
+    <div style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem", backgroundColor: CREAM }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
+
+      {/* HERO: Aardvark editorial cream warmth + Pieter typography scale */}
+      <section
+        id="hv-hero"
         style={{
-          background: "#fefdfa",
-          backgroundImage: "radial-gradient(#e0d6c8 1px, transparent 1px)",
-          backgroundSize: "20px 20px",
-          borderRadius: "16px",
-          border: "2px solid #DED3C1",
-          boxShadow: "4px 8px 0px rgba(222,211,193,0.4), 0 4px 24px rgba(0,0,0,0.06)",
+          position: "relative",
+          overflow: "hidden",
+          backgroundColor: CREAM,
+          backgroundImage: `linear-gradient(${GRID} 1px, transparent 1px), linear-gradient(90deg, ${GRID} 1px, transparent 1px)`,
+          backgroundSize: "32px 32px",
         }}
       >
-        <div className="flex items-center gap-5 z-10">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center text-4xl flex-shrink-0 -mt-2 -ml-2 shadow-lg z-10 relative"
-            style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `3px solid ${T.white}` }}
-          >
-            {EMO[mood]?.emoji || "😌"}
-            <div className="absolute inset-0 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] pointer-events-none"></div>
+        {/* Top metadata strip */}
+        <div
+          id="hv-kicker"
+          style={{
+            position: "relative", zIndex: 2,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "1.5rem clamp(1.5rem, 5vw, 4rem)",
+            borderBottom: `1px solid rgba(26,20,10,0.1)`,
+          }}
+        >
+          <span style={{ fontFamily: SF, fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: INK_MUTED }}>{todayThai}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: PINK, boxShadow: `0 0 8px ${PINK}` }} />
+            <span style={{ fontFamily: SF, fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: INK_MUTED }}>กำลังทำงาน</span>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+        </div>
+
+        {/* Main hero: big type left, collage right */}
+        <div style={{ display: "flex", flexWrap: "wrap", minHeight: "clamp(460px, 68vh, 740px)", position: "relative", zIndex: 2 }}>
+
+          {/* LEFT column: display typography */}
+          <div style={{
+            flex: "1 1 420px",
+            display: "flex", flexDirection: "column", justifyContent: "center",
+            padding: "3rem clamp(1.5rem, 5vw, 4rem) 4rem",
+          }}>
+            <p style={{
+              fontFamily: SF, fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.2em",
+              textTransform: "uppercase", color: PINK, margin: "0 0 1.5rem",
+              display: "flex", alignItems: "center", gap: "0.5rem"
+            }}>
+              <span style={{ display: "inline-block", width: "28px", height: "2px", background: PINK, borderRadius: "2px" }} />
               {greeting}
-            </h2>
-            <p className="text-sm mt-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
-              วันนี้อยากให้กระจกฟังอะไรบ้าง จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ
             </p>
-          </div>
-        </div>
-        <div className="flex gap-3 flex-shrink-0 z-10">
-          <button
-            onClick={onGoChat}
-            className="px-5 py-2.5 rounded-full text-white font-bold text-sm transition-all hover:scale-105 active:scale-95"
-            style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 4px 12px rgba(45,106,111,0.3)" }}
-          >
-            💬 เริ่มคุยกับกระจก
-          </button>
-          <button
-            onClick={onGoTrend}
-            className="px-4 py-2.5 rounded-full font-semibold text-sm transition-all hover:bg-gray-50 active:scale-95"
-            style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", backgroundColor: T.white, border: "2px solid #E2D9C2" }}
-          >
-            📈 ดูแนวโน้มของฉัน
-          </button>
-        </div>
-      </div>
 
-      {/* A visual cue from the shared FrontEndB design source keeps the home view
-          connected to the collage language while loading the larger image only
-          after the primary controls are visible. */}
-      <figure className="design-preview surface overflow-hidden">
-        <img
-          src={IMG.designPreview}
-          alt="ตัวอย่างหน้าต้อนรับ JaiKrajok ในสไตล์คอลลาจบนกระดาษกริด"
-          loading="lazy"
-          decoding="async"
-        />
-        <figcaption>
-          <span className="design-preview-kicker">DESIGN NOTE</span>
-          <span>แรงบันดาลใจจาก FrontEndB ที่ใช้ในประสบการณ์เริ่มต้นใช้งาน</span>
-        </figcaption>
-      </figure>
-
-      {/* QUICK MOOD PICKER */}
-      <div>
-        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-          วันนี้รู้สึกยังไง?
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-          {moods.map(([key, emo], idx) => {
-            const rotations = ["rotate-[-2deg]", "rotate-[1deg]", "rotate-[-1deg]", "rotate-[2deg]", "rotate-[0deg]", "rotate-[-3deg]"];
-            const rot = rotations[idx % rotations.length];
-            return (
-            <button
-              key={key}
-              onClick={() => setMood(key)}
-              className={`p-4 rounded-xl text-center transition-all duration-300 transform hover:-translate-y-2 hover:shadow-xl active:scale-95 ${rot}`}
+            <h1
+              id="hv-headline"
               style={{
-                backgroundColor: mood === key ? "#DCEAE8" : T.white,
-                border: mood === key ? `3px solid ${T.teal}` : "1px solid #EDE6D3",
-                boxShadow: mood === key ? "0 8px 0px rgba(45,106,111,0.2)" : "0 4px 10px rgba(0,0,0,0.05)",
-                fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
+                fontFamily: SF,
+                fontSize: "clamp(4rem, 9vw, 9.5rem)",
+                fontWeight: 900,
+                lineHeight: 0.9,
+                letterSpacing: "-0.04em",
+                color: INK,
+                margin: "0 0 1.75rem",
+                maxWidth: "12ch",
               }}
             >
-              <span className="text-4xl block mb-2 drop-shadow-sm">{emo.emoji}</span>
-              <span className="text-[11px] font-bold block uppercase tracking-wide" style={{ color: mood === key ? T.teal : T.black }}>{emo.label}</span>
-            </button>
-          )})}
+              กระจก
+              <br />
+              <span style={{ color: PINK }}>สะท้อนใจ</span>
+            </h1>
+
+            <p style={{
+              fontFamily: SF,
+              fontSize: "clamp(0.9rem, 1.6vw, 1.05rem)",
+              lineHeight: 1.7,
+              color: INK_MUTED,
+              margin: "0 0 2.5rem",
+              maxWidth: "36ch",
+              borderLeft: `3px solid ${PINK}`,
+              paddingLeft: "1rem",
+            }}>
+              พื้นที่ส่วนตัวเพื่อบันทึกความรู้สึก — พิมพ์ พูด หรือถ่ายภาพ กระจกรับฟังทุกอย่าง
+            </p>
+
+            <div id="hv-ctas" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+              <button
+                onClick={onGoChat}
+                style={{
+                  fontFamily: SF, fontWeight: 800, fontSize: "0.9rem",
+                  background: INK, color: CREAM,
+                  border: "none", borderRadius: "9999px",
+                  padding: "0.9rem 2rem", cursor: "pointer",
+                  letterSpacing: "-0.01em",
+                  display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                  transition: "background 0.2s, transform 0.2s",
+                  boxShadow: "0 4px 20px rgba(26,20,10,0.15)",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = PINK; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.03)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = INK; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
+              >
+                เริ่มคุยกับกระจก
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+              <button
+                onClick={onGoTrend}
+                style={{
+                  fontFamily: SF, fontWeight: 700, fontSize: "0.9rem",
+                  background: "transparent", color: INK,
+                  border: `2px solid rgba(26,20,10,0.22)`, borderRadius: "9999px",
+                  padding: "0.88rem 2rem", cursor: "pointer",
+                  letterSpacing: "-0.01em",
+                  transition: "border-color 0.2s, color 0.2s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = PINK; (e.currentTarget as HTMLButtonElement).style.color = PINK; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(26,20,10,0.22)"; (e.currentTarget as HTMLButtonElement).style.color = INK; }}
+              >
+                ดูแนวโน้มของฉัน
+              </button>
+            </div>
+          </div>
+
+          {/* RIGHT column: collage editorial */}
+          <div
+            id="hv-img"
+            style={{
+              flex: "0 1 400px",
+              position: "relative",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              overflow: "hidden",
+              minHeight: "320px",
+            }}
+          >
+            <div style={{
+              position: "absolute",
+              bottom: "-80px", right: "-80px",
+              width: "420px", height: "420px",
+              borderRadius: "50%",
+              background: `radial-gradient(circle, ${PINK}12 0%, transparent 65%)`,
+              zIndex: 0,
+            }} />
+            <div style={{
+              position: "absolute", top: "2rem", left: "2.5rem",
+              fontFamily: SERIF, fontSize: "6rem", fontWeight: 900,
+              color: PINK, opacity: 0.1, lineHeight: 1, zIndex: 0, userSelect: "none",
+            }}>✦</div>
+            <img
+              src={IMG.glasses}
+              alt=""
+              aria-hidden="true"
+              style={{
+                width: "clamp(200px, 30vw, 400px)",
+                objectFit: "contain",
+                zIndex: 1,
+                position: "relative",
+                filter: "drop-shadow(0 24px 48px rgba(26,20,10,0.16))",
+                mixBlendMode: "multiply",
+                opacity: 0.9,
+              }}
+            />
+            <div style={{
+              position: "absolute", bottom: "2.5rem", right: "1.5rem",
+              fontFamily: `'Mali', 'Noto Sans Thai', cursive`,
+              fontSize: "0.78rem", color: INK_MUTED,
+              transform: "rotate(-8deg)", zIndex: 2,
+              opacity: 0.6,
+            }}>กระจกของฉัน ↗</div>
+          </div>
         </div>
+
+        <div style={{ height: "1px", background: `rgba(26,20,10,0.1)` }} />
+      </section>
+
+      {/* MODE GALLERY HEADER — cream editorial strip */}
+      <div className="hv-strip" style={{
+        background: CREAM,
+        backgroundImage: `linear-gradient(${GRID} 1px, transparent 1px), linear-gradient(90deg, ${GRID} 1px, transparent 1px)`,
+        backgroundSize: "32px 32px",
+        borderBottom: `1px solid rgba(26,20,10,0.1)`,
+        padding: "1.5rem clamp(1.5rem, 5vw, 4rem)",
+        display: "flex", alignItems: "center", justifyContent: "space-between"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+          <span style={{ fontFamily: SF, fontSize: "1.35rem", fontWeight: 800, color: INK, letterSpacing: "-0.03em" }}>เลือกวิธีบอกเรา</span>
+          <span style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.16em", color: INK_MUTED, textTransform: "uppercase" }}>04 โหมด</span>
+        </div>
+        <svg width="60" height="12" viewBox="0 0 60 12" fill="none" style={{ opacity: 0.4 }}>
+          <path d="M0 6 Q7.5 0 15 6 Q22.5 12 30 6 Q37.5 0 45 6 Q52.5 12 60 6" stroke={PINK} strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+        </svg>
       </div>
 
-      {/* 4 MODE CARDS */}
-      <div>
-        <h3 className="text-base font-bold mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-          วิธีระบายความรู้สึก · เลือกวิธีที่ถนัดได้เลย
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-          {[
-            { id: "camera" as const, title: "ถ่ายเซลฟี่", desc: "Face detection API", iconSrc: IMG.bulb, bg: "#FDF5E6", border: "#F0E1C8" },
-            { id: "keyboard" as const, title: "พิมพ์ความรู้สึก", desc: "Sentiment Analysis API", iconSrc: IMG.handPen, bg: "#F2F5E9", border: "#E0E8D3" },
-            { id: "mic" as const, title: "พูดระบาย", desc: "Speech-to-Text API", iconSrc: IMG.amplifier, bg: "#FFF0F4", border: "#F5DBE4" },
-            { id: "photo" as const, title: "ถ่ายรูปการบ้าน", desc: "OCR API", iconSrc: IMG.origamiStarsNoBg, bg: "#EBF3F5", border: "#D4E5E8" },
-          ].map((item, idx) => {
-            const rots = ["rotate-[1deg]", "rotate-[-1deg]", "rotate-[2deg]", "rotate-[-2deg]"];
-            const r = rots[idx % rots.length];
-            const cardId = `action-card-${item.id}`;
-            const imgId = `action-img-${item.id}`;
-            return (
+      {/* MODE GALLERY: Accordion in black — dramatic cream-to-black contrast */}
+      <div
+        className="hv-strip"
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          height: "clamp(500px, 68vh, 740px)",
+          background: BLACK,
+          overflow: "hidden"
+        }}
+      >
+        {modes.map((item, idx) => {
+          const isHovered = hoveredMode === item.id;
+          const isAnyHovered = hoveredMode !== null;
+          const flexGrow = isHovered ? 3.5 : isAnyHovered ? 0.4 : 1;
+
+          return (
             <button
               key={item.id}
-              id={cardId}
-              onClick={(e) => {
-                tryMode(item.id);
-                // GSAP burst ripple on click
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ripple = document.createElement("div");
-                ripple.style.cssText = `position:fixed;left:${rect.left + rect.width/2}px;top:${rect.top + rect.height/2}px;width:12px;height:12px;border-radius:50%;background:${item.border};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
-                document.body.appendChild(ripple);
-                gsap.fromTo(ripple,
-                  { scale: 0, opacity: 0.8 },
-                  { scale: 9, opacity: 0, duration: 0.7, ease: "expo.out", onComplete: () => ripple.remove() }
-                );
-                // GSAP pop the image
-                const imgEl = document.getElementById(imgId);
-                if (imgEl) gsap.fromTo(imgEl, { scale: 0.8, rotate: -10 }, { scale: 1, rotate: 0, duration: 0.6, ease: "elastic.out(1.3, 0.4)" });
-              }}
-              onMouseEnter={() => {
-                const imgEl = document.getElementById(imgId);
-                if (imgEl) gsap.to(imgEl, { y: -8, rotate: 5, duration: 0.4, ease: "power2.out" });
-                const card = document.getElementById(cardId);
-                if (card) gsap.to(card, { y: -6, duration: 0.3, ease: "power2.out" });
-              }}
-              onMouseLeave={() => {
-                const imgEl = document.getElementById(imgId);
-                if (imgEl) gsap.to(imgEl, { y: 0, rotate: 0, duration: 0.4, ease: "elastic.out(1, 0.5)" });
-                const card = document.getElementById(cardId);
-                if (card) gsap.to(card, { y: 0, duration: 0.35, ease: "power2.inOut" });
-              }}
-              className={`p-6 rounded-none text-center group transition-colors duration-200 ${r}`}
+              onClick={() => tryMode(item.id)}
+              onMouseEnter={() => setHoveredMode(item.id)}
+              onMouseLeave={() => setHoveredMode(null)}
+              onFocus={() => setHoveredMode(item.id)}
+              onBlur={() => setHoveredMode(null)}
+              aria-label={`${item.th} \u2014 ${item.sub}`}
               style={{
-                backgroundColor: item.bg,
-                border: `1px solid ${item.border}`,
-                boxShadow: `4px 4px 0px ${item.border}, 0 10px 20px rgba(0,0,0,0.05)`,
+                flex: flexGrow,
+                transition: "flex 0.65s cubic-bezier(0.25, 1, 0.25, 1)",
+                background: "transparent",
                 position: "relative",
-                willChange: "transform",
+                cursor: "pointer",
+                padding: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                minWidth: 0,
+                border: "none",
+                outline: "none",
+                borderRight: idx < 3 ? "1px solid rgba(240,239,233,0.06)" : "none",
               }}
             >
-              {/* Tape visual */}
-              <div className="absolute top-[-10px] left-1/2 -translate-x-1/2 w-12 h-6 bg-white/40 border border-white/60 shadow-sm rotate-[-2deg]" style={{backdropFilter: "blur(2px)"}}></div>
-              
-              <div className="bg-white rounded-sm aspect-square flex items-center justify-center mb-4 shadow-inner overflow-hidden" style={{ border: `1px solid ${item.border}` }}>
-                <img
-                  id={imgId}
-                  src={item.iconSrc}
-                  alt=""
-                  style={{
-                    width: "85%",
-                    height: "85%",
-                    objectFit: "contain",
-                    display: "block",
-                    willChange: "transform",
-                  }}
-                />
+              <div style={{
+                position: "absolute", inset: 0,
+                background: `radial-gradient(ellipse at 50% 70%, ${PINK}15 0%, transparent 65%)`,
+                opacity: isHovered ? 1 : 0,
+                transition: "opacity 0.5s ease",
+                zIndex: 0
+              }} />
+              <div style={{
+                position: "absolute", inset: 0,
+                background: "rgba(8,9,10,0.62)",
+                opacity: isAnyHovered && !isHovered ? 1 : 0,
+                transition: "opacity 0.55s ease",
+                zIndex: 1
+              }} />
+              <div style={{
+                position: "absolute", top: "1.25rem", left: "1.5rem",
+                fontFamily: SF, fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.16em",
+                color: isHovered ? PINK : "rgba(245,240,232,0.9)",
+                opacity: isAnyHovered && !isHovered ? 0.15 : isHovered ? 1 : 0.4,
+                transition: "all 0.45s ease",
+                zIndex: 5
+              }}>{String(idx + 1).padStart(2, "0")}</div>
+
+              <img
+                src={item.img}
+                alt={item.th}
+                style={{
+                  width: "clamp(120px, 18vw, 240px)",
+                  height: "clamp(120px, 18vw, 240px)",
+                  objectFit: "contain",
+                  transition: "all 0.65s cubic-bezier(0.25, 1, 0.25, 1)",
+                  transform: isHovered ? "scale(1.14) translateY(-8px)" : "scale(1)",
+                  filter: isHovered
+                    ? `drop-shadow(0 28px 44px rgba(0,0,0,0.8)) drop-shadow(0 0 30px ${PINK}44) brightness(1.08)`
+                    : "drop-shadow(0 10px 22px rgba(0,0,0,0.55)) brightness(0.92) grayscale(0.12)",
+                  zIndex: 2,
+                  position: "relative",
+                  flexShrink: 0
+                }}
+              />
+
+              <div style={{
+                position: "absolute", bottom: 0, left: 0, right: 0,
+                padding: "2.5rem 1.5rem 1.5rem",
+                background: "linear-gradient(to top, rgba(8,9,10,0.95) 0%, transparent 100%)",
+                transition: "all 0.45s ease",
+                opacity: isHovered ? 0 : 1,
+                transform: isHovered ? "translateY(8px)" : "translateY(0)",
+                zIndex: 3,
+                textAlign: "center"
+              }}>
+                <p style={{ fontFamily: SF, fontSize: "clamp(0.65rem, 1.4vw, 0.82rem)", fontWeight: 700, color: "rgba(245,240,232,0.95)", textTransform: "uppercase", letterSpacing: "0.15em", margin: 0 }}>
+                  {item.th}
+                </p>
               </div>
-              <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-                {item.title}
-              </h4>
-              <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#888" }}>
-                {item.desc}
-              </p>
+
+              <div style={{
+                position: "absolute", bottom: 0, left: 0, right: 0,
+                padding: "3rem 2rem 2rem",
+                background: "linear-gradient(to top, rgba(8,9,10,0.98) 0%, rgba(8,9,10,0.6) 55%, transparent 100%)",
+                transition: "all 0.6s cubic-bezier(0.25, 1, 0.25, 1)",
+                opacity: isHovered ? 1 : 0,
+                transform: isHovered ? "translateY(0)" : "translateY(20px)",
+                pointerEvents: "none",
+                zIndex: 4,
+                textAlign: "left"
+              }}>
+                <p style={{ fontFamily: SF, fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: PINK, margin: "0 0 0.5rem" }}>
+                  {item.sub}
+                </p>
+                <h2 style={{ fontFamily: SF, fontSize: "clamp(1.5rem, 3.5vw, 3rem)", fontWeight: 900, lineHeight: 1, letterSpacing: "-0.035em", color: CREAM, margin: "0 0 1rem" }}>
+                  {item.th}
+                </h2>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: PINK, color: BLACK, borderRadius: "9999px", padding: "0.4rem 1.1rem", fontSize: "0.78rem", fontWeight: 800, fontFamily: SF }}>
+                  เริ่มเลย
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+              </div>
+
+              {idx < 3 && (
+                <div style={{
+                  position: "absolute", right: 0, top: "10%", height: "80%", width: "1px",
+                  background: "rgba(240,239,233,0.06)",
+                  zIndex: 5
+                }} />
+              )}
             </button>
-          )})}
-        </div>
+          );
+        })}
       </div>
 
-      {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
-      {/* CHANNEL ACCESS & NOTIFICATION TOGGLE */}
-      <div
-        className="p-6 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative mt-4"
-        style={{ 
-          backgroundColor: "#F9F8F5", 
-          border: "2px dashed #C8BEAC",
-          backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(200, 190, 172, 0.05) 10px, rgba(200, 190, 172, 0.05) 20px)"
-        }}
-      >
-        {/* Pin visual */}
-        <div className="absolute top-3 right-5 w-3 h-3 rounded-full bg-[#A85F73] shadow-[0_2px_4px_rgba(0,0,0,0.3)] z-10">
-          <div className="w-1 h-1 bg-white/60 rounded-full absolute top-[1px] left-[1px]"></div>
-        </div>
-
+      {/* FOOTER: privacy summary */}
+      <div className="hv-strip" style={{
+        background: CREAM,
+        backgroundImage: `linear-gradient(${GRID} 1px, transparent 1px), linear-gradient(90deg, ${GRID} 1px, transparent 1px)`,
+        backgroundSize: "32px 32px",
+        borderTop: `1px solid rgba(26,20,10,0.1)`,
+        padding: "1.75rem clamp(1.5rem, 5vw, 4rem)",
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1.5rem", flexWrap: "wrap"
+      }}>
         <div>
-          <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-            ช่องทางการเข้าถึง
-          </h4>
-          <div className="flex gap-3 mt-3 flex-wrap">
-            <span className="px-4 py-1.5 text-[#00B900] text-xs font-bold rounded-sm border border-[#00B900] bg-white shadow-sm" style={{transform: "rotate(-1deg)"}}>
-              💚 LINE Official Account
-            </span>
-            <span className="px-4 py-1.5 text-blue-600 text-xs font-bold rounded-sm border border-blue-600 bg-white shadow-sm" style={{transform: "rotate(1deg)"}}>
-              🌐 Web Application (หน้านี้)
-            </span>
-          </div>
+          <p style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: INK_MUTED, margin: "0 0 0.3rem" }}>ความเป็นส่วนตัว</p>
+          <p style={{ fontFamily: SF, fontSize: "1rem", fontWeight: 700, color: INK, margin: 0 }}>ไม่เก็บเนื้อหาแชท ภาพ หรือเสียงไว้ในฐานข้อมูล</p>
         </div>
-        <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-full border border-[#E2D9C2] shadow-sm z-10">
-          <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-            การแจ้งเตือนผ่าน LINE (ยังไม่เปิดใช้งาน)
-          </span>
-          <button
-            onClick={() => toast("การแจ้งเตือนผ่าน LINE ยังไม่เปิดใช้งาน")}
-            disabled
-            aria-label="การแจ้งเตือนผ่าน LINE ยังไม่เปิดใช้งาน"
-            className="w-10 h-5 rounded-full flex items-center transition-colors px-0.5 relative"
-            style={{ backgroundColor: "#D1D5DB", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)", cursor: "not-allowed", opacity: 0.7 }}
-          >
-            <div className="w-4 h-4 bg-white rounded-full shadow transition-all absolute top-0.5" style={{ left: "2px" }} />
-          </button>
-        </div>
+        <p style={{ fontFamily: SF, fontSize: "0.82rem", fontWeight: 600, color: INK_MUTED, margin: 0, maxWidth: "34rem" }}>
+          ระบบเก็บเฉพาะผลอารมณ์ เวลา แหล่งที่มา และจำนวนการใช้งานภายใต้เซสชันแบบไม่ระบุตัวตน
+        </p>
       </div>
     </div>
   );
 }
 
+
+
+
 /* ============ CHAT VIEW ============ */
 function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
-  mood, concernStreak, transparencyLogs, onNotifyCounselor,
+  mood, concernStreak, transparencyLogs, supportStrip, onDismissSupport, onNotifyCounselor,
+  showCrisisAlert, onDismissCrisis, crisisDetected,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -1392,18 +1874,30 @@ function ChatView({
   handleHomeworkPhoto: () => void;
   resetChat: () => void;
   speakText: (t: string) => void;
-  mood: string;
+  mood: Mood;
   concernStreak: number;
   transparencyLogs: string[];
+  supportStrip: boolean;
+  onDismissSupport: () => void;
   onNotifyCounselor: () => void;
+  showCrisisAlert: boolean;
+  onDismissCrisis: () => void;
+  crisisDetected: boolean;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (chatBodyRef.current) chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
   }, [messages, isAnalyzing]);
 
+  const handleCall1323 = () => {
+    window.location.href = "tel:1323";
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ height: "calc(100vh - 100px)" }}>
+      {/* CRISIS ALERT */}
+      {showCrisisAlert && <CrisisAlert onDismiss={onDismissCrisis} onCall1323={handleCall1323} />}
+
       {/* LEFT CHAT PANEL */}
       <div
         className="lg:col-span-2 flex flex-col overflow-hidden"
@@ -1433,7 +1927,7 @@ function ChatView({
             className="p-2 rounded-xl hover:bg-gray-100 transition-all text-gray-500"
             title="เริ่มการสนทนาใหม่"
           >
-            🔄
+            <RefreshIcon size={18} />
           </button>
         </div>
 
@@ -1450,14 +1944,18 @@ function ChatView({
                   className="max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed"
                   style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
                 >
-                  <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                    ผลการสะท้อนจากใบหน้า · {msg.emotionData.label}
+                  <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75 flex items-center gap-2" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                    <CameraIcon size={12} />
+                    ผลการประเมินเบื้องต้นจากใบหน้า · {msg.emotionData.label}
                   </p>
                   <p>{msg.emotionData.note}</p>
                 </div>
               ) : msg.cardType === "ocr" ? (
                 <div className="max-w-[85%] p-4 rounded-2xl text-sm" style={{ backgroundColor: T.cream, border: "1.5px dashed #aaa" }}>
-                  <p className="font-bold text-xs text-gray-500 mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>📷 ผลจาก OCR API</p>
+                  <p className="font-bold text-xs text-gray-500 mb-1 flex items-center gap-2" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                    <ImageIcon size={12} />
+                    ผลจาก OCR API
+                  </p>
                   <p className="text-xs text-gray-500 italic border-l-2 pl-3 py-1 my-1" style={{ borderColor: T.teal }}>{msg.ocrText}</p>
                 </div>
               ) : (
@@ -1474,7 +1972,9 @@ function ChatView({
                 >
                   {msg.text}
                   {msg.role === "bot" && (
-                    <button onClick={() => speakText(msg.text)} className="ml-2 text-xs opacity-50 hover:opacity-100 transition-opacity">🔊</button>
+                    <button onClick={() => speakText(msg.text)} className="ml-2 text-xs opacity-50 hover:opacity-100 transition-opacity">
+                      <SpeakerIcon size={14} />
+                    </button>
                   )}
                 </div>
               )}
@@ -1493,17 +1993,54 @@ function ChatView({
           )}
         </div>
 
+        {/* Support strip — appears after the first concern log, stays quiet */}
+        {supportStrip && (
+          <div className="px-4 pt-3">
+            <div
+              className="flex items-center justify-between gap-3 p-3.5 rounded-2xl text-xs leading-relaxed"
+              style={{ backgroundColor: "#FFF3EE", border: "1.5px dashed #E3A48E" }}
+            >
+              <p style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6E3826" }} className="flex items-center gap-2">
+                <HandshakeIcon size={14} />
+                รู้สึกหนักใจอยู่ใช่ไหม? กระจกอยู่ตรงนี้เสมอ — มีคนที่พร้อมฟังคุณตลอด 24 ชม. ด้วยนะ
+              </p>
+              <a
+                href="tel:1323"
+                className="flex-shrink-0 px-3 py-2 rounded-full font-bold text-[11px] flex items-center gap-1.5 transition-all active:scale-[0.97]"
+                style={{ backgroundColor: T.red, color: T.white, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+                โทร 1323
+              </a>
+              <button
+                onClick={onDismissSupport}
+                aria-label="ปิดข้อความนี้"
+                className="flex-shrink-0 p-1.5 rounded-lg transition-colors hover:bg-black/5"
+                style={{ color: "#A85F73" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Input toolbar */}
         <div className="p-4 space-y-3" style={{ borderTop: `2px solid ${T.teal}`, backgroundColor: T.white }}>
           <div className="flex items-center gap-2">
             {[
-              { handler: handleSelfie, icon: "📷", title: "ถ่ายเซลฟี่" },
-              { handler: handleVoice, icon: "🎤", title: "พูดระบาย" },
-              { handler: handleHomeworkPhoto, icon: "🖼️", title: "แนบรูปการบ้าน" },
+              { handler: handleSelfie, icon: <CameraIcon size={18} />, title: "ตรวจใบหน้าในภาพ" },
+              { handler: handleVoice, icon: <MicIcon size={18} />, title: "พูดระบาย" },
+              { handler: handleHomeworkPhoto, icon: <ImageIcon size={18} />, title: "แนบรูปการบ้าน" },
             ].map(({ handler, icon, title }) => (
               <button
                 key={title}
                 onClick={handler}
+                disabled={isAnalyzing}
                 title={title}
                 className="p-2.5 rounded-full text-sm font-bold transition-all hover:text-white"
                 style={{ border: `2px solid ${T.teal}`, backgroundColor: "#E3EAE0", color: T.teal }}
@@ -1516,9 +2053,11 @@ function ChatView({
           </div>
           <div className="flex gap-2">
             <input
+              id="chat-input"
               type="text"
               placeholder="พิมพ์ความรู้สึกของคุณ..."
               value={inputText}
+              disabled={isAnalyzing}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               className="flex-1 px-5 py-3 rounded-full outline-none text-sm"
@@ -1528,10 +2067,11 @@ function ChatView({
             />
             <button
               onClick={sendMessage}
+              disabled={isAnalyzing || !inputText.trim()}
               className="w-11 h-11 rounded-full text-white font-bold flex items-center justify-center transition-all active:scale-[0.95]"
               style={{ backgroundColor: T.teal }}
             >
-              ⬆️
+              <SendIcon size={18} />
             </button>
           </div>
         </div>
@@ -1543,7 +2083,7 @@ function ChatView({
         <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
           <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>โหมดที่ใช้ได้</h4>
           <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
-            Face detection ตรวจว่าภาพมีใบหน้าหรือไม่ ส่วนข้อความ เสียง และ OCR จะถูกส่งต่อไปยัง Pathumma เมื่อโหมดนั้นต้องใช้คำตอบจาก AI
+            ตรวจจับใบหน้า (ไม่อ่านอารมณ์) · วิเคราะห์ข้อความ · แปลงเสียงเป็นข้อความ · OCR การบ้าน แต่ละโหมดประมวลผลเฉพาะข้อมูลที่คุณเลือกส่ง
           </p>
         </div>
 
@@ -1552,20 +2092,27 @@ function ChatView({
           <h4 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>สถานะการดูแล</h4>
           {concernStreak >= 2 ? (
             <div className="p-3.5 rounded-xl space-y-2" style={{ backgroundColor: "#F1DEE3", border: "1.5px solid #A85F73" }}>
-              <p className="font-bold text-xs" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#6B3B49" }}>⚠️ สังเกตแนวโน้มเชิงลบต่อเนื่อง</p>
+              <p className="font-bold text-xs flex items-center gap-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#6B3B49" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                สังเกตแนวโน้มเชิงลบต่อเนื่อง
+              </p>
               <p className="text-xs" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#6B3B49" }}>อยากชวนคุยกับครูที่ปรึกษาหรือสายด่วน 1323 ไหม</p>
               <div className="flex gap-2 pt-1">
                 <button onClick={onNotifyCounselor} className="px-3 py-1.5 rounded-xl text-white text-xs font-bold" style={{ backgroundColor: T.teal, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
-                  ดูแหล่งช่วยเหลือ
+                  วิธีติดต่อครู
                 </button>
-                <a href="tel:1323" className="px-3 py-1.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#6B3B49", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                <a href="tel:1323" className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1" style={{ border: "1.5px solid #A85F73", color: "#6B3B49", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                   โทร 1323
                 </a>
               </div>
             </div>
           ) : (
             <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
-              ยังไม่พบสัญญาณที่น่าเป็นห่วง หากรู้สึกไม่ปลอดภัย โปรดติดต่อผู้ใหญ่ที่ไว้ใจหรือสายด่วน 1323
+              หากพบข้อความที่น่าเป็นห่วง ระบบจะแสดงช่องทางขอความช่วยเหลือ แต่จะไม่แจ้งครูหรือผู้ปกครองอัตโนมัติ
             </p>
           )}
         </div>
@@ -1579,7 +2126,8 @@ function ChatView({
             <div className="space-y-2">
               {transparencyLogs.map((log, i) => (
                 <div key={i} className="text-xs font-mono text-gray-600 p-2 rounded-xl flex items-center gap-2" style={{ backgroundColor: "#f5f5f5", border: "1px solid #e5e5e5" }}>
-                  <span>👁️</span><span>{log}</span>
+                  <EyeIcon size={12} />
+                  <span>{log}</span>
                 </div>
               ))}
             </div>
@@ -1591,9 +2139,11 @@ function ChatView({
 }
 
 /* ============ TREND VIEW ============ */
-function TrendView({ trendData, logEntries, onClearAll, onExport }: {
+function TrendView({ trendData, logEntries, sessionReady, refreshKey, onClearAll, onExport }: {
   trendData: TrendPoint[];
   logEntries: LogEntry[];
+  sessionReady: boolean;
+  refreshKey: number;
   onClearAll: () => void;
   onExport: () => void;
 }) {
@@ -1601,51 +2151,55 @@ function TrendView({ trendData, logEntries, onClearAll, onExport }: {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!sessionReady) return;
+    let cancelled = false;
+    setLoading(true);
     api.trend()
-      .then(setServerTrend)
-      .catch(() => toast.error("โหลดข้อมูลแนวโน้มไม่สำเร็จ"))
-      .finally(() => setLoading(false));
-  }, []);
+      .then((result) => { if (!cancelled) setServerTrend(result); })
+      .catch(() => { if (!cancelled) toast.error("โหลดข้อมูลแนวโน้มไม่สำเร็จ"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [sessionReady, refreshKey]);
 
   const chartData = trendData.length > 0
     ? trendData
     : (serverTrend?.days ?? []).map((point, id) => {
-        const info = EMO[point.mood] || EMO.neutral;
+        const info = EMO[point.mood];
         return { id, valence: info.valence, color: info.color, key: point.mood, label: info.label };
       });
 
+  const historyRows = logEntries.length > 0
+    ? logEntries.map((entry) => ({ id: entry.id, label: entry.label, source: entry.source, time: entry.time }))
+    : [...(serverTrend?.days ?? [])].reverse().map((point) => ({
+        id: point.date,
+        label: EMO[point.mood].label,
+        source: "อารมณ์เด่นของวัน",
+        time: point.date,
+      }));
+
   return (
     <div className="space-y-6 max-w-4xl">
-      {loading && (
-        <div className="text-center py-8 text-gray-500">กำลังโหลดข้อมูล...</div>
-      )}
+      {loading && <div className="text-center py-6 text-gray-500">กำลังโหลดข้อมูล...</div>}
       {!loading && serverTrend && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
-            <span className="text-2xl font-black block" style={{ color: T.teal }}>{serverTrend.messages}</span>
-            <span className="text-xs text-gray-600 font-semibold">ข้อความทั้งหมด</span>
-          </div>
-          <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
-            <span className="text-2xl font-black block" style={{ color: T.teal }}>{serverTrend.active_days}</span>
-            <span className="text-xs text-gray-600 font-semibold">วันที่ใช้งาน</span>
-          </div>
-          <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
-            <span className="text-xl font-black block" style={{ color: T.teal }}>
-              {serverTrend.dominant_mood ? (EMO[serverTrend.dominant_mood] || EMO.neutral).emoji : "—"}
-            </span>
-            <span className="text-xs text-gray-600 font-semibold">อารมณ์ส่วนใหญ่</span>
-          </div>
-          <div className="p-4 rounded-xl" style={{ backgroundColor: T.white, border: "2px solid #E2D9C2" }}>
-            <span className="text-2xl font-black block" style={{ color: T.teal }}>{serverTrend.days.length}</span>
-            <span className="text-xs text-gray-600 font-semibold">วันที่มีบันทึก</span>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { value: serverTrend.messages.toString(), label: "รายการอารมณ์ทั้งหมด" },
+            { value: serverTrend.active_days.toString(), label: "วันที่ใช้งาน" },
+            { value: serverTrend.dominant_mood ? EMO[serverTrend.dominant_mood].label : "ยังไม่มีข้อมูล", label: "อารมณ์ส่วนใหญ่" },
+            { value: serverTrend.days.length.toString(), label: "วันที่มีบันทึก" },
+          ].map((item) => (
+            <div key={item.label} className="p-4 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
+              <span className="text-xl font-black block" style={{ color: T.teal }}>{item.value}</span>
+              <span className="text-xs text-gray-600 font-semibold">{item.label}</span>
+            </div>
+          ))}
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* SVG trend chart */}
         <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มอารมณ์ในเซสชันนี้</h3>
+            <h3 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มอารมณ์ของคุณ</h3>
             <span className="text-xs font-mono text-gray-500">{chartData.length === 0 ? "ยังไม่มีข้อมูล" : `${chartData.length} จุดข้อมูล`}</span>
           </div>
           <div className="relative h-44 w-full my-2">
@@ -1682,10 +2236,10 @@ function TrendView({ trendData, logEntries, onClearAll, onExport }: {
         <div className="p-6 rounded-2xl flex flex-col" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
           <h3 className="font-bold text-base mb-3" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>ประวัติการเช็คอิน</h3>
           <div className="flex-1 overflow-y-auto max-h-48 space-y-2 pr-1" style={{ scrollbarWidth: "thin" }}>
-            {logEntries.length === 0 ? (
-              <div className="text-center text-xs text-gray-400 py-8" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>ยังไม่มีประวัติการเช็คอินในเซสชันนี้</div>
+            {historyRows.length === 0 ? (
+              <div className="text-center text-xs text-gray-400 py-8" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>ยังไม่มีประวัติการเช็คอิน</div>
             ) : (
-              logEntries.map((e) => (
+              historyRows.map((e) => (
                 <div key={e.id} className="flex items-center justify-between p-3 rounded-xl text-xs" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                   <span className="font-semibold text-gray-800">{e.label} · {e.source}</span>
                   <span className="font-mono text-gray-400">{e.time}</span>
@@ -1694,11 +2248,13 @@ function TrendView({ trendData, logEntries, onClearAll, onExport }: {
             )}
           </div>
           <div className="flex gap-2 pt-4 mt-auto" style={{ borderTop: "1px solid #EDE6D3" }}>
-            <button onClick={onExport} className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all" style={{ border: `2px solid ${T.teal}`, color: T.teal, backgroundColor: "#E3EAE0", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
-              📥 ส่งออกข้อมูลของฉัน
+            <button onClick={onExport} className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5" style={{ border: `2px solid ${T.teal}`, color: T.teal, backgroundColor: "#E3EAE0", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+              <DownloadIcon size={14} />
+              ส่งออกข้อมูลของฉัน
             </button>
-            <button onClick={onClearAll} className="px-4 py-2.5 rounded-xl text-white text-xs font-bold transition-all" style={{ backgroundColor: "#A85F73", border: "2px solid #A85F73", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
-              🗑️ ลบข้อมูลทั้งหมด
+            <button onClick={onClearAll} className="px-4 py-2.5 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5" style={{ backgroundColor: "#A85F73", border: "2px solid #A85F73", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+              <TrashIcon size={14} />
+              ลบข้อมูลทั้งหมด
             </button>
           </div>
         </div>
@@ -1708,39 +2264,33 @@ function TrendView({ trendData, logEntries, onClearAll, onExport }: {
 }
 
 /* ============ SCHOOL VIEW ============ */
-function SchoolView() {
+function SchoolView({ sessionReady, refreshKey }: { sessionReady: boolean; refreshKey: number }) {
   const [schoolData, setSchoolData] = useState<SchoolResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!sessionReady) return;
+    let cancelled = false;
+    setLoading(true);
     api.school()
-      .then(setSchoolData)
-      .catch(() => toast.error("โหลดข้อมูลโรงเรียนไม่สำเร็จ"))
-      .finally(() => setLoading(false));
-  }, []);
+      .then((result) => { if (!cancelled) setSchoolData(result); })
+      .catch(() => { if (!cancelled) toast.error("โหลดข้อมูลโรงเรียนไม่สำเร็จ"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [sessionReady, refreshKey]);
 
   if (loading) {
-    return (
-      <div className="space-y-6 max-w-4xl">
-        <div className="text-center py-12 text-gray-500">กำลังโหลดข้อมูล...</div>
-      </div>
-    );
+    return <div className="text-center py-12 text-gray-500">กำลังโหลดข้อมูล...</div>;
   }
-
   if (!schoolData) {
-    return (
-      <div className="space-y-6 max-w-4xl">
-        <div className="text-center py-12 text-gray-500">ไม่มีข้อมูล</div>
-      </div>
-    );
+    return <div className="text-center py-12 text-gray-500">ไม่มีข้อมูล</div>;
   }
-
   if (schoolData.suppressed) {
     return (
       <div className="space-y-6 max-w-4xl">
-        <div className="p-6 rounded-2xl text-center" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
+        <div className="p-7 rounded-2xl text-center" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
           <h3 className="font-bold text-base mb-2" style={{ color: T.black }}>ยังไม่แสดงข้อมูลภาพรวม</h3>
-          <p className="text-sm text-gray-600">ระบบจะแสดงสถิติเมื่อมีข้อมูลจากผู้ใช้อย่างน้อย 5 คน เพื่อป้องกันการระบุตัวตนจากอารมณ์ของบุคคลเดียว</p>
+          <p className="text-sm text-gray-600">ระบบจะแสดงสถิติเมื่อมีผู้ใช้อย่างน้อย 5 เซสชัน เพื่อป้องกันการอนุมานอารมณ์ของบุคคลเดียว</p>
         </div>
       </div>
     );
@@ -1752,14 +2302,14 @@ function SchoolView() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="inline-block px-4 py-1.5 rounded-full text-xs font-mono font-bold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
-        📊 ภาพรวมโรงเรียน (ไม่ระบุตัวตนนักเรียน)
+        ภาพรวมแบบไม่ระบุตัวตน
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { num: schoolData.readings.toString(), label: "การเช็คอินทั้งหมด" },
-          { num: `${Math.round(stressRatio * 100)}%`, label: "มีแนวโน้มเครียด/กังวล" },
-          { num: `${Math.round(regularRatio * 100)}%`, label: "อยู่ในเกณฑ์ปกติ-ผ่อนคลาย" },
-          { num: schoolData.users.toString(), label: "นักเรียนที่ใช้งาน" },
+          { num: schoolData.readings.toString(), label: "รายการอารมณ์ทั้งหมด" },
+          { num: `${Math.round(stressRatio * 100)}%`, label: "รายการเครียดหรือเศร้า" },
+          { num: `${Math.round(regularRatio * 100)}%`, label: "ผู้ใช้งานประจำ" },
+          { num: schoolData.users.toString(), label: "เซสชันที่มีข้อมูล" },
         ].map((stat, i) => (
           <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
             <span className="text-3xl font-black block" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>{stat.num}</span>
@@ -1768,19 +2318,20 @@ function SchoolView() {
         ))}
       </div>
       <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-        <h4 className="font-bold text-base mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การกระจายตัวของอารมณ์</h4>
+        <h4 className="font-bold text-base mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การกระจายอารมณ์</h4>
         <div className="space-y-3">
-          {Object.entries(schoolData.distribution).map(([mood, count]) => {
-            const info = EMO[mood as Mood] || EMO.neutral;
+          {Object.entries(schoolData.distribution).map(([moodKey, count]) => {
+            const typedMood = (moodKey in EMO ? moodKey : "neutral") as Mood;
+            const info = EMO[typedMood];
             const percentage = schoolData.readings > 0 ? Math.round((count / schoolData.readings) * 100) : 0;
             return (
-              <div key={mood} className="flex items-center gap-3">
-                <span className="text-xl">{info.emoji}</span>
-                <span className="text-sm font-semibold w-32" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>{info.label}</span>
+              <div key={moodKey} className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: info.color }} />
+                <span className="text-sm font-semibold w-32">{info.label}</span>
                 <div className="flex-1 h-6 rounded-full overflow-hidden" style={{ backgroundColor: "#F0F0F0" }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${percentage}%`, backgroundColor: info.color }} />
+                  <div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: info.color }} />
                 </div>
-                <span className="text-sm font-bold w-12 text-right" style={{ color: info.color }}>{percentage}%</span>
+                <span className="text-sm font-bold w-12 text-right">{percentage}%</span>
               </div>
             );
           })}
@@ -1788,9 +2339,9 @@ function SchoolView() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { title: "บริการฟรี", desc: "นักเรียนใช้งานรายบุคคลผ่าน LINE Official Account ได้ฟรีเสมอ" },
-          { title: "แพ็กเกจโรงเรียน", desc: "ค่าบริการรายเดือนสำหรับภาพรวมสถิติระดับสถาบัน ไม่ระบุตัวตนนักเรียน" },
-          { title: "บริการวิเคราะห์ข้อมูล", desc: "สำหรับหน่วยงานด้านการศึกษาที่ต้องการข้อมูลเชิงลึกระดับภาพรวม" },
+          { title: "เกณฑ์ขั้นต่ำ", desc: "ไม่แสดงข้อมูลรวมจนกว่าจะมีผู้ใช้อย่างน้อย 5 เซสชัน" },
+          { title: "ข้อมูลรวมเท่านั้น", desc: "แสดงจำนวนและสัดส่วนอารมณ์โดยไม่ส่งคืนรหัสของผู้ใช้" },
+          { title: "ไม่มีการแจ้งอัตโนมัติ", desc: "สถิตินี้ไม่ส่งข้อความถึงครู ผู้ปกครอง หรือบุคคลอื่น" },
         ].map((plan, i) => (
           <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
             <h5 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>{plan.title}</h5>
@@ -1837,8 +2388,8 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
-              { label: "อายุที่ยืนยัน", value: age ? `${age} ปี` : "16 ปี" },
-              { label: "ความยินยอมผู้ปกครอง", value: guardianConsent ? "ผู้ใช้ยืนยันแล้ว (ยังไม่ตรวจสอบ)" : "รอดำเนินการ" },
+              { label: "อายุที่ยืนยัน", value: age ? `${age} ปี` : "ไม่ได้ระบุ" },
+              { label: "การรับทราบของผู้ใหญ่", value: Number(age) >= 20 ? "ไม่จำเป็น" : guardianConsent ? "ผู้ใช้ยืนยันแล้ว" : "ยังไม่ได้ยืนยัน" },
               { label: "เงื่อนไขการใช้งาน", value: "ยอมรับแล้ว" },
             ].map((item, i) => (
               <div key={i} className="p-4 rounded-xl" style={{ backgroundColor: "#E3EAE0", color: "#3C5137" }}>
@@ -1851,19 +2402,21 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
             <h4 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การควบคุมข้อมูลของฉัน</h4>
             <p className="text-xs text-gray-600" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>คุณสามารถเข้าถึง ส่งออก หรือลบข้อมูลของตนเองได้ทุกเมื่อ</p>
             <div className="flex gap-3">
-              <button onClick={onExport} className="px-5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-xs font-bold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
-                📥 ส่งออกข้อมูลของฉัน
+              <button onClick={onExport} className="px-5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-xs font-bold flex items-center gap-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                <DownloadIcon size={14} />
+                ส่งออกข้อมูลของฉัน
               </button>
-              <button onClick={onClearAll} className="px-5 py-2.5 rounded-xl text-xs font-bold" style={{ border: "1.5px solid #A85F73", color: "#A85F73", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
-                🗑️ ลบข้อมูลทั้งหมด
+              <button onClick={onClearAll} className="px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5" style={{ border: "1.5px solid #A85F73", color: "#A85F73", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+                <TrashIcon size={14} />
+                ลบข้อมูลทั้งหมด
               </button>
             </div>
           </div>
           <div className="space-y-3">
             {[
-              { title: "พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA)", content: "ภาพและเสียงถูกประมวลผลผ่านบริการ AI ตามโหมดที่เลือก และแอปนี้ไม่เก็บไฟล์ต้นฉบับถาวร ข้อมูลแนวโน้มอารมณ์ถูกเก็บด้วยรหัสเซสชันแบบ pseudonymous และยังไม่ได้เข้ารหัสระดับ AES-256" },
-              { title: "นโยบายความเป็นส่วนตัว (สรุป)", content: "ข้อมูลดิบถูกส่งไปยังผู้ให้บริการ AI ที่จำเป็นต่อการทำงาน ระบบเก็บเฉพาะแนวโน้มอารมณ์และตัวนับการใช้งานใน SQLite เพื่อแสดงผลและรองรับการส่งออกหรือลบข้อมูล" },
-              { title: "ข้อกำหนดการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 20 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้บริการตามขั้นตอนของแอป ระบบจำกัดความถี่คำขอพื้นฐานต่อไคลเอนต์ แต่ยังไม่ใช่ระบบป้องกันการใช้งานในทางที่ผิดแบบสมบูรณ์" },
+              { title: "ข้อมูลที่ระบบจัดเก็บ", content: "ระบบจัดเก็บผลอารมณ์ แหล่งที่มา ความมั่นใจ และเวลาใน SQLite ภายใต้รหัสเซสชันที่ผ่านการแฮช ไม่จัดเก็บเนื้อหาแชท ภาพ หรือเสียงในฐานข้อมูลของแอป" },
+              { title: "การประมวลผลภายนอก", content: "ข้อความ ภาพ และเสียงที่คุณเลือกส่งจะถูกส่งไปยังบริการ AI ภายนอกเพื่อประมวลผล จึงไม่ควรส่งข้อมูลที่ไม่ต้องการเปิดเผยต่อผู้ให้บริการเหล่านั้น" },
+              { title: "เงื่อนไขการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 20 ปียืนยันด้วยตนเองว่าได้บอกผู้ปกครองหรือผู้ใหญ่ที่ไว้ใจแล้ว ระบบไม่ได้ตรวจสอบหรือส่งอีเมลขอความยินยอมอัตโนมัติ" },
             ].map((acc, i) => (
               <details key={i} className="p-4 rounded-2xl group" style={{ backgroundColor: T.white, border: "1.5px solid #EDE6D3" }}>
                 <summary className="font-bold text-sm cursor-pointer list-none flex justify-between items-center" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
@@ -1880,13 +2433,23 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
       {subTab === "ethics" && (
         <div className="space-y-4">
           <div className="p-6 rounded-2xl space-y-3" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
-            {["👁️ ระบบแสดงข้อความว่าโหมดใดกำลังถูกวิเคราะห์ (Transparent AI)", "🩺 AI ไม่มีหน้าที่วินิจฉัยโรคซึมเศร้าหรือโรคทางจิตเวช", "📞 ระบบแนะนำสายด่วน 1323 และผู้ใหญ่ที่ไว้ใจ แต่ยังไม่แจ้งผู้ดูแลให้อัตโนมัติ", "💖 ผลลัพธ์เป็นข้อเสนอแนะ ไม่ใช่การตัดสินหรือตีตรา", "🛡️ API จำกัดความถี่คำขอและขนาดไฟล์ แต่ยังไม่มีตัวกรองเนื้อหาครบวงจร"].map((text, i) => (
-              <div key={i} className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{text}</div>
-            ))}
+            <div className="p-3.5 rounded-xl text-xs font-semibold text-gray-800 flex items-center gap-2" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+              <EyeIcon size={14} />
+              ระบบแสดงบันทึกว่าโหมดใดส่งข้อมูลไปวิเคราะห์
+            </div>
+            <div className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>AI ไม่วินิจฉัยโรคซึมเศร้าหรือโรคทางจิตเวช</div>
+            <div className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>ข้อความวิกฤตที่ตรงกับคำเตือนจะข้าม LLM และแสดงสายด่วน 1323 แต่ระบบไม่ติดต่อมนุษย์อัตโนมัติ</div>
+            <div className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>ผลลัพธ์เป็นข้อเสนอแนะ ไม่ใช่การตัดสิน ตีตรา หรือประเมินค่า</div>
+            <div className="p-3.5 rounded-xl text-xs font-semibold text-gray-800" style={{ backgroundColor: T.cream, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>API มีการจำกัดอัตราการใช้งานและตรวจขนาดไฟล์ก่อนส่งต่อ</div>
           </div>
           <div className="p-6 rounded-2xl flex items-center justify-between gap-4" style={{ backgroundColor: T.black }}>
             <div>
-              <h4 className="font-bold text-lg mb-1" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.salmon }}>📞 สายด่วนสุขภาพจิต 1323</h4>
+              <h4 className="font-bold text-lg mb-1 flex items-center gap-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.salmon }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+                สายด่วนสุขภาพจิต 1323
+              </h4>
               <p className="text-xs text-gray-300" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>หากพบสัญญาณน่าเป็นห่วงต่อเนื่อง กระจกจะแนะนำให้ปรึกษาครูที่ปรึกษา ผู้ปกครอง หรือสายด่วนนี้</p>
             </div>
             <a href="tel:1323" className="px-6 py-3 rounded-full text-white font-bold text-sm shrink-0 transition-all" style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
@@ -1899,10 +2462,10 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
       {subTab === "arch" && (
         <div className="space-y-3">
           {[
-            { layer: "ชั้น 1", title: "User Interface", desc: "LINE Official Account และ Web Application — พิมพ์ ถ่ายเซลฟี่ พูด หรือถ่ายรูปการบ้าน" },
-            { layer: "ชั้น 2", title: "API Gateway", desc: "ตรวจสอบสิทธิ์ กระจายคำขอไปยังบริการที่ถูกต้อง บันทึก Log แบบไม่ระบุตัวตน" },
-            { layer: "ชั้น 3", title: "AI Services · AI for Thai", desc: "Face detection (presence only) · Sentiment Analysis · Speech-to-Text · OCR · Pathumma LLM" },
-            { layer: "ชั้น 4", title: "Data Storage", desc: "SQLite เก็บแนวโน้มอารมณ์ด้วยรหัสเซสชันแบบ pseudonymous; ไฟล์ต้นฉบับภาพและเสียงไม่ถูกเก็บถาวรโดยแอป" },
+            { layer: "ชั้น 1", title: "User Interface", desc: "เว็บและ LINE รองรับข้อความ ส่วนเว็บเพิ่มการตรวจใบหน้า เสียง และรูปการบ้าน" },
+            { layer: "ชั้น 2", title: "FastAPI", desc: "ใช้คุกกี้ HttpOnly ที่ลงลายเซ็น ตรวจสิทธิ์ จำกัดอัตรา และตรวจขนาดไฟล์" },
+            { layer: "ชั้น 3", title: "AI Services", desc: "ตรวจใบหน้าโดยไม่อ่านอารมณ์ · วิเคราะห์ความรู้สึก · Speech-to-Text · OCR · Pathumma LLM" },
+            { layer: "ชั้น 4", title: "SQLite", desc: "เก็บเฉพาะเหตุการณ์อารมณ์และตัวนับภายใต้รหัสผู้ใช้ที่ผ่านการแฮช" },
           ].map((item, i) => (
             <div key={i} className="p-5 rounded-2xl flex items-center gap-4" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
               <span className="px-3 py-1 rounded-full text-xs font-mono font-bold text-white shrink-0" style={{ backgroundColor: T.teal }}>{item.layer}</span>
@@ -1917,7 +2480,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
 
       {subTab === "limits" && (
         <div className="p-6 rounded-2xl space-y-3" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
-            {["⚠️ โหมดเซลฟี่ตรวจเฉพาะการมีใบหน้า ไม่ได้วิเคราะห์อารมณ์จากสีหน้า", "⚠️ การวิเคราะห์ความรู้สึกจากข้อความอาจไม่ครอบคลุมภาษาเฉพาะกลุ่มหรือภาษาถิ่นบางรูปแบบ", "⚠️ ระบบนี้เป็นเครื่องมือเสริม ไม่สามารถแทนที่การปรึกษาจิตแพทย์หรือนักจิตวิทยา", "⚠️ อาจยังไม่สามารถตรวจจับอารมณ์เชิงซ้อนที่เกิดจากหลายสาเหตุพร้อมกันได้อย่างแม่นยำ", "⚠️ ประสิทธิภาพขึ้นอยู่กับคุณภาพการเชื่อมต่ออินเทอร์เน็ต เนื่องจากเรียกใช้ API แบบเรียลไทม์"].map((text, i) => (
+          {["โหมดภาพตรวจเพียงว่ามีใบหน้าในภาพหรือไม่ ไม่วิเคราะห์อารมณ์จากสีหน้า", "การวิเคราะห์ความรู้สึกจากข้อความอาจไม่ครอบคลุมภาษาถิ่น การประชด หรือบริบทซับซ้อน", "ระบบนี้เป็นเครื่องมือเสริม ไม่สามารถแทนที่บริการฉุกเฉิน จิตแพทย์ หรือนักจิตวิทยา", "การตรวจคำวิกฤตใช้คำสำคัญ จึงอาจไม่ครอบคลุมทุกถ้อยคำหรือทุกบริบท", "ประสิทธิภาพขึ้นอยู่กับอินเทอร์เน็ตและความพร้อมของบริการ AI ภายนอก"].map((text, i) => (
             <div key={i} className="p-3.5 rounded-xl text-xs font-semibold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{text}</div>
           ))}
         </div>
@@ -1928,17 +2491,8 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
 
 /* ============ MAIN APP ============ */
 // Page transition wipe effect wrapper
-const PageWrapper = ({ children, pageKey }: { children: React.ReactNode, pageKey: string }) => {
-  const elRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (elRef.current) {
-      gsap.fromTo(elRef.current,
-        { clipPath: "inset(0 100% 0 0)" },
-        { clipPath: "inset(0 0% 0 0)", duration: 0.6, ease: "power3.inOut" }
-      );
-    }
-  }, [pageKey]);
-  return <div ref={elRef} className="h-full w-full">{children}</div>;
+const PageWrapper = ({ children }: { children: React.ReactNode, pageKey: string }) => {
+  return <div className="h-full w-full">{children}</div>;
 };
 
 export default function App() {
@@ -1948,6 +2502,7 @@ export default function App() {
 
   // Global click ripple effect
   useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const handleGlobalClick = (e: MouseEvent) => {
       // Don't ripple if clicking inside a modal or explicitly prevented
       if ((e.target as HTMLElement).closest(".no-ripple")) return;
@@ -2003,20 +2558,11 @@ export default function App() {
       )}
       {page === "guardian" && (
         <PageWrapper pageKey="guardian">
-          <GuardianPage
-            onNext={() => {
-              setGuardianConsent(true);
-              setPage("privacy");
-            }}
-          />
+          <GuardianPage onNext={() => { setGuardianConsent(true); setPage("privacy"); }} />
         </PageWrapper>
       )}
       {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={() => setPage("app")} /></PageWrapper>}
-      {page === "app" && (
-        <PageWrapper pageKey="app">
-          <AppShell age={age} guardianConsent={guardianConsent || Number(age) >= 20} />
-        </PageWrapper>
-      )}
+      {page === "app" && <PageWrapper pageKey="app"><AppShell age={age} guardianConsent={guardianConsent || Number(age) >= 20} /></PageWrapper>}
     </div>
   );
 }

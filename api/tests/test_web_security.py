@@ -59,3 +59,27 @@ def test_tts_input_is_bounded_before_upstream_processing():
 
     response = client.post("/tts/speak", json={"text": "x" * 301})
     assert response.status_code == 422
+
+
+def test_production_rejects_a_short_session_secret(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "app_env", "production")
+    monkeypatch.setattr(settings, "session_secret", "too-short")
+    client = TestClient(app)
+
+    assert client.get("/health").status_code == 503
+    assert client.post("/session").status_code == 503
+
+
+def test_security_headers_are_added_to_api_and_frontend_responses(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "app_env", "test")
+    monkeypatch.setattr(settings, "session_secret", "test-session-secret")
+    client = TestClient(app)
+
+    for response in (client.get("/health"), client.get("/")):
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["x-frame-options"] == "DENY"
+        assert response.headers["referrer-policy"] == "no-referrer"
+        assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+        assert response.headers["x-request-id"]
