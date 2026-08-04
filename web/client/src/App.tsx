@@ -1402,6 +1402,42 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                   {EMO[mood]?.label || "ปกติ"}
                 </p>
               </div>
+
+              {/* Emergency 1323 Button */}
+              <div className="mt-4 pt-4" style={{ borderTop: "1px solid rgba(255,181,167,0.15)" }}>
+                <a
+                  href="tel:1323"
+                  className="block w-full px-4 py-3 rounded-xl transition-all duration-200 text-center"
+                  style={{
+                    backgroundColor: "#DC2626",
+                    color: "#FFFFFF",
+                    fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    border: "2px solid rgba(255,255,255,0.2)",
+                    boxShadow: "0 4px 12px rgba(220, 38, 38, 0.4)",
+                    textDecoration: "none",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#B91C1C";
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(220, 38, 38, 0.5)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "#DC2626";
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(220, 38, 38, 0.4)";
+                  }}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <PhoneIcon size={16} />
+                    <span>สายด่วน 1323</span>
+                  </div>
+                  <div className="text-[10px] mt-1 opacity-90" style={{ fontWeight: 500 }}>
+                    สุขภาพจิต 24 ชม.
+                  </div>
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -1501,6 +1537,33 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
           </div>
         </div>
       </div>
+
+      {/* FLOATING EMERGENCY 1323 BUTTON (Mobile) - Visible on all pages except home */}
+      {currentView !== "home" && (
+        <a
+          href="tel:1323"
+          className="fixed bottom-6 right-6 z-40 md:hidden flex items-center justify-center gap-2 px-5 py-4 rounded-full shadow-2xl transition-all duration-200"
+          style={{
+            backgroundColor: "#DC2626",
+            color: "#FFFFFF",
+            fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+            fontSize: "14px",
+            fontWeight: 700,
+            textDecoration: "none",
+            border: "2px solid rgba(255,255,255,0.3)",
+            boxShadow: "0 8px 24px rgba(220, 38, 38, 0.6)",
+          }}
+          onTouchStart={(e) => {
+            e.currentTarget.style.transform = "scale(0.95)";
+          }}
+          onTouchEnd={(e) => {
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+        >
+          <PhoneIcon size={18} />
+          <span>1323</span>
+        </a>
+      )}
 
       {/* ESCALATION MODAL */}
       {showEscalationModal && (
