@@ -49,25 +49,25 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-/** Strip <think>...</think> reasoning blocks from Qwen3-Think model */
+/** Strip <think>...</think> reasoning blocks from Qwen3-Think model.
+ * Handles: complete blocks, orphan closing tags, case variations.
+ */
 function stripThink(text: string): string {
   if (!text) return "";
-  let cleaned = text;
 
-  // 1. If there's a closed </think>, extract everything after the LAST </think> tag
-  if (cleaned.includes("</think>")) {
-    const parts = cleaned.split("</think>");
-    const after = parts[parts.length - 1].trim();
-    if (after) {
-      cleaned = after;
-    }
+  // Step 1: Remove all complete <think>...</think> blocks
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+  // Step 2: If an orphan </think> remains, everything BEFORE it is raw reasoning — discard it
+  const orphanClose = cleaned.toLowerCase().lastIndexOf("</think>");
+  if (orphanClose !== -1) {
+    cleaned = cleaned.slice(orphanClose + 8);
   }
 
-  // 2. Strip any remaining <think>...</think> or orphan <think> / </think> tags
-  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "");
-  cleaned = cleaned.replace(/<\/?think\s*\/?>/gi, "").trim();
+  // Step 3: Strip any remaining orphan <think> or </think> tags
+  cleaned = cleaned.replace(/<\/?think>/gi, "").trim();
 
-  return cleaned || text.replace(/<\/?think\s*\/?>/gi, "").trim();
+  return cleaned;
 }
 
 /** Extract text from Pathumma (VQA/Audio) raw response shapes */

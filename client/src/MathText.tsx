@@ -42,12 +42,25 @@ export default function MathText({ text, className, style }: Props) {
 // ─── Single-Pass Sequential Block Tokenizer ────────────────────────────────────
 
 function parseFullMarkdown(raw: string): React.ReactNode[] {
-  // Safety: strip any leaked <think>...</think> blocks from Qwen3-Think model
-  let text = raw
-    .replace(/<think>[\s\S]*?<\/think>/gi, "")
-    .replace(/<\/?think\s*\/?>/gi, "")
-    .replace(/\r\n/g, "\n")
-    .trim();
+  // Safety: Strip leaked <think>...</think> blocks from Qwen3-Think model.
+  // Two-phase approach: remove full blocks, then handle orphan closing tags.
+  let text = raw;
+
+  // Phase 1: Remove complete <think>...</think> blocks
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+  // Phase 2: If an orphan </think> remains, everything BEFORE it is raw reasoning — discard it
+  const orphanCloseIdx = text.toLowerCase().lastIndexOf("</think>");
+  if (orphanCloseIdx !== -1) {
+    const afterOrphan = text.slice(orphanCloseIdx + 8).trim();
+    text = afterOrphan || text.replace(/<\/think>/gi, "");
+  }
+
+  // Phase 3: Strip any remaining orphan <think> opening tags
+  text = text.replace(/<\/?think>/gi, "");
+
+  // Normalize line endings and trim
+  text = text.replace(/\r\n/g, "\n").trim();
 
   // Normalize delimiters for consistent handling:
   //   \[ ... \]  =>  $$ ... $$
