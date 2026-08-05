@@ -1083,8 +1083,8 @@ function AppShell() {
       setIsAnalyzing(true);
       setTimeout(() => {
         setMessages((prev) => [...prev,
-          { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์สมการเชิงเส้นเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: '"...จงหาค่า x จากสมการ 2x + 5 = 17 พร้อมแสดงวิธีทำ..."' },
-          { id: Math.random().toString(), role: "bot", text: "กระจกอ่านโจทย์แล้วนะ ดูเหมือนเป็นโจทย์สมการเชิงเส้น ลองบอกกระจกได้ไหมว่าติดขั้นตอนไหนอยู่", timestamp: Date.now() + 50 },
+        { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์สมการเชิงเส้นเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: '"...จงหาค่า x จากสมการ 2x + 5 = 17 พร้อมแสดงวิธีทำ..."' },
+        { id: Math.random().toString(), role: "bot", text: "กระจกอ่านโจทย์แล้วนะ ดูเหมือนเป็นโจทย์สมการเชิงเส้น ลองบอกกระจกได้ไหมว่าติดขั้นตอนไหนอยู่", timestamp: Date.now() + 50 },
         ]);
         setIsAnalyzing(false);
         pushTrend("neutral", "รูปการบ้าน");
@@ -1102,8 +1102,8 @@ function AppShell() {
     try {
       const { answer, llmReply } = await analyzeHomework(file);
       setMessages((prev) => [...prev,
-        { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์เรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer}"` },
-        { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() + 50 },
+      { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์เรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer}"` },
+      { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() + 50 },
       ]);
       pushTrend("neutral", "รูปการบ้าน");
     } catch (err) {
