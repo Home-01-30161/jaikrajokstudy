@@ -148,14 +148,13 @@ export async function callTextLLM(
   let effectiveTemperature = temperature;
   let extraInstruction = "";
 
-  // Detect Math / Remainder / Multiple Choice → Force Low Temp (0.05) + CoT
-  const isMathOrChoice = /(เศษ|หาร|ผลบวก|ค\.ร\.น\.|ห\.ร\.ม\.|lcm|gcd|mod|ก\.|ข\.|ค\.|ง\.|โจทย์|จำนวนเต็ม|สมการ|\$\d|\d+\s*[\+\-\*\/%]\s*\d+|1\s*<\s*n\s*<\s*\d+)/i.test(instruction);
+  // Detect Math / Calculation / Multiple Choice → Force Low Temp (0.05) + CoT
+  // Strictly require math terms or clear standalone multiple-choice patterns (e.g. "ก. ", "(ข)"), NOT bare letters in normal words.
+  const isMathOrChoice = /(?:ค\.ร\.น\.|ห\.ร\.ม\.|แคลคูลัส|อนุพันธ์|อินทีกรัล|ลิมิต|ผลหาร|เศษเหลือ|\b(lcm|gcd|mod|calculus|integral|derivative)\b|โจทย์เลข|โจทย์คณิต|\bสมการ\b|\$\d|\d+\s*[\+\-\*\/%]\s*\d+|(?:^|\s|\()[ก-ง][\.\)]\s+)/i.test(instruction);
   if (isMathOrChoice) {
     effectiveTemperature = 0.05;
-    extraInstruction = "\n\n[บังคับ: คำนวณด้วยหลักคณิตศาสตร์จริงทีละขั้นตอน ห้ามเดาตัวเลขเด็ดขาด หากเป็นโจทย์เศษเหลือ ให้คำนวณ ค.ร.น. แล้วบวกเศษ แล้วตรวจกับตัวเลือก ก/ข/ค/ง ให้ตรงกับผลคำนวณจริง 100%] " +
-      "**จัดรูปแบบบังคับ**: ใช้ $$...$$ สำหรับทุกสูตรสมการ | ตาราง markdown แสดงขั้นตอนคำนวณ | " +
-      "Blockquote `> **สูตรสำคัญ**` เน้นทฤษฎีบท | Task list `- [ ]` ขั้นตอนแก้โจทย์ | " +
-      "Horizontal rule `---` แยกขั้นตอน | **Bold** เน้นคำตอบสุดท้าย";
+    extraInstruction = "\n\n[คำสั่งจัดรูปแบบคณิตศาสตร์: คำนวณตามโจทย์ของผู้ใช้ทีละขั้นตอนอย่างแม่นยำ ห้ามเดาตัวเลข หรือสร้างโจทย์ใหม่ที่ผู้ใช้ไม่ได้ถามขึ้นมาเด็ดขาด] " +
+      "**จัดรูปแบบ**: ใช้ $$...$$ สำหรับทุกสูตรสมการ | ตาราง markdown แสดงขั้นตอนคำนวณ | หากมีตัวเลือก ก/ข/ค/ง ให้สรุปข้อที่ถูกต้องท้ายสุด";
   }
 
   // Detect Programming Tutorial → Enforce 5-topic comprehensive lesson
