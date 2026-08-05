@@ -74,15 +74,15 @@ export const JAIKRAJOK_SYSTEM_PROMPT =
   "คุณคือ กระจก (JaiKraJok) ผู้ช่วยสอนเรียนและเพื่อนคู่คิดอัจฉริยะ สร้างโดยทีม JaiKraJok " +
   "ตอบเป็นภาษาไทยอย่างสุภาพ อบอุ่น ชัดเจน ครอบคลุม ละเอียดลึกซึ้งในระดับมืออาชีพ (สไตล์ Gemini / Claude) " +
   "กฎสำคัญสำหรับการสอนโปรแกรมมิ่งและวิชาการให้ครอบคลุมทุกหัวข้อ (Complete Master Lesson): " +
-  "1. เมื่อผู้ใช้ขอให้สอนไวยากรณ์พื้นฐาน (Basic Syntax) หรือการเขียนโปรแกรม (C++, Python, Java, JS ฯลฯ) " +
-  "   ต้องอธิบายให้ครบถ้วนครอบคลุมทั้ง 5 หัวข้อหลักในคำตอบเดียวเสมอ ห้ามตอบเพียงแค่เรื่องเดียว: " +
-  "   - โครงสร้างโปรแกรมหลักและ Hello World (พร้อมกล่องโค้ด ```cpp ... ```) " +
+  "1. เมื่อผู้ใช้ขอให้สอนไวยากรณ์พื้นฐาน (Basic Syntax) หรือการเขียนโปรแกรมภาษาใดๆ (เช่น C, C++, Python, Java, JS, TS, C#, Go, Rust, PHP, SQL ฯลฯ) " +
+  "   ต้องอธิบายให้ครบถ้วนครอบคลุมทั้ง 5 หัวข้อหลักในคำตอบเดียวเสมอ ห้ามตอบเพียงเรื่องเดียวเด็ดขาด: " +
+  "   - โครงสร้างโปรแกรมหลักและ Hello World (พร้อมกล่องโค้ด ```c หรือ ```cpp) " +
   "   - 1. การประกาศตัวแปรและชนิดข้อมูล (Variables & Data Types) (พร้อมกล่องโค้ดตัวอย่าง) " +
-  "   - 2. การรับค่าและการแสดงผล (Input & Output - cin/cout หรือ print/input) (พร้อมกล่องโค้ดตัวอย่าง) " +
+  "   - 2. การรับค่าและการแสดงผล (Input & Output - printf/scanf หรือ cin/cout หรือ print/input) (พร้อมกล่องโค้ดตัวอย่าง) " +
   "   - 3. เงื่อนไขทางเลือก (Conditional Statements - if/else) (พร้อมกล่องโค้ดตัวอย่าง) " +
   "   - 4. การวนลูป (Loops - for/while) (พร้อมกล่องโค้ดตัวอย่าง) " +
   "   - 5. ฟังก์ชัน (Functions) (พร้อมกล่องโค้ดตัวอย่าง) " +
-  "2. โค้ดทุกกล่องต้องถูกต้องตามไวยากรณ์ภาษา 100% (เช่น C++ ใช้ int/double/string/bool/auto ห้ามใช้ var) " +
+  "2. โค้ดทุกกล่องต้องถูกต้องตามไวยากรณ์ภาษา 100% (เช่น ภาษา C ใช้ #include <stdio.h> int main(), printf, scanf; C++ ใช้ #include <iostream> std::cout; ห้ามใช้คำว่า var ใน C/C++) " +
   "3. ทุกหัวข้อต้องมีกล่องโค้ด ```lang ... ``` แยกเฉพาะ และมี Comment อธิบายในโค้ดอย่างละเอียด " +
   "4. สำหรับโจทย์คณิตศาสตร์/วิทยาศาสตร์ ใช้ LaTeX $...$ และ $$...$$ แสดงสมการแบบละเอียดทุกขั้นตอน " +
   "5. หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย";
@@ -114,10 +114,13 @@ export async function callTextLLM(
   // If there's history, we format it into the prompt since Pathumma TextQA doesn't take a messages array natively
   let fullInstruction = instruction;
 
-  // Enhance tutorial requests to guarantee all 5 topics are covered in 1 response
-  if (/(สอน|syntax|พื้นฐาน|basic|เรียน|เขียนโค้ด|เริ่มต้น)/i.test(instruction) && /(c\+\+|python|java|javascript|js|html|css|c#|golang|rust|php|sql|โปรแกรม|โค้ด)/i.test(instruction)) {
-    fullInstruction += "\n\n[ข้อบังคับสำคัญ: กรุณาสอนบทเรียนนี้ฉบับสมบูรณ์ ให้ครอบคลุมทั้ง 5 หัวข้อหลักในคำตอบเดียว: 1. โครงสร้างหลัก & Hello World, 2. ตัวแปรและชนิดข้อมูล (Variables & Data Types), 3. การรับค่าและการแสดงผล (Input & Output), 4. เงื่อนไขทางเลือกและการวนลูป (Conditionals & Loops), 5. ฟังก์ชัน (Functions) โดยมีกล่องโค้ด ```...``` ตัวอย่างและอธิบายทีละหัวข้ออย่างสมบูรณ์]";
+  // Enhance tutorial & learning requests to GUARANTEE comprehensive coverage in ALL chats
+  const isLearningOrTech = /(สอน|syntax|พื้นฐาน|basic|เรียน|เขียน|code|โปรแกรม|คืออะไร|อธิบาย|วิธี|guide|tutorial|overview|c\b|cpp|c\+\+|python|java|javascript|typescript|js|ts|html|css|c#|golang|go|rust|php|sql|ruby|swift|kotlin|dart|flutter)/i.test(instruction);
+  
+  if (isLearningOrTech) {
+    fullInstruction += "\n\n[ข้อบังคับสำคัญสำหรับการตอบ: หากเป็นคำขอสอนโปรแกรมมิ่งหรือเรื่องเทคโนโลยี ให้เขียนบทเรียนฉบับสมบูรณ์ที่ครอบคลุมครบถ้วนทั้ง 5 หัวข้อหลักในคำตอบเดียวเสมอ: 1. โครงสร้างหลัก & Hello World, 2. ตัวแปรและชนิดข้อมูล (Variables & Data Types), 3. การรับส่งข้อมูล (Input & Output), 4. เงื่อนไขทางเลือกและการวนลูป (Conditionals & Loops), 5. ฟังก์ชัน (Functions) โดยต้องมีกล่องโค้ด ```...``` ตัวอย่างและอธิบายทีละหัวข้ออย่างละเอียดสมบูรณ์แบบ]";
   }
+
 
   if (history && history.length > 0) {
     const historyText = history
