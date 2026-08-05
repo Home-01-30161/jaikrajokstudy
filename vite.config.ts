@@ -276,6 +276,14 @@ export default defineConfig({
     port: 3000,
     strictPort: false, // Will find next available port if 3000 is busy
     host: true,
+    proxy: {
+      '/api/pathumma': {
+        target: 'https://api.aiforthai.in.th',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path: string) => path.replace(/^\/api\/pathumma/, ''),
+      },
+    },
     allowedHosts: [
       ".manuspre.computer",
       ".manus.computer",

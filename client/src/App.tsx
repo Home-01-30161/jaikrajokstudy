@@ -2,32 +2,39 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
+import {
+  hasApiKey,
+  chat,
+  analyzeSelfie,
+  analyzeHomework,
+  analyzeAudio,
+} from "./pathummaApi";
 
 /* ============ IMAGE PATHS ============ */
 const IMG = {
-    loginCollage: "/collage/login_collage_ffaf73f0.png",
-    grid: "/collage/grid.png",
-    handPen: "/collage/hand_pen_b35a681f.png",
-    origamiStars: "/collage/origami_stars_0584c42e.png",
-    megaphone: "/collage/megaphone_halftone_f526c4ce.png",
-    booksStack: "/collage/books_stack_435c2b81.png",
-    chatBubbles: "/collage/chat_bubbles_77801543.png",
-    chartGraph: "/collage/chart_graph_a92a34b6.png",
-    schoolBuilding: "/collage/school_building_8cd04dbb.png",
-    shieldLock: "/collage/shield_lock_6bc87c75.png",
-    hand: "/collage/hand.png",
-    booksStackNoBg: "/collage/books_stack_435c2b81-removebg-preview.png",
-    chartGraphNoBg: "/collage/chart_graph_a92a34b6-removebg-preview.png",
-    chatBubblesNoBg: "/collage/chat_bubbles_77801543-removebg-preview.png",
-    origamiStarsNoBg: "/collage/origami_stars_0584c42e-removebg-preview.png",
-    schoolBuildingNoBg: "/collage/school_building_8cd04dbb-removebg-preview.png",
-    shieldLockNoBg: "/collage/shield_lock_6bc87c75-removebg-preview.png",
-    amplifier: "/collage/amplifier.png",
-    bulb: "/collage/bulb.png",
-    dots: "/collage/dots.png",
-    glasses: "/collage/glasses.png",
-    redstar: "/collage/redstar.png",
-    star: "/collage/star.png",
+  loginCollage: "/collage/login_collage_ffaf73f0.png",
+  grid: "/collage/grid.png",
+  handPen: "/collage/hand_pen_b35a681f.png",
+  origamiStars: "/collage/origami_stars_0584c42e.png",
+  megaphone: "/collage/megaphone_halftone_f526c4ce.png",
+  booksStack: "/collage/books_stack_435c2b81.png",
+  chatBubbles: "/collage/chat_bubbles_77801543.png",
+  chartGraph: "/collage/chart_graph_a92a34b6.png",
+  schoolBuilding: "/collage/school_building_8cd04dbb.png",
+  shieldLock: "/collage/shield_lock_6bc87c75.png",
+  hand: "/collage/hand.png",
+  booksStackNoBg: "/collage/books_stack_435c2b81-removebg-preview.png",
+  chartGraphNoBg: "/collage/chart_graph_a92a34b6-removebg-preview.png",
+  chatBubblesNoBg: "/collage/chat_bubbles_77801543-removebg-preview.png",
+  origamiStarsNoBg: "/collage/origami_stars_0584c42e-removebg-preview.png",
+  schoolBuildingNoBg: "/collage/school_building_8cd04dbb-removebg-preview.png",
+  shieldLockNoBg: "/collage/shield_lock_6bc87c75-removebg-preview.png",
+  amplifier: "/collage/amplifier.png",
+  bulb: "/collage/bulb.png",
+  dots: "/collage/dots.png",
+  glasses: "/collage/glasses.png",
+  redstar: "/collage/redstar.png",
+  star: "/collage/star.png",
 };
 
 /* ============ DESIGN TOKENS ============ */
@@ -281,15 +288,15 @@ function RedDotCross({ className = "", color = T.red }: { className?: string; co
     <div className={`absolute pointer-events-none ${className}`}>
       <svg viewBox="0 0 80 80" width="80" height="80" fill="none">
         {[
-          [32,8],[40,8],[48,8],
-          [24,16],[32,16],[40,16],[48,16],[56,16],
-          [16,24],[24,24],[32,24],[40,24],[48,24],[56,24],[64,24],
-          [8,32],[16,32],[24,32],[32,32],[40,32],[48,32],[56,32],[64,32],[72,32],
-          [8,40],[16,40],[24,40],[32,40],[40,40],[48,40],[56,40],[64,40],[72,40],
-          [16,48],[24,48],[32,48],[40,48],[48,48],[56,48],[64,48],
-          [24,56],[32,56],[40,56],[48,56],[56,56],
-          [32,64],[40,64],[48,64],
-          [40,72],
+          [32, 8], [40, 8], [48, 8],
+          [24, 16], [32, 16], [40, 16], [48, 16], [56, 16],
+          [16, 24], [24, 24], [32, 24], [40, 24], [48, 24], [56, 24], [64, 24],
+          [8, 32], [16, 32], [24, 32], [32, 32], [40, 32], [48, 32], [56, 32], [64, 32], [72, 32],
+          [8, 40], [16, 40], [24, 40], [32, 40], [40, 40], [48, 40], [56, 40], [64, 40], [72, 40],
+          [16, 48], [24, 48], [32, 48], [40, 48], [48, 48], [56, 48], [64, 48],
+          [24, 56], [32, 56], [40, 56], [48, 56], [56, 56],
+          [32, 64], [40, 64], [48, 64],
+          [40, 72],
         ].map(([cx, cy], i) => <circle key={i} cx={cx} cy={cy} r="3.2" fill={color} opacity="0.9" />)}
       </svg>
     </div>
@@ -410,7 +417,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
   return (
     <div className="relative min-h-screen overflow-hidden" style={{ backgroundColor: T.black }}>
       <CheckerStrip className="fixed top-0 left-0 right-0 z-50" />
-      
+
       {/* LEFT: collage only (no grid) */}
       <div
         className="absolute left-0 top-0 bottom-0 z-0 login-img"
@@ -425,7 +432,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           className="absolute inset-0 w-full h-full object-cover object-left-top"
           style={{ mixBlendMode: "multiply", opacity: 0.88 }}
         />
-        
+
         {/* Black curved divider sweeping right fully connected */}
         <div className="absolute inset-y-0 right-0 z-10" style={{ width: "25%" }}>
           <svg viewBox="0 0 120 100" preserveAspectRatio="none" className="w-full h-full block">
@@ -441,7 +448,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           <img src={IMG.hand} alt="" className="w-full h-auto opacity-80" />
         </div>
       </div>
-      
+
       <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-30 login-form" style={{ width: "50%" }}>
         {/* Form card */}
         <div
@@ -561,11 +568,11 @@ function LoginPage({ onNext }: { onNext: () => void }) {
 function OnbWelcome({ onNext }: { onNext: () => void }) {
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
-        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
-        <img src={IMG.origamiStarsNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
-        <img src={IMG.hand} className="absolute bottom-[-40px] right-[-40px] w-[420px] h-auto pointer-events-none z-0 opacity-70" alt="" />
-        <img src={IMG.redstar} className="absolute top-16 right-24 w-16 h-auto pointer-events-none z-0" alt="" />
-        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+      <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+      <img src={IMG.origamiStarsNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
+      <img src={IMG.hand} className="absolute bottom-[-40px] right-[-40px] w-[420px] h-auto pointer-events-none z-0 opacity-70" alt="" />
+      <img src={IMG.redstar} className="absolute top-16 right-24 w-16 h-auto pointer-events-none z-0" alt="" />
+      <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
         <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
           ยินดีต้อนรับสู่ JaiKraJok
         </h2>
@@ -583,10 +590,10 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
 function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => void; onNext: () => void }) {
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
-        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
-        <img src={IMG.booksStackNoBg} className="absolute bottom-0 left-0 w-80 h-auto pointer-events-none z-0" alt="" />
-        <img src={IMG.glasses} className="absolute top-4 right-10 w-96 h-auto pointer-events-none z-0 opacity-80" alt="" />
-        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+      <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+      <img src={IMG.booksStackNoBg} className="absolute bottom-0 left-0 w-80 h-auto pointer-events-none z-0" alt="" />
+      <img src={IMG.glasses} className="absolute top-4 right-10 w-96 h-auto pointer-events-none z-0 opacity-80" alt="" />
+      <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
         <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
           คุณอายุเท่าไหร่?
         </h2>
@@ -612,10 +619,10 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
 function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmail }: any) {
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
-        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
-        <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0" alt="" />
-        <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0 " alt="" />
-        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+      <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+      <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0" alt="" />
+      <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0 " alt="" />
+      <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
         <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
           ขอความยินยอมจากผู้ปกครอง
         </h2>
@@ -654,10 +661,10 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
 function PrivacyPage({ onNext }: { onNext: () => void }) {
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
-        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
-        <img src={IMG.chartGraphNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
-        <img src={IMG.dots} className="absolute top-16 right-16 w-32 h-auto pointer-events-none z-0 " alt="" />
-        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
+      <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+      <img src={IMG.chartGraphNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0" alt="" />
+      <img src={IMG.dots} className="absolute top-16 right-16 w-32 h-auto pointer-events-none z-0 " alt="" />
+      <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
         <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
           นโยบายความเป็นส่วนตัว
         </h2>
@@ -730,6 +737,13 @@ function AppShell() {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   const escalationRef = useRef<HTMLDivElement>(null);
+  // Pathumma API — file input refs
+  const selfieInputRef = useRef<HTMLInputElement>(null);
+  const homeworkInputRef = useRef<HTMLInputElement>(null);
+  // Mic recording state
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem("jaikrajok:trend", JSON.stringify(trendData)); } catch { /* storage full or blocked */ }
@@ -858,57 +872,187 @@ function AppShell() {
     return bestScore === 0 ? "neutral" : bestKey;
   };
 
-  const sendMessage = useCallback((overrideText?: string, sourceLabel: string = "ข้อความ") => {
+  const sendMessage = useCallback(async (overrideText?: string, sourceLabel: string = "ข้อความ") => {
     const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim()) return;
     if (overrideText === undefined) setInputText("");
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
     noteMultimodal(sourceLabel);
     setIsAnalyzing(true);
-    const key = detectEmotion(textToSend);
-    setTimeout(() => {
-      const list = RESPONSES[key] || RESPONSES.neutral;
-      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: list[Math.floor(Math.random() * list.length)], timestamp: Date.now() }]);
-      setIsAnalyzing(false);
-      pushTrend(key, sourceLabel);
-    }, 1000);
+
+    if (hasApiKey()) {
+      // ── Real Pathumma Text LLM ──
+      try {
+        const { emotionKey, reply } = await chat(textToSend);
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: reply, timestamp: Date.now() }]);
+        pushTrend(emotionKey, sourceLabel);
+      } catch (err) {
+        console.error("Pathumma Text LLM error:", err);
+        toast("ไม่สามารถเชื่อมต่อ Pathumma LLM ได้ ใช้การตอบสนองในเครื่องแทน");
+        // Fallback to local mock
+        const key = detectEmotion(textToSend);
+        const list = RESPONSES[key] || RESPONSES.neutral;
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: list[Math.floor(Math.random() * list.length)], timestamp: Date.now() }]);
+        pushTrend(key, sourceLabel);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    } else {
+      // ── Local mock (no API key) ──
+      setTimeout(() => {
+        const key = detectEmotion(textToSend);
+        const list = RESPONSES[key] || RESPONSES.neutral;
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: list[Math.floor(Math.random() * list.length)], timestamp: Date.now() }]);
+        setIsAnalyzing(false);
+        pushTrend(key, sourceLabel);
+      }, 1000);
+    }
   }, [inputText, noteMultimodal, pushTrend]);
 
   const handleSelfie = () => {
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "📷 ถ่ายเซลฟี่เพื่อวิเคราะห์สีหน้า", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
-    noteMultimodal("เซลฟี่");
-    setIsAnalyzing(true);
-    setTimeout(() => {
-      const key = SELFIE_RESULTS[Math.floor(Math.random() * SELFIE_RESULTS.length)];
-      const info = EMO[key];
-      const note = SELFIE_NOTES[key];
-      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: note, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note, color: info.color, bg: info.bg, text: info.text } }]);
-      setIsAnalyzing(false);
-      pushTrend(key, "เซลฟี่");
+    if (hasApiKey()) {
+      // Open native camera/file picker
+      selfieInputRef.current?.click();
+    } else {
+      // Mock fallback
+      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "📷 ถ่ายเซลฟี่เพื่อวิเคราะห์สีหน้า", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
+      noteMultimodal("เซลฟี่");
+      setIsAnalyzing(true);
       setTimeout(() => {
-        const list = RESPONSES[key];
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: list[Math.floor(Math.random() * list.length)], timestamp: Date.now() }]);
-      }, 700);
-    }, 1200);
+        const key = SELFIE_RESULTS[Math.floor(Math.random() * SELFIE_RESULTS.length)];
+        const info = EMO[key];
+        const note = SELFIE_NOTES[key];
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: note, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note, color: info.color, bg: info.bg, text: info.text } }]);
+        setIsAnalyzing(false);
+        pushTrend(key, "เซลฟี่");
+        setTimeout(() => {
+          const list = RESPONSES[key];
+          setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: list[Math.floor(Math.random() * list.length)], timestamp: Date.now() }]);
+        }, 700);
+      }, 1200);
+    }
   };
 
-  const handleVoice = () => {
-    const samples = ["วันนี้เหนื่อยมากเลย อ่านหนังสือทั้งวัน", "พรุ่งนี้สอบแล้วรู้สึกกังวลนิดหน่อย", "วันนี้โอเคดี สบายใจ", "เครียดมาก ทำโจทย์ไม่ได้เลย"];
-    sendMessage(`🎤 (เสียงพูด): "${samples[Math.floor(Math.random() * samples.length)]}"`, "เสียงพูด");
+  const handleSelfieFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: `📷 ถ่ายเซลฟี่: ${file.name}`, timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
+    noteMultimodal("เซลฟี่");
+    setIsAnalyzing(true);
+    try {
+      const { answer, llmReply } = await analyzeSelfie(file);
+      const emotionKey = "neutral";
+      const info = EMO[emotionKey] || EMO.neutral;
+      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: answer, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note: answer, color: info.color, bg: info.bg, text: info.text } }]);
+      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() }]);
+      pushTrend(emotionKey, "เซลฟี่");
+    } catch (err) {
+      console.error("Vision LLM selfie error:", err);
+      toast("วิเคราะห์รูปไม่สำเร็จ กรุณาลองใหม่");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleVoice = async () => {
+    if (!hasApiKey()) {
+      // Mock fallback
+      const samples = ["วันนี้เหนื่อยมากเลย อ่านหนังสือทั้งวัน", "พรุ่งนี้สอบแล้วรู้สึกกังวลนิดหน่อย", "วันนี้โอเคดี สบายใจ", "เครียดมาก ทำโจทย์ไม่ได้เลย"];
+      await sendMessage(`🎤 (เสียงพูด): "${samples[Math.floor(Math.random() * samples.length)]}"`, "เสียงพูด");
+      return;
+    }
+
+    if (isRecording) {
+      // Stop recording
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setIsRecording(false);
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🎤 บันทึกเสียงเรียบร้อยแล้ว กำลังวิเคราะห์...", timestamp: Date.now(), sourceTag: "เสียงพูด" }]);
+        noteMultimodal("เสียงพูด");
+        setIsAnalyzing(true);
+        try {
+          const { transcription, emotionKey, llmReply } = await analyzeAudio(audioBlob);
+          const displayText = transcription ? `🎤 (เสียงพูด): "${transcription}"` : "🎤 บันทึกเสียงแล้ว";
+          setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() }]);
+          pushTrend(emotionKey, "เสียงพูด");
+          // Also run text LLM with transcription for deeper response
+          if (transcription) {
+            setMessages((prev) => prev.map((m, i) => i === prev.length - 2 ? { ...m, text: displayText } : m));
+          }
+        } catch (err) {
+          console.error("Audio LLM error:", err);
+          toast("วิเคราะห์เสียงไม่สำเร็จ กรุณาลองใหม่");
+        } finally {
+          setIsAnalyzing(false);
+        }
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      toast("🎙️ กำลังบันทึกเสียง... กดอีกครั้งเพื่อหยุด");
+      // Auto-stop after 30 seconds
+      setTimeout(() => { if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop(); }, 30000);
+    } catch (err) {
+      console.error("Mic access error:", err);
+      toast("ไม่สามารถเข้าถึงไมโครโฟนได้ กรุณาอนุญาตการเข้าถึง");
+    }
   };
 
   const handleHomeworkPhoto = () => {
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🖼️ แนบรูปถ่ายการบ้าน (Homework.jpg)", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
+    if (hasApiKey()) {
+      homeworkInputRef.current?.click();
+    } else {
+      // Mock fallback
+      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🖼️ แนบรูปถ่ายการบ้าน (Homework.jpg)", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
+      noteMultimodal("รูปการบ้าน");
+      setIsAnalyzing(true);
+      setTimeout(() => {
+        setMessages((prev) => [...prev,
+          { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์สมการเชิงเส้นเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: '"...จงหาค่า x จากสมการ 2x + 5 = 17 พร้อมแสดงวิธีทำ..."' },
+          { id: Math.random().toString(), role: "bot", text: "กระจกอ่านโจทย์แล้วนะ ดูเหมือนเป็นโจทย์สมการเชิงเส้น ลองบอกกระจกได้ไหมว่าติดขั้นตอนไหนอยู่", timestamp: Date.now() + 50 },
+        ]);
+        setIsAnalyzing(false);
+        pushTrend("neutral", "รูปการบ้าน");
+      }, 1300);
+    }
+  };
+
+  const handleHomeworkFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: `🖼️ แนบรูปถ่ายการบ้าน: ${file.name}`, timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
     noteMultimodal("รูปการบ้าน");
     setIsAnalyzing(true);
-    setTimeout(() => {
+    try {
+      const { answer, llmReply } = await analyzeHomework(file);
       setMessages((prev) => [...prev,
-        { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์สมการเชิงเส้นเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: '"...จงหาค่า x จากสมการ 2x + 5 = 17 พร้อมแสดงวิธีทำ..."' },
-        { id: Math.random().toString(), role: "bot", text: "กระจกอ่านโจทย์แล้วนะ ดูเหมือนเป็นโจทย์สมการเชิงเส้น ลองบอกกระจกได้ไหมว่าติดขั้นตอนไหนอยู่", timestamp: Date.now() + 50 },
+        { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์เรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer}"` },
+        { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() + 50 },
       ]);
-      setIsAnalyzing(false);
       pushTrend("neutral", "รูปการบ้าน");
-    }, 1300);
+    } catch (err) {
+      console.error("Vision LLM homework error:", err);
+      toast("อ่านรูปการบ้านไม่สำเร็จ กรุณาลองใหม่");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const resetChat = () => {
@@ -1146,32 +1290,9 @@ function AppShell() {
                       positive: "วันนี้รู้สึกสดใส มีความสุขมากค่ะ",
                     };
                     const openingText = openingLines[key] || "วันนี้เป็นยังไงบ้าง";
-                    setMessages((prev) => [
-                      ...prev,
-                      {
-                        id: Math.random().toString(),
-                        role: "user" as const,
-                        text: `${info.emoji} ${openingText}`,
-                        timestamp: Date.now(),
-                        sourceTag: "อารมณ์แท็บ",
-                      },
-                    ]);
-                    noteMultimodal("ข้อความ");
-                    setIsAnalyzing(true);
-                    setTimeout(() => {
-                      const list = RESPONSES[key] || RESPONSES.neutral;
-                      setMessages((prev) => [
-                        ...prev,
-                        {
-                          id: Math.random().toString(),
-                          role: "bot" as const,
-                          text: list[Math.floor(Math.random() * list.length)],
-                          timestamp: Date.now(),
-                        },
-                      ]);
-                      setIsAnalyzing(false);
-                      pushTrend(key, "อารมณ์แท็บ");
-                    }, 900);
+                    const fullText = `${info.emoji} ${openingText}`;
+                    // Route through sendMessage so the real LLM handles the response
+                    sendMessage(fullText, "อารมณ์แท็บ");
                     setCurrentView("chat");
                   }}
                 />
@@ -1293,6 +1414,63 @@ function AppShell() {
           </div>
         </div>
       )}
+
+      {/* ── Hidden file inputs for Pathumma Vision LLM ── */}
+      <input
+        ref={selfieInputRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        style={{ display: "none" }}
+        onChange={handleSelfieFile}
+        aria-hidden="true"
+      />
+      <input
+        ref={homeworkInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        style={{ display: "none" }}
+        onChange={handleHomeworkFile}
+        aria-hidden="true"
+      />
+
+      {/* ── Mic recording indicator pill ── */}
+      {isRecording && (
+        <div
+          onClick={handleVoice}
+          style={{
+            position: "fixed", bottom: "96px", left: "50%", transform: "translateX(-50%)",
+            zIndex: 999, background: "#FF3366", color: "#fff",
+            borderRadius: "999px", padding: "10px 24px",
+            display: "flex", alignItems: "center", gap: "10px",
+            fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+            fontSize: "14px", fontWeight: 700,
+            boxShadow: "0 4px 24px rgba(255,51,102,0.45)",
+            cursor: "pointer", userSelect: "none",
+          }}
+        >
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", display: "inline-block" }} />
+          🎙️ กำลังบันทึก — แตะเพื่อหยุด
+        </div>
+      )}
+
+      {/* ── Pathumma API status badge ── */}
+      <div
+        style={{
+          position: "fixed", bottom: "12px", right: "12px", zIndex: 500,
+          display: "flex", alignItems: "center", gap: "6px",
+          background: hasApiKey() ? "rgba(10,10,10,0.85)" : "rgba(180,40,40,0.9)",
+          backdropFilter: "blur(8px)",
+          borderRadius: "999px", padding: "5px 12px",
+          fontFamily: "'Inter', monospace", fontSize: "11px",
+          color: "#fff", letterSpacing: "0.04em",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+          pointerEvents: "none",
+        }}
+      >
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: hasApiKey() ? "#39FF14" : "#FF4444", flexShrink: 0 }} />
+        {hasApiKey() ? "Pathumma LLM — เชื่อมต่อแล้ว" : "Pathumma LLM — ยังไม่ได้ตั้งค่า API Key"}
+      </div>
     </div>
   );
 }
@@ -1440,7 +1618,7 @@ function HomeView({
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = INK; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
               >
                 เริ่มคุยกับกระจก
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
               </button>
               <button
                 onClick={onGoTrend}
@@ -1527,7 +1705,7 @@ function HomeView({
           <span style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.16em", color: INK_MUTED, textTransform: "uppercase" }}>04 โหมด</span>
         </div>
         <svg width="60" height="12" viewBox="0 0 60 12" fill="none" style={{ opacity: 0.4 }}>
-          <path d="M0 6 Q7.5 0 15 6 Q22.5 12 30 6 Q37.5 0 45 6 Q52.5 12 60 6" stroke={PINK} strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+          <path d="M0 6 Q7.5 0 15 6 Q22.5 12 30 6 Q37.5 0 45 6 Q52.5 12 60 6" stroke={PINK} strokeWidth="2.5" fill="none" strokeLinecap="round" />
         </svg>
       </div>
 
@@ -1649,7 +1827,7 @@ function HomeView({
                 </h2>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: PINK, color: BLACK, borderRadius: "9999px", padding: "0.4rem 1.1rem", fontSize: "0.78rem", fontWeight: 800, fontFamily: SF }}>
                   เริ่มเลย
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                 </div>
               </div>
 
@@ -2226,22 +2404,22 @@ export default function App() {
     const handleGlobalClick = (e: MouseEvent) => {
       // Don't ripple if clicking inside a modal or explicitly prevented
       if ((e.target as HTMLElement).closest(".no-ripple")) return;
-      
+
       const colors = ["#2D6A6F", "#1A1A1A", "#FFB5A7", "#A85F73", "#6C8C64"];
       const col = colors[Math.floor(Math.random() * colors.length)];
       const maxR = 40 + Math.random() * 60;
-      
+
       const drop = document.createElement("div");
       drop.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;width:12px;height:12px;border-radius:50%;background:${col};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
       document.body.appendChild(drop);
-      
+
       gsap.fromTo(drop,
         { scale: 0, opacity: 0.35 },
-        { scale: maxR/6, opacity: 0, duration: 1.2, ease: "expo.out", onComplete: () => drop.remove() }
+        { scale: maxR / 6, opacity: 0, duration: 1.2, ease: "expo.out", onComplete: () => drop.remove() }
       );
-      
+
       // Some micro droplets
-      for(let i=0; i<3; i++) {
+      for (let i = 0; i < 3; i++) {
         const micro = document.createElement("div");
         const angle = Math.random() * Math.PI * 2;
         const dist = maxR * (0.3 + Math.random() * 0.5);
@@ -2250,7 +2428,7 @@ export default function App() {
         micro.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;width:3px;height:3px;border-radius:50%;background:${col};pointer-events:none;z-index:9999;transform:translate(-50%,-50%)`;
         document.body.appendChild(micro);
         gsap.to(micro, {
-          x: tx, y: ty, scale: 0, opacity: 0, duration: 0.6 + Math.random()*0.4, ease: "power2.out",
+          x: tx, y: ty, scale: 0, opacity: 0, duration: 0.6 + Math.random() * 0.4, ease: "power2.out",
           onComplete: () => micro.remove()
         });
       }
