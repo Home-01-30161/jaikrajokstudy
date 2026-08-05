@@ -41,7 +41,13 @@ export default function MathText({ text, className, style }: Props) {
 // ─── Main Markdown Parser ──────────────────────────────────────────────────────
 
 function parseFullMarkdown(raw: string): React.ReactNode[] {
-  const text = raw.replace(/\r\n/g, "\n");
+  // Normalize line endings and LaTeX delimiters:
+  //   \[ ... \]  =>  $$ ... $$
+  //   \( ... \)  =>  $ ... $
+  let text = raw.replace(/\r\n/g, "\n");
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => `$$${latex.trim()}$$`);
+  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => `$${latex.trim()}$`);
+
   const nodes: React.ReactNode[] = [];
 
   // Step 1: Extract code blocks (```lang\ncode``` or unclosed ```lang\ncode...)
@@ -117,8 +123,8 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
       return;
     }
 
-    // Block math: $$...$$
-    const blockMathMatch = line.match(/^\s*\$\$([\s\S]*?)\$\$\s*$/);
+    // Block math: $$...$$ or \[...\]
+    const blockMathMatch = line.match(/^\s*(?:\$\$|\\\[)([\s\S]*?)(?:\$\$|\\\])\s*$/);
     if (blockMathMatch) {
       flushTable();
       nodes.push(<BlockMath key={key} latex={blockMathMatch[1].trim()} />);
@@ -245,20 +251,22 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
 // ─── Inline Token Parser (Math, Code, Bold, Links) ─────────────────────────────
 
 function renderInline(text: string): React.ReactNode[] {
-  // Matches: block math $$...$$, inline math $...$, inline code `...`, bold **...**, links [text](url)
-  const TOKEN_REGEX = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|`[^`\n]+?`|\*\*[^*]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
+  // Matches: block math $$...$$ or \[...\], inline math $...$ or \(...\), inline code `...`, bold **...**, links [text](url)
+  const TOKEN_REGEX = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\$[^$\n]+?\$|\\\([\s\S]*?\\\)|`[^`\n]+?`|\*\*[^*]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
 
   const parts = text.split(TOKEN_REGEX);
   return parts.map((part, i) => {
     if (!part) return null;
 
-    // Block math $$...$$
-    if (part.startsWith("$$") && part.endsWith("$$")) {
-      return <BlockMath key={i} latex={part.slice(2, -2).trim()} />;
+    // Block math $$...$$ or \[...\]
+    if ((part.startsWith("$$") && part.endsWith("$$")) || (part.startsWith("\\[") && part.endsWith("\\]"))) {
+      const latex = part.startsWith("$$") ? part.slice(2, -2) : part.slice(2, -2);
+      return <BlockMath key={i} latex={latex.trim()} />;
     }
-    // Inline math $...$
-    if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
-      return <InlineMath key={i} latex={part.slice(1, -1).trim()} />;
+    // Inline math $...$ or \(...\)
+    if ((part.startsWith("$") && part.endsWith("$") && part.length > 2) || (part.startsWith("\\(") && part.endsWith("\\)"))) {
+      const latex = part.startsWith("$") ? part.slice(1, -1) : part.slice(2, -2);
+      return <InlineMath key={i} latex={latex.trim()} />;
     }
     // Inline code `...`
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
