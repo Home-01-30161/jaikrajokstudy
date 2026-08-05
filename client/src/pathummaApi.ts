@@ -396,19 +396,21 @@ export async function callTextLLMWithSearch(
     searchCtx =
       `\n\n---\n**ผลการค้นหาจริงจากเว็บ (Tavily Web Search Results):**\n${snippets}\n` +
       (data.answer ? `\n**สรุปภาพรวมจากระบบค้นหา:** ${data.answer}\n` : "") +
-      `---\n\n**ข้อบังคับสำคัญในการตอบ**: ` +
-      `1. ใช้ข้อมูลจริงจากผลการค้นหาด้านบนตอบอย่างครอบคลุม ละเอียด และแม่นยำที่สุด ` +
-      `2. หากอ้างอิงส่วนใด ให้ใส่เลข [1], [2] กำกับ ` +
-      `3. ห้ามคิดแต่งข้อมูลเองหากไม่พบในผลการค้นหา ให้ระบุว่าข้อมูลใดที่มีหรือไม่มีอ้างอิง`;
+      `---\n\n**ข้อบังคับสำคัญในการตอบ (Strict Factuality Rules — ห้ามแต่งเติม/ห้ามหลอน)**:\n` +
+      `1. ตอบเฉพาะข้อมูลที่มีระบุไว้ในผลการค้นหาด้านบนเท่านั้น **ห้ามแต่งเติมการศึกษา ปริญญา ประวัติ หรือผลงานที่ไม่ปรากฏในผลการค้นหาเด็ดขาด**\n` +
+      `2. หากข้อมูลใดไม่มีระบุในผลการค้นหา (เช่น ประวัติการศึกษา) ให้ระบุชัดเจนว่า "ไม่มีระบุในผลการค้นหา" ห้ามเดาหรือสมมุติเอาเองเด็ดขาด\n` +
+      `3. ห้ามสร้างข้อควรระวังหรือสมมุติชื่อบุคคลอื่นที่ไม่มีในเนื้อหาผลการค้นหาขึ้นมาเอง\n` +
+      `4. อ้างอิงส่วนที่นำมาตอบด้วยเลข [1], [2], ... ให้ตรงกับแหล่งข้อมูลจริง`;
   } catch (err) {
     console.warn("[Tavily] Search failed, answering without search context:", err);
   }
 
+  // Use ultra-low temperature (0.05) when web search context is present to enforce strict factual fidelity
   const rawReply = await callTextLLM(
     instruction + searchCtx,
     systemPrompt,
     maxTokens,
-    temperature,
+    0.05,
     history
   );
 
