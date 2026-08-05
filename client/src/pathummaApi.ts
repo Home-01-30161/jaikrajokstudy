@@ -440,22 +440,38 @@ export async function callTextLLMWithSearch(
 }
 
 /**
- * SENTIMENT ANALYSIS via ThaiLLM
+ * SENTIMENT ANALYSIS via ThaiLLM / Tag Parsing / Regex
  */
 export async function analyzeSentiment(text: string): Promise<string> {
+  if (!text) return "neutral";
+
+  // 1. Direct tag check from Vision LLM [อารมณ์: ...]
+  const tagMatch = text.match(/\[อารมณ์[:\s]+([^\]]+)\]/i);
+  if (tagMatch) {
+    const tag = tagMatch[1].trim().toLowerCase();
+    if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล")) return "stressed";
+    if (tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ")) return "sad";
+    if (tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า")) return "tired";
+    if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") || tag.includes("ดีใจ")) return "positive";
+    if (tag.includes("สงบ") || tag.includes("ผ่อนคลาย") || tag.includes("สบายใจ")) return "calm";
+  }
+
+  const SENTIMENT_SYSTEM =
+    "You are a strict emotion classifier. Given text in Thai or English, classify the overall emotion into EXACTLY ONE word from this list: stressed, sad, tired, positive, calm, neutral. Output ONLY that single word.";
+
   try {
     const result = await callTextLLM(
-      `วิเคราะห์อารมณ์หลักจากข้อความต่อไปนี้: "${text}"\nตอบด้วยคำเดียวเท่านั้น (ห้ามมีคำอื่น): stressed, sad, tired, positive, calm, หรือ neutral`,
-      JAIKRAJOK_SYSTEM_PROMPT,
+      `Classify overall emotion: "${text.slice(0, 300)}"`,
+      SENTIMENT_SYSTEM,
       16,
-      0.1
+      0.01
     );
     const lower = result.toLowerCase().trim();
     for (const key of ["stressed", "sad", "tired", "positive", "calm", "neutral"]) {
       if (lower.includes(key)) return key;
     }
   } catch {
-    // fall through to keyword classifier
+    // fall through to regex classifier
   }
   return classifyMoodFromText(text);
 }
@@ -768,10 +784,30 @@ const MOOD_CUES: [string, string[]][] = [
 
 export function classifyMoodFromText(text: string): string {
   if (!text) return "neutral";
-  const lower = text.toLowerCase();
-  for (const [mood, cues] of MOOD_CUES) {
-    if (cues.some((c) => lower.includes(c))) return mood;
+
+  // 1. Direct tag check from Vision LLM [อารมณ์: ...]
+  const tagMatch = text.match(/\[อารมณ์[:\s]+([^\]]+)\]/i);
+  if (tagMatch) {
+    const tag = tagMatch[1].trim().toLowerCase();
+    if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล")) return "stressed";
+    if (tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ")) return "sad";
+    if (tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า")) return "tired";
+    if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") || tag.includes("ดีใจ")) return "positive";
+    if (tag.includes("สงบ") || tag.includes("ผ่อนคลาย") || tag.includes("สบายใจ")) return "calm";
   }
+
+  const lower = text.toLowerCase();
+
+  // 2. Remove negated positive phrases (e.g. "ไม่มีรอยยิ้ม", "ไม่ยิ้ม", "ไร้ความสุข") so "ไม่มีรอยยิ้ม" won't match "ยิ้ม"
+  const cleaned = lower.replace(/(ไม่มี|ไม่|ไร้|ปราศจาก)\s*(รอยยิ้ม|ยิ้ม|ความสุข|ความสดใส|อารมณ์ดี|ความผ่อนคลาย)/g, "");
+
+  // 3. Priority order: check negative emotions first on cleaned text
+  if (/(เครียด|ปวดศีรษะ|หมอง|ตึง|กดดัน|กังวล|กลุ้ม|รับไม่ไหว|stress)/.test(cleaned)) return "stressed";
+  if (/(เหนื่อย|อ่อนเพลีย|หมดแรง|ไม่มีแรง|เพลีย|นอนไม่หลับ|ล้า|tired)/.test(cleaned)) return "tired";
+  if (/(เศร้า|เสียใจ|ท้อแท้|ท้อใจ|สิ้นหวัง|หมดกำลังใจ|เหงา|โดดเดี่ยว|ผิดหวัง|sad)/.test(cleaned)) return "sad";
+  if (/(ยิ้ม|สดใส|ร่าเริง|มีความสุข|อารมณ์ดี|ดีใจ|สนุก|เยี่ยม|ภูมิใจ|สุขใจ|สำเร็จ|เบิกบาน|เป็นมิตร|หัวเราะ|happy)/.test(cleaned)) return "positive";
+  if (/(ผ่อนคลาย|สบายใจ|สงบ|โล่งใจ|ปกติดี|calm|โอเค)/.test(cleaned)) return "calm";
+
   return "neutral";
 }
 
