@@ -35,12 +35,16 @@ function pathummaHeaders(): Record<string, string> {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Strip <think>...</think> reasoning blocks the Qwen3-Think model emits */
+/** Strip <think>...</think> reasoning blocks from Qwen3-Think model */
 function stripThink(text: string): string {
-  text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
-  const idx = text.toLowerCase().indexOf("<think>");
-  if (idx !== -1) text = text.slice(0, idx);
-  return text.trim();
+  if (!text) return "";
+  // If there's a closed </think>, extract the final answer that follows it
+  if (text.includes("</think>")) {
+    const after = text.split("</think>").slice(1).join("</think>").trim();
+    if (after) return after;
+  }
+  // If token limit was hit inside <think>, strip the opening tag and return the reasoning
+  return text.replace(/<think>/gi, "").trim();
 }
 
 /** Extract text from Pathumma (VQA/Audio) raw response shapes */
@@ -395,7 +399,7 @@ export async function chat(
   history?: { role: string; text: string }[]
 ): Promise<ChatResult> {
   const [reply, emotionKey] = await Promise.all([
-    callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 2048, 0.4, history),
+    callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history),
     analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
   ]);
   return { reply, emotionKey };
