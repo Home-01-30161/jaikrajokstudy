@@ -18,6 +18,7 @@ const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
 const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
 const PATHUMMA_PROXY = "/api/pathumma";
 const GEMINI_KEY: string = (import.meta.env.VITE_GEMINI_API_KEY as string) ?? "";
+const GEMINI_PROXY = "/api/gemini";
 
 export function hasApiKey(): boolean {
   return THAILLM_KEY.trim().length > 0;
@@ -286,7 +287,7 @@ export async function callVisionLLM(
       };
 
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_KEY}`,
+        `${GEMINI_PROXY}/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -289,6 +289,12 @@ export default defineConfig({
         secure: false,
         rewrite: (path: string) => path.replace(/^\/api\/thaillm/, ''),
       },
+      '/api/gemini': {
+        target: 'https://generativelanguage.googleapis.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path: string) => path.replace(/^\/api\/gemini/, ''),
+      },
     },
     allowedHosts: [
       ".manuspre.computer",
