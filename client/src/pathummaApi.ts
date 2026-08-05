@@ -17,6 +17,7 @@ const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
 
 const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
 const PATHUMMA_PROXY = "/api/pathumma";
+const GEMINI_KEY: string = (import.meta.env.VITE_GEMINI_API_KEY as string) ?? "";
 
 export function hasApiKey(): boolean {
   return THAILLM_KEY.trim().length > 0;
@@ -34,6 +35,19 @@ function pathummaHeaders(): Record<string, string> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = (reader.result as string) || "";
+      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 /** Strip <think>...</think> reasoning blocks from Qwen3-Think model */
 function stripThink(text: string): string {
@@ -243,6 +257,61 @@ export async function callVisionLLM(
   query: string,
   filename = "image.jpg"
 ): Promise<string> {
+  // If Gemini API key is configured, use Gemini Flash Vision for multimodal understanding
+  if (GEMINI_KEY.trim().length > 0) {
+    try {
+      const base64Data = await blobToBase64(imageBlob);
+      const mimeType = imageBlob.type || "image/jpeg";
+
+      const payload = {
+        contents: [
+          {
+            parts: [
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: base64Data,
+                },
+              },
+              {
+                text: query,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 2048,
+          temperature: 0.1,
+        },
+      };
+
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (res.ok) {
+        const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
+        const text = candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text && text.trim().length > 0) {
+          console.debug("[Gemini Vision] Response received:", text.slice(0, 100));
+          return text.trim();
+        }
+      } else {
+        const errText = await res.text().catch(() => "");
+        console.warn("[Gemini Vision] HTTP Error:", res.status, errText.slice(0, 200));
+      }
+    } catch (e) {
+      console.warn("[Gemini Vision] Error, falling back to Pathumma VQA:", e);
+    }
+  }
+
+  // Fallback: Pathumma VQA
   const form = new FormData();
   form.append("query", query);
   form.append("file", imageBlob, filename);
