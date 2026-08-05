@@ -48,6 +48,12 @@ function parseFullMarkdown(raw: string): React.ReactNode[] {
   text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => `$$${latex.trim()}$$`);
   text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => `$${latex.trim()}$`);
 
+  // Auto-wrap bare LaTeX environments (\begin{aligned}...\end{aligned}) in $$...$$ if not already wrapped
+  text = text.replace(
+    /(^|\n|\s*)(\\begin\{(?:aligned|align|equation|matrix|pmatrix|bmatrix|vmatrix|cases|array|gather|alignat)\}[\s\S]*?\\end\{(?:aligned|align|equation|matrix|pmatrix|bmatrix|vmatrix|cases|array|gather|alignat)\})(\s*|\n|$)/gi,
+    (m, p1, latex, p3) => `${p1}\n$$\n${latex.trim()}\n$$\n${p3}`
+  );
+
   const nodes: React.ReactNode[] = [];
 
   // Step 1: Extract code blocks (```lang\ncode``` or unclosed ```lang\ncode...)
@@ -251,8 +257,8 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
 // ─── Inline Token Parser (Math, Code, Bold, Links) ─────────────────────────────
 
 function renderInline(text: string): React.ReactNode[] {
-  // Matches: block math $$...$$ or \[...\], inline math $...$ or \(...\), inline code `...`, bold **...**, links [text](url)
-  const TOKEN_REGEX = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\$[^$\n]+?\$|\\\([\s\S]*?\\\)|`[^`\n]+?`|\*\*[^*]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
+  // Matches: block math $$...$$, bare \begin{env}...\end{env}, inline math $...$, inline code `...`, bold **...**, links [text](url)
+  const TOKEN_REGEX = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\begin\{(?:aligned|align|equation|matrix|pmatrix|bmatrix|vmatrix|cases|array|gather|alignat)\}[\s\S]*?\\end\{(?:aligned|align|equation|matrix|pmatrix|bmatrix|vmatrix|cases|array|gather|alignat)\}|\$[^$\n]+?\$|\\\([\s\S]*?\\\)|`[^`\n]+?`|\*\*[^*]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
 
   const parts = text.split(TOKEN_REGEX);
   return parts.map((part, i) => {
@@ -262,6 +268,10 @@ function renderInline(text: string): React.ReactNode[] {
     if ((part.startsWith("$$") && part.endsWith("$$")) || (part.startsWith("\\[") && part.endsWith("\\]"))) {
       const latex = part.startsWith("$$") ? part.slice(2, -2) : part.slice(2, -2);
       return <BlockMath key={i} latex={latex.trim()} />;
+    }
+    // Bare \begin{...}...\end{...}
+    if (part.startsWith("\\begin{") && part.includes("\\end{")) {
+      return <BlockMath key={i} latex={part.trim()} />;
     }
     // Inline math $...$ or \(...\)
     if ((part.startsWith("$") && part.endsWith("$") && part.length > 2) || (part.startsWith("\\(") && part.endsWith("\\)"))) {
