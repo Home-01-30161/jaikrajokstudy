@@ -361,6 +361,16 @@ const NEEDS_SEARCH_RE = new RegExp(
   "i"
 );
 
+export const SEARCH_SYSTEM_PROMPT =
+  "คุณคือ กระจก (JaiKraJok) ผู้ช่วยตอบคำถามจากผลการค้นหาเว็บจริงอย่างแม่นยำ 100% " +
+  "📐 กฎเหล็กป้องกันการหลอนและอ้างอิงผิดคน (Strict Grounding Rules): " +
+  "1. ตอบคำถามเฉพาะข้อมูลบุคคลหรือหัวข้อที่ผู้ใช้ถาม โดยยึดตามข้อความจากผลการค้นหาจริงที่จัดสรรให้เท่านั้น " +
+  "2. **ห้ามเอ่ยชื่อบุคคลอื่นที่ไม่ตรงกับคำถามเด็ดขาด** (เช่น ห้ามแต่งชื่อ ดร.ศราวุธ แรมจันทร์, ดร.ศราวุฒิ อารีย์ หรือคนอื่นที่ไม่มีในผลการค้นหามาปะปน) " +
+  "3. **ห้ามแต่งประวัติการศึกษา ปริญญา หรือตำแหน่งงาน** ที่ไม่ได้ระบุไว้ในผลการค้นหาเด็ดขาด " +
+  "4. **ห้ามสร้างส่วน 'ข้อควรระวัง' หรือสมมุติการสับสนชื่อขึ้นมาเอง** หากไม่มีระบุไว้ในผลการค้นหาจริง " +
+  "5. อ้างอิงส่วนที่นำมาตอบด้วยเลข [1], [2], ... ให้ตรงกับแหล่งข้อมูลจริง " +
+  "6. หากข้อมูลใดไม่มีระบุในผลการค้นหา ให้ระบุเพียงว่า 'ไม่มีระบุในผลการค้นหาที่พบ'";
+
 /**
  * Smart wrapper around callTextLLM:
  * - Detects if the query needs web search (using NEEDS_SEARCH_RE)
@@ -390,27 +400,23 @@ export async function callTextLLMWithSearch(
 
     // Build context block for the prompt with explicit URLs
     const snippets = data.results
-      .map((r, i) => `[${i + 1}] **ชื่อเว็บ:** [${r.title}](${r.url})\n**URL:** ${r.url}\n**เนื้อหา:** ${r.content.slice(0, 600)}`)
+      .map((r, i) => `[${i + 1}] **ชื่อเว็บ:** [${r.title}](${r.url})\n**URL:** ${r.url}\n**เนื้อหา:** ${r.content.slice(0, 700)}`)
       .join("\n\n");
 
     searchCtx =
       `\n\n---\n**ผลการค้นหาจริงจากเว็บ (Tavily Web Search Results):**\n${snippets}\n` +
       (data.answer ? `\n**สรุปภาพรวมจากระบบค้นหา:** ${data.answer}\n` : "") +
-      `---\n\n**ข้อบังคับสำคัญในการตอบ (Strict Factuality Rules — ห้ามแต่งเติม/ห้ามหลอน)**:\n` +
-      `1. ตอบเฉพาะข้อมูลที่มีระบุไว้ในผลการค้นหาด้านบนเท่านั้น **ห้ามแต่งเติมการศึกษา ปริญญา ประวัติ หรือผลงานที่ไม่ปรากฏในผลการค้นหาเด็ดขาด**\n` +
-      `2. หากข้อมูลใดไม่มีระบุในผลการค้นหา (เช่น ประวัติการศึกษา) ให้ระบุชัดเจนว่า "ไม่มีระบุในผลการค้นหา" ห้ามเดาหรือสมมุติเอาเองเด็ดขาด\n` +
-      `3. ห้ามสร้างข้อควรระวังหรือสมมุติชื่อบุคคลอื่นที่ไม่มีในเนื้อหาผลการค้นหาขึ้นมาเอง\n` +
-      `4. อ้างอิงส่วนที่นำมาตอบด้วยเลข [1], [2], ... ให้ตรงกับแหล่งข้อมูลจริง`;
+      `---\n\n**คำสั่งบังคับ**: สรุปข้อมูลตอบคำถามผู้ใช้โดยใช้เฉพาะข้อมูลใน 5 ผลการค้นหาด้านบนเท่านั้น ห้ามเอ่ยถึงบุคคลอื่นที่ไม่ปรากฏในผลการค้นหา`;
   } catch (err) {
     console.warn("[Tavily] Search failed, answering without search context:", err);
   }
 
-  // Use ultra-low temperature (0.05) when web search context is present to enforce strict factual fidelity
+  // Use SEARCH_SYSTEM_PROMPT and ultra-low temperature (0.01) when web search is active
   const rawReply = await callTextLLM(
     instruction + searchCtx,
-    systemPrompt,
+    SEARCH_SYSTEM_PROMPT,
     maxTokens,
-    0.05,
+    0.01,
     history
   );
 
