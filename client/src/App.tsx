@@ -8,7 +8,9 @@ import {
   analyzeSelfie,
   analyzeHomework,
   analyzeAudio,
+  classifyMoodFromText,
 } from "./pathummaApi";
+import MathText from "./MathText";
 
 /* ============ IMAGE PATHS ============ */
 const IMG = {
@@ -707,6 +709,10 @@ function AppShell() {
       timestamp: Date.now(),
     },
   ]);
+  // Keep a ref that always reflects the latest messages — used to read history
+  // synchronously inside async sendMessage without relying on stale closure.
+  const messagesRef = useRef<ChatMsg[]>([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
   const [inputText, setInputText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -876,6 +882,13 @@ function AppShell() {
     const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim()) return;
     if (overrideText === undefined) setInputText("");
+
+    // Read history from ref — always up-to-date, no closure timing issues
+    const currentHistory = messagesRef.current
+      .filter((m) => m.role === "user" || m.role === "bot")
+      .slice(-8)  // keep last 8 for context
+      .map((m) => ({ role: m.role, text: m.text }));
+
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
     noteMultimodal(sourceLabel);
     setIsAnalyzing(true);
@@ -883,7 +896,7 @@ function AppShell() {
     if (hasApiKey()) {
       // ── Real Pathumma Text LLM ──
       try {
-        const { emotionKey, reply } = await chat(textToSend);
+        const { emotionKey, reply } = await chat(textToSend, currentHistory);
         setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: reply, timestamp: Date.now() }]);
         pushTrend(emotionKey, sourceLabel);
       } catch (err) {
@@ -942,7 +955,8 @@ function AppShell() {
     setIsAnalyzing(true);
     try {
       const { answer, llmReply } = await analyzeSelfie(file);
-      const emotionKey = "neutral";
+      // Classify emotion from the Vision LLM's description
+      const emotionKey = classifyMoodFromText(answer) || "neutral";
       const info = EMO[emotionKey] || EMO.neutral;
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: answer, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note: answer, color: info.color, bg: info.bg, text: info.text } }]);
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() }]);
@@ -954,6 +968,7 @@ function AppShell() {
       setIsAnalyzing(false);
     }
   };
+
 
   const handleVoice = async () => {
     if (!hasApiKey()) {
@@ -971,7 +986,21 @@ function AppShell() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+
+      // Pick the best supported MIME type — prefer wav/ogg for AudioQA compatibility
+      const preferredTypes = [
+        "audio/wav",
+        "audio/ogg;codecs=opus",
+        "audio/ogg",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+      ];
+      const mimeType = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
       audioChunksRef.current = [];
       mediaRecorderRef.current = recorder;
 
@@ -982,28 +1011,55 @@ function AppShell() {
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         setIsRecording(false);
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🎤 บันทึกเสียงเรียบร้อยแล้ว กำลังวิเคราะห์...", timestamp: Date.now(), sourceTag: "เสียงพูด" }]);
+
+        // Use the recorder's actual MIME type for the blob
+        const blobType = recorder.mimeType || "audio/webm";
+        const audioBlob = new Blob(audioChunksRef.current, { type: blobType });
+
+        const userMsgId = Math.random().toString();
+        setMessages((prev) => [...prev, {
+          id: userMsgId,
+          role: "user",
+          text: "🎤 บันทึกเสียงเรียบร้อยแล้ว กำลังวิเคราะห์เสียง...",
+          timestamp: Date.now(),
+          sourceTag: "เสียงพูด"
+        }]);
         noteMultimodal("เสียงพูด");
         setIsAnalyzing(true);
         try {
           const { transcription, emotionKey, llmReply } = await analyzeAudio(audioBlob);
-          const displayText = transcription ? `🎤 (เสียงพูด): "${transcription}"` : "🎤 บันทึกเสียงแล้ว";
-          setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() }]);
+          // Update the user message to show what was transcribed
+          const displayText = transcription
+            ? `🎤 (เสียงพูด): "${transcription}"`
+            : "🎤 บันทึกเสียงแล้ว";
+          setMessages((prev) => prev.map((m) =>
+            m.id === userMsgId ? { ...m, text: displayText } : m
+          ));
+          setMessages((prev) => [...prev, {
+            id: Math.random().toString(),
+            role: "bot",
+            text: llmReply,
+            timestamp: Date.now()
+          }]);
           pushTrend(emotionKey, "เสียงพูด");
-          // Also run text LLM with transcription for deeper response
-          if (transcription) {
-            setMessages((prev) => prev.map((m, i) => i === prev.length - 2 ? { ...m, text: displayText } : m));
-          }
         } catch (err) {
           console.error("Audio LLM error:", err);
-          toast("วิเคราะห์เสียงไม่สำเร็จ กรุณาลองใหม่");
+          setMessages((prev) => prev.map((m) =>
+            m.id === userMsgId ? { ...m, text: "🎤 บันทึกเสียงแล้ว (วิเคราะห์ไม่สำเร็จ)" } : m
+          ));
+          setMessages((prev) => [...prev, {
+            id: Math.random().toString(),
+            role: "bot",
+            text: "ขอโทษนะคะ กระจกวิเคราะห์เสียงไม่สำเร็จ ลองพูดอีกครั้งหรือพิมพ์ข้อความแทนได้ค่ะ",
+            timestamp: Date.now()
+          }]);
+          pushTrend("neutral", "เสียงพูด");
         } finally {
           setIsAnalyzing(false);
         }
       };
 
-      recorder.start();
+      recorder.start(100); // timeslice for faster data chunks
       setIsRecording(true);
       toast("🎙️ กำลังบันทึกเสียง... กดอีกครั้งเพื่อหยุด");
       // Auto-stop after 30 seconds
@@ -1983,9 +2039,9 @@ function ChatView({
                     fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
                   }}
                 >
-                  {msg.text}
+                  <MathText text={msg.text} />
                   {msg.role === "bot" && (
-                    <button onClick={() => speakText(msg.text)} className="ml-2 text-xs opacity-50 hover:opacity-100 transition-opacity">🔊</button>
+                    <button onClick={() => speakText(msg.text)} className="mt-1 text-xs opacity-50 hover:opacity-100 transition-opacity">🔊 ฟังเสียง</button>
                   )}
                 </div>
               )}
