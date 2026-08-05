@@ -828,26 +828,205 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
 
 function GuardianPage({ onNext }: { onNext: () => void }) {
   const [confirmed, setConfirmed] = useState(false);
+  const [printMode, setPrintMode] = useState(false);
+
+  const handlePrint = () => {
+    setPrintMode(true);
+    setTimeout(() => {
+      window.print();
+      setPrintMode(false);
+    }, 100);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
-        <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
-        <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0" alt="" />
-        <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0 " alt="" />
-        <div className="relative mx-auto z-10" style={{ background: "#ffffff", borderRadius: "20px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
-        <h2 className="text-[2.2rem] font-black mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
-          ก่อนเริ่ม ขอให้ผู้ใหญ่รับทราบ
-        </h2>
-        <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
-          หากคุณอายุต่ำกว่า 20 ปี ควรใช้งานโดยมีผู้ปกครองหรือผู้ใหญ่ที่ไว้ใจรับทราบร่วมกัน
-        </p>
-        <label className="flex gap-3 items-start p-5 rounded-2xl mb-6" style={{ backgroundColor: "#EBE5DC", color: "#1a1a1a", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
-          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />
-          <span>ฉันได้บอกผู้ปกครองหรือผู้ใหญ่ที่ไว้ใจแล้ว และเข้าใจว่าใจกระจกไม่ใช่บริการฉุกเฉินหรือผู้เชี่ยวชาญสุขภาพจิต</span>
-        </label>
-        <button onClick={onNext} disabled={!confirmed} className="w-full py-4 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] disabled:opacity-50" style={{ backgroundColor: "#2D6A6F", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
-          ยืนยันและไปต่อ
-        </button>
+      {!printMode && (
+        <>
+          <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-60" alt="" />
+          <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0" alt="" />
+          <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0" alt="" />
+        </>
+      )}
+      <div
+        className="relative mx-auto z-10"
+        style={{
+          background: "#ffffff",
+          borderRadius: printMode ? "0" : "20px",
+          padding: printMode ? "32px" : "48px 56px",
+          maxWidth: printMode ? "100%" : "680px",
+          width: "100%",
+          boxShadow: printMode ? "none" : "0 10px 40px rgba(0,0,0,0.05)"
+        }}
+      >
+        <div className="mb-2 flex items-center gap-3">
+          <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "#FF3366", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-[2rem] font-black leading-tight" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#1a1a1a" }}>
+              หนังสือยินยอมของผู้ปกครอง
+            </h2>
+            <p className="text-xs" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#666", letterSpacing: "0.05em" }}>
+              Guardian Consent Form • ใจกระจก v3.0
+            </p>
+          </div>
+        </div>
+
+        <div
+          className="my-6 p-6 rounded-2xl text-sm leading-relaxed"
+          style={{
+            backgroundColor: "#FFF9F5",
+            border: "2px solid #FFE4D6",
+            fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+          }}
+        >
+          <div className="mb-5">
+            <h3 className="font-bold text-base mb-2 flex items-center gap-2" style={{ color: "#C41E3A" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+              สำคัญ: กรุณาอ่านก่อนอนุญาต
+            </h3>
+            <p style={{ color: "#4a4a4a", lineHeight: "1.7" }}>
+              ระบบ "ใจกระจก" เป็นแพลตฟอร์มสนับสนุนสุขภาพจิตสำหรับนักเรียน โดยใช้ปัญญาประดิษฐ์ (AI) ช่วยวิเคราะห์อารมณ์และให้คำปรึกษาเบื้องต้น
+            </p>
+          </div>
+
+          <div className="space-y-4 mb-5">
+            <div>
+              <h4 className="font-bold mb-1.5" style={{ color: "#1a1a1a" }}>1. ข้อจำกัดของระบบ</h4>
+              <ul className="list-disc list-inside space-y-1 text-sm" style={{ color: "#4a4a4a", paddingLeft: "0.5rem" }}>
+                <li><strong>ไม่ใช่ผู้เชี่ยวชาญทางการแพทย์:</strong> ระบบนี้ไม่สามารถททดแทนนักจิตวิทยา จิตแพทย์ หรือที่ปรึกษาวิชาชีพได้</li>
+                <li><strong>ไม่ใช่บริการฉุกเฉิน:</strong> หากบุตรหลานมีความคิดทำร้ายตนเองหรือผู้อื่น กรุณาติดต่อสายด่วนสุขภาพจิต <strong>1323</strong> ทันที</li>
+                <li><strong>ความถูกต้องไม่สมบูรณ์:</strong> AI อาจวิเคราะห์ผิดพลาดได้ ไม่ควรใช้เป็นข้อมูลเดียวในการตัดสินใจ</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-bold mb-1.5" style={{ color: "#1a1a1a" }}>2. การใช้ข้อมูลและความเป็นส่วนตัว</h4>
+              <ul className="list-disc list-inside space-y-1 text-sm" style={{ color: "#4a4a4a", paddingLeft: "0.5rem" }}>
+                <li>ระบบใช้เซสชันแบบไม่ระบุตัวตน ไม่เก็บชื่อจริง เบอร์โทร หรือที่อยู่</li>
+                <li>ข้อความ รูปภาพ และเสียงจะถูกส่งไปยังบริการ AI ภายนอก (AIFORTHAI, TokenMind) เพื่อวิเคราะห์</li>
+                <li>ระบบบันทึกเฉพาะผลการวิเคราะห์อารมณ์ เวลา และสถิติการใช้งาน ไม่บันทึกเนื้อหาแชทหรือรูปภาพ</li>
+                <li>ผู้ใช้สามารถลบข้อมูลได้ตลอดเวลาผ่านเมนู "ความปลอดภัยและข้อมูล"</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-bold mb-1.5" style={{ color: "#1a1a1a" }}>3. บทบาทของผู้ปกครอง</h4>
+              <ul className="list-disc list-inside space-y-1 text-sm" style={{ color: "#4a4a4a", paddingLeft: "0.5rem" }}>
+                <li>ควรติดตามการใช้งานของบุตรหลานอย่างสม่ำเสมอ</li>
+                <li>หากระบบแจ้งเตือนความเสี่ยง (concern streak) กรุณาติดตามอาการและพูดคุยกับบุตรหลาน</li>
+                <li>ระบบไม่แจ้งเตือนผู้ปกครองโดยอัตโนมัติ—ผู้ใช้ต้องแชร์ข้อมูลด้วยตนเอง</li>
+                <li>แนะนำให้พาบุตรหลานพบนักจิตวิทยาโรงเรียนหากมีความกังวล</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-bold mb-1.5" style={{ color: "#1a1a1a" }}>4. ข้อควรปฏิบัติ</h4>
+              <ul className="list-disc list-inside space-y-1 text-sm" style={{ color: "#4a4a4a", paddingLeft: "0.5rem" }}>
+                <li>ใช้เป็นเครื่องมือเสริม ไม่ใช้เป็นทางเลือกเดียว</li>
+                <li>สร้างบรรยากาศให้บุตรหลานรู้สึกปลอดภัยที่จะเล่าปัญหา</li>
+                <li>ตรวจสอบสุขภาพจิตของบุตรหลานเป็นระยะ ไม่ควรพึ่งระบบเพียงอย่างเดียว</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl" style={{ backgroundColor: "#FFF3E0", border: "1.5px dashed #FF9800" }}>
+            <p className="text-xs font-bold mb-1" style={{ color: "#E65100" }}>หมายเลขฉุกเฉิน:</p>
+            <p className="text-sm" style={{ color: "#4a4a4a" }}>
+              สายด่วนสุขภาพจิต: <strong style={{ color: "#C41E3A", fontSize: "1.1rem" }}>1323</strong> (24 ชั่วโมง ทุกวัน)
+            </p>
+          </div>
+        </div>
+
+        {!printMode && (
+          <>
+            <label className="flex gap-3 items-start p-5 rounded-2xl mb-4" style={{ backgroundColor: "#EBE5DC", color: "#1a1a1a", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+              <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />
+              <span className="text-sm leading-relaxed">
+                <strong>ฉันในฐานะผู้ปกครองหรือผู้ใหญ่ที่บุตรหลานไว้ใจ</strong> รับทราบข้อจำกัดและความเสี่ยงของระบบแล้ว และเข้าใจว่า:
+                <ul className="list-disc list-inside mt-2 ml-2 space-y-1 opacity-90">
+                  <li>ระบบนี้ไม่ใช่บริการทางการแพทย์หรือฉุกเฉิน</li>
+                  <li>ผู้ปกครองต้องติดตามและพูดคุยกับบุตรหลานเองด้วย</li>
+                  <li>หากเกิดวิกฤติ ต้องติดต่อสายด่วน 1323 หรือผู้เชี่ยวชาญทันที</li>
+                </ul>
+              </span>
+            </label>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handlePrint}
+                className="px-6 py-3.5 rounded-full font-semibold transition-all active:scale-[0.97] flex items-center gap-2"
+                style={{
+                  backgroundColor: "#ffffff",
+                  border: "2px solid #FF3366",
+                  color: "#FF3366",
+                  fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                  fontSize: "0.95rem"
+                }}
+              >
+                <DownloadIcon size={18} />
+                พิมพ์หนังสือยินยอม
+              </button>
+              <button
+                onClick={onNext}
+                disabled={!confirmed}
+                className="flex-1 py-3.5 rounded-full font-bold text-white transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  backgroundColor: "#FF3366",
+                  fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                  fontSize: "0.95rem"
+                }}
+              >
+                ยืนยันและไปต่อ
+              </button>
+            </div>
+          </>
+        )}
+
+        {printMode && (
+          <div className="mt-8 pt-6 border-t-2 border-dashed" style={{ borderColor: "#ddd" }}>
+            <div className="grid grid-cols-2 gap-8 text-sm" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+              <div>
+                <p className="mb-1 text-gray-600">ลายเซ็นผู้ปกครอง/ผู้ใหญ่:</p>
+                <div className="border-b-2 border-black h-12"></div>
+                <p className="mt-2 text-xs text-gray-500">ชื่อ: _______________________________</p>
+              </div>
+              <div>
+                <p className="mb-1 text-gray-600">วันที่:</p>
+                <div className="border-b-2 border-black h-12"></div>
+                <p className="mt-2 text-xs text-gray-500">( ____ / ____ / ________ )</p>
+              </div>
+            </div>
+            <p className="mt-6 text-xs text-center text-gray-500" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+              เอกสารนี้สามารถเก็บไว้เป็นหลักฐานการรับทราบ • โครงการใจกระจก สังกัด {new Date().getFullYear() + 543}
+            </p>
+          </div>
+        )}
       </div>
+
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .relative.mx-auto.z-10, .relative.mx-auto.z-10 * {
+            visibility: visible;
+          }
+          .relative.mx-auto.z-10 {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+        }
+      `}</style>
     </div>
   );
 }
