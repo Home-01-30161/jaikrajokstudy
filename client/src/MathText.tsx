@@ -45,27 +45,24 @@ function parseFullMarkdown(raw: string): React.ReactNode[] {
   //   \[ ... \]  =>  $$ ... $$
   //   \( ... \)  =>  $ ... $
   let text = raw.replace(/\r\n/g, "\n");
-  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => `$$${latex.trim()}$$`);
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => `\n$$\n${latex.trim()}\n$$\n`);
   text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => `$${latex.trim()}$`);
 
-  // Auto-wrap bare LaTeX environments (\begin{aligned}...\end{aligned}) in $$...$$ if not already wrapped
-  text = text.replace(
-    /(^|\n|\s*)(\\begin\{(?:aligned|align|equation|matrix|pmatrix|bmatrix|vmatrix|cases|array|gather|alignat)\}[\s\S]*?\\end\{(?:aligned|align|equation|matrix|pmatrix|bmatrix|vmatrix|cases|array|gather|alignat)\})(\s*|\n|$)/gi,
-    (m, p1, latex, p3) => `${p1}\n$$\n${latex.trim()}\n$$\n${p3}`
-  );
+  // Auto-wrap any bare \begin{env}...\end{env} in $$...$$ for block rendering
+  text = text.replace(/\\begin\{([a-zA-Z0-9*]+)\}([\s\S]*?)\\end\{\1\}/gi, (match, env, inner) => {
+    return `\n$$\n\\begin{${env}}${inner}\\end{${env}}\n$$\n`;
+  });
 
   const nodes: React.ReactNode[] = [];
 
-  // Step 1: Extract code blocks (```lang\ncode``` or unclosed ```lang\ncode...)
-  const codeBlockRegex = /```([a-zA-Z0-9_+#-]*)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
+  // Master Block Regex: extracts Code Blocks ```...``` AND Block Math $$...$$
+  const MASTER_BLOCK_REGEX = /(```[a-zA-Z0-9_+#-]*[ \t]*\n?[\s\S]*?(?:```|$))|(\$\$[\s\S]*?\$\$)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  // If text starts with or contains code blocks
-  while ((match = codeBlockRegex.exec(text)) !== null) {
-    // Avoid zero-width match loops
-    if (match.index === codeBlockRegex.lastIndex) {
-      codeBlockRegex.lastIndex++;
+  while ((match = MASTER_BLOCK_REGEX.exec(text)) !== null) {
+    if (match.index === MASTER_BLOCK_REGEX.lastIndex) {
+      MASTER_BLOCK_REGEX.lastIndex++;
     }
 
     const preText = text.substring(lastIndex, match.index);
@@ -73,13 +70,21 @@ function parseFullMarkdown(raw: string): React.ReactNode[] {
       nodes.push(...parseLinesAndBlocks(preText, `pre-${lastIndex}`));
     }
 
-    const lang = match[1].trim() || "code";
-    const codeContent = match[2].trim();
-    if (codeContent || match[0].endsWith("```")) {
+    if (match[1]) {
+      // Fenced Code Block
+      const codeMatch = match[1].match(/^```([a-zA-Z0-9_+#-]*)[ \t]*\n?([\s\S]*?)(?:```|$)/);
+      const lang = codeMatch ? codeMatch[1].trim() || "code" : "code";
+      const codeContent = codeMatch ? codeMatch[2].trim() : match[1].trim();
       nodes.push(<CodeBlock key={`code-${match.index}`} lang={lang} code={codeContent} />);
+    } else if (match[2]) {
+      // Block Math $$...$$
+      const latex = match[2].slice(2, -2).trim();
+      if (latex) {
+        nodes.push(<BlockMath key={`math-${match.index}`} latex={latex} />);
+      }
     }
 
-    lastIndex = codeBlockRegex.lastIndex;
+    lastIndex = MASTER_BLOCK_REGEX.lastIndex;
     if (match.index + match[0].length === text.length) break;
   }
 
