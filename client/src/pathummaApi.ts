@@ -52,6 +52,61 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+/**
+ * Convert any browser audio blob (webm, ogg, etc.) to PCM WAV
+ * using the Web Audio API. Needed because Chrome records in audio/webm
+ * which Typhoon ASR rejects (415 Unsupported Media Type).
+ */
+async function blobToWav(blob: Blob): Promise<Blob> {
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioCtx = new AudioContext();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  await audioCtx.close();
+
+  const numChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const numSamples = audioBuffer.length;
+  const bytesPerSample = 2; // 16-bit PCM
+
+  const dataSize = numSamples * numChannels * bytesPerSample;
+  const wavBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(wavBuffer);
+
+  const writeStr = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  // RIFF header
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, "WAVE");
+  // fmt chunk
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);           // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);          // bits per sample
+  // data chunk
+  writeStr(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  // Write interleaved PCM samples
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const s = audioBuffer.getChannelData(ch)[i];
+      const clamped = Math.max(-1, Math.min(1, s));
+      view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([wavBuffer], { type: "audio/wav" });
+}
+
 /** Strip <think>...</think> reasoning blocks from Qwen3-Think model */
 function stripThink(text: string): string {
   if (!text) return "";
@@ -407,15 +462,31 @@ export interface AudioResult {
 
 /** Typhoon ASR — OpenAI-compatible transcription endpoint */
 export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
-  const mimeToExt: Record<string, string> = {
-    "audio/wav": "wav", "audio/wave": "wav", "audio/x-wav": "wav",
-    "audio/mp3": "mp3", "audio/mpeg": "mp3", "audio/ogg": "ogg",
-    "audio/mp4": "mp4", "audio/webm": "webm", "video/webm": "webm",
-  };
-  const ext = mimeToExt[audioBlob.type] ?? "webm";
+  // Typhoon ASR supported formats: wav, mp3, flac, ogg, opus
+  // Chrome MediaRecorder produces audio/webm which is rejected (415).
+  // Convert any unsupported format to WAV via Web Audio API.
+  const SUPPORTED = ["audio/wav", "audio/wave", "audio/x-wav", "audio/mp3", "audio/mpeg", "audio/flac", "audio/ogg", "audio/opus"];
+  const isSupported = SUPPORTED.some(t => audioBlob.type.startsWith(t.split(";")[0]));
+
+  let fileBlob = audioBlob;
+  let fileName = "recording.wav";
+
+  if (!isSupported) {
+    console.debug("[TyphoonASR] Converting", audioBlob.type, "→ WAV for upload");
+    fileBlob = await blobToWav(audioBlob);
+    fileName = "recording.wav";
+  } else {
+    const mimeToExt: Record<string, string> = {
+      "audio/wav": "wav", "audio/wave": "wav", "audio/x-wav": "wav",
+      "audio/mp3": "mp3", "audio/mpeg": "mp3", "audio/flac": "flac",
+      "audio/ogg": "ogg", "audio/opus": "opus",
+    };
+    const ext = Object.entries(mimeToExt).find(([k]) => audioBlob.type.startsWith(k))?.[1] ?? "wav";
+    fileName = `recording.${ext}`;
+  }
 
   const form = new FormData();
-  form.append("file", audioBlob, `recording.${ext}`);
+  form.append("file", fileBlob, fileName);
   form.append("model", "typhoon-asr-realtime");
 
   const res = await fetch(`${TYPHOON_PROXY}/v1/audio/transcriptions`, {
