@@ -567,6 +567,12 @@ export async function callVisionLLM(
   return text;
 }
 
+export const SELFIE_SYSTEM_PROMPT =
+  "คุณคือ กระจก (JaiKraJok) ผู้ช่วยตอบสนองอารมณ์จากใบหน้าอย่างอบอุ่นและเห็นอกเห็นใจ " +
+  "ตอบเป็นข้อความสั้น ๆ 2-3 ประโยคอย่างเป็นธรรมชาติ สุภาพ และน่าฟัง " +
+  "❌ ห้ามใส่ [Task List], ห้ามใส่รายการข้อ 1. 2. 3. ที่เป็นคำสั่งภายใน, ห้ามใส่ไดอะแกรม Mermaid หรือโค้ดใด ๆ เด็ดขาด " +
+  "ตอบเฉพาะข้อความทักทาย ให้กำลังใจ และสอบถามความรู้สึกอย่างจริงใจเท่านั้น";
+
 export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { emotionKey?: string }> {
   const visionQuery =
     "ดูใบหน้าของคนในภาพนี้แล้วบรรยายอารมณ์และความรู้สึกที่สังเกตเห็นเป็นภาษาไทย " +
@@ -591,9 +597,19 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
 
   let llmReply: string;
   try {
-    llmReply = await callTextLLM(
-      `จากการวิเคราะห์ภาพใบหน้า: "${answer}" ตอบสนองด้วยความเห็นอกเห็นใจ สอบถามความรู้สึกของผู้ใช้ ไม่เกิน 2-3 ประโยค`
+    const rawReply = await callTextLLM(
+      `จากการวิเคราะห์ภาพใบหน้า: "${answer}" ตอบสนองด้วยความเห็นอกเห็นใจ สอบถามความรู้สึกของผู้ใช้ 2-3 ประโยค (ห้ามใส่ Task List หรือ Mermaid เด็ดขาด)`,
+      SELFIE_SYSTEM_PROMPT,
+      1024,
+      0.4
     );
+    // Strip any stray internal Task List or Mermaid blocks specifically for selfie responses
+    llmReply = rawReply
+      .replace(/\[Task List\][\s\S]*?(?=\n\[|\n#|\n\n[A-Z]|$)/gi, "")
+      .replace(/\[Mermaid\][\s\S]*?```[\s\S]*?```/gi, "")
+      .replace(/```mermaid[\s\S]*?```/gi, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   } catch {
     llmReply = answer || "กระจกเห็นรูปคุณแล้วค่ะ วันนี้รู้สึกเป็นยังไงบ้าง?";
   }
