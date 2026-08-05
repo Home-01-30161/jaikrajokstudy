@@ -1,10 +1,9 @@
 /**
- * MathText.tsx — Rich text & code block renderer for JaiKraJok chat messages
+ * MathText.tsx — Robust Rich Text, Code & KaTeX Math Renderer for JaiKraJok
  * Renders:
- *   - Code blocks ```cpp ... ``` with dark theme & Copy button
- *   - Inline code `code`
+ *   - Code blocks ```lang\ncode``` (with dark theme, syntax colors & Copy button)
  *   - LaTeX math ($...$ and $$...$$ via KaTeX)
- *   - Markdown headers (##, ###), bold (**text**), lists (1., -)
+ *   - Markdown headers (#, ##, ###), bold (**text**), lists (1., -), blockquotes (>), inline code (`code`), tables
  */
 import { useState } from "react";
 import "katex/dist/katex.min.css";
@@ -19,10 +18,21 @@ interface Props {
 export default function MathText({ text, className, style }: Props) {
   if (!text) return null;
 
+  // Render markdown directly from prop text (prevents state desync)
   const nodes = parseFullMarkdown(text);
 
   return (
-    <div className={className} style={{ ...style, display: "block", width: "100%" }}>
+    <div
+      className={className}
+      style={{
+        ...style,
+        display: "block",
+        width: "100%",
+        lineHeight: 1.6,
+        color: "inherit",
+        wordBreak: "break-word",
+      }}
+    >
       {nodes}
     </div>
   );
@@ -34,12 +44,18 @@ function parseFullMarkdown(raw: string): React.ReactNode[] {
   const text = raw.replace(/\r\n/g, "\n");
   const nodes: React.ReactNode[] = [];
 
-  // Step 1: Extract code blocks (```lang\ncode\n```)
-  const codeBlockRegex = /```([a-zA-Z0-9_+#-]*)\n([\s\S]*?)```/g;
+  // Step 1: Extract code blocks (```lang\ncode``` or unclosed ```lang\ncode...)
+  const codeBlockRegex = /```([a-zA-Z0-9_+#-]*)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
+  // If text starts with or contains code blocks
   while ((match = codeBlockRegex.exec(text)) !== null) {
+    // Avoid zero-width match loops
+    if (match.index === codeBlockRegex.lastIndex) {
+      codeBlockRegex.lastIndex++;
+    }
+
     const preText = text.substring(lastIndex, match.index);
     if (preText) {
       nodes.push(...parseLinesAndBlocks(preText, `pre-${lastIndex}`));
@@ -47,98 +63,141 @@ function parseFullMarkdown(raw: string): React.ReactNode[] {
 
     const lang = match[1].trim() || "code";
     const codeContent = match[2].trim();
-    nodes.push(<CodeBlock key={`code-${match.index}`} lang={lang} code={codeContent} />);
+    if (codeContent || match[0].endsWith("```")) {
+      nodes.push(<CodeBlock key={`code-${match.index}`} lang={lang} code={codeContent} />);
+    }
 
     lastIndex = codeBlockRegex.lastIndex;
+    if (match.index + match[0].length === text.length) break;
   }
 
   const remainingText = text.substring(lastIndex);
-  if (remainingText) {
+  if (remainingText && lastIndex < text.length) {
     nodes.push(...parseLinesAndBlocks(remainingText, `post-${lastIndex}`));
   }
 
-  return nodes;
+  return nodes.length > 0 ? nodes : [<span key="fallback">{raw}</span>];
 }
 
-// ─── Parse Line-by-Line Markdown (headers, lists, math) ───────────────────────
+// ─── Parse Line-by-Line Markdown ───────────────────────────────────────────────
 
 function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactNode[] {
   const lines = textBlock.split("\n");
   const nodes: React.ReactNode[] = [];
 
+  let tableLines: string[] = [];
+  let inTable = false;
+  let tableAlign: ("left" | "center" | "right")[] = [];
+
+  const flushTable = () => {
+    if (tableLines.length > 0) {
+      nodes.push(<Table key={`table-${keyPrefix}-${nodes.length}`} rows={tableLines} align={tableAlign} />);
+      tableLines = [];
+      tableAlign = [];
+      inTable = false;
+    }
+  };
+
   lines.forEach((line, lineIdx) => {
     const key = `${keyPrefix}-${lineIdx}`;
 
-    // Skip empty trailing lines if needed or render small gap
-    if (lineIdx > 0 && line === "") {
-      nodes.push(<div key={`space-${key}`} style={{ height: "0.5em" }} />);
+    // Blank line
+    if (line.trim() === "") {
+      flushTable();
+      if (lineIdx > 0 && lineIdx < lines.length - 1) {
+        nodes.push(<div key={`space-${key}`} style={{ height: "0.4em" }} />);
+      }
       return;
     }
 
-    // Match block math line: $$...$$
+    // Horizontal rule: --- or ***
+    if (/^[-*]{3,}\s*$/.test(line.trim())) {
+      flushTable();
+      nodes.push(<hr key={key} style={{ border: "none", borderTop: "1px solid #E2D9C2", margin: "0.8em 0" }} />);
+      return;
+    }
+
+    // Block math: $$...$$
     const blockMathMatch = line.match(/^\s*\$\$([\s\S]*?)\$\$\s*$/);
     if (blockMathMatch) {
+      flushTable();
       nodes.push(<BlockMath key={key} latex={blockMathMatch[1].trim()} />);
       return;
     }
 
-    // Match h1 / h2 header: # ... or ## ...
-    const h2Match = line.match(/^##?\s+(.+)$/);
-    if (h2Match) {
+    // Headers
+    const h1Match = line.match(/^#\s+(.+)$/);
+    if (h1Match) {
+      flushTable();
       nodes.push(
-        <h3
-          key={key}
-          style={{
-            fontWeight: 800,
-            fontSize: "1.15em",
-            marginTop: "0.8em",
-            marginBottom: "0.3em",
-            color: "inherit",
-          }}
-        >
+        <h2 key={key} style={{ fontWeight: 800, fontSize: "1.25em", marginTop: "0.8em", marginBottom: "0.3em", color: "inherit" }}>
+          {renderInline(h1Match[1])}
+        </h2>
+      );
+      return;
+    }
+    const h2Match = line.match(/^##\s+(.+)$/);
+    if (h2Match) {
+      flushTable();
+      nodes.push(
+        <h3 key={key} style={{ fontWeight: 700, fontSize: "1.12em", marginTop: "0.7em", marginBottom: "0.25em", color: "inherit" }}>
           {renderInline(h2Match[1])}
         </h3>
       );
       return;
     }
-
-    // Match h3 header: ### ...
     const h3Match = line.match(/^###\s+(.+)$/);
     if (h3Match) {
+      flushTable();
       nodes.push(
-        <h4
-          key={key}
-          style={{
-            fontWeight: 700,
-            fontSize: "1.02em",
-            marginTop: "0.6em",
-            marginBottom: "0.2em",
-            color: "inherit",
-          }}
-        >
+        <h4 key={key} style={{ fontWeight: 700, fontSize: "1.02em", marginTop: "0.5em", marginBottom: "0.2em", color: "inherit" }}>
           {renderInline(h3Match[1])}
         </h4>
       );
       return;
     }
 
-    // Match numbered list item: 1. ...
+    // Blockquote: > text
+    const blockquoteMatch = line.match(/^>\s*(.+)$/);
+    if (blockquoteMatch) {
+      flushTable();
+      nodes.push(
+        <blockquote
+          key={key}
+          style={{
+            margin: "0.4em 0",
+            padding: "0.4em 0.8em",
+            borderLeft: "3px solid #E2D9C2",
+            backgroundColor: "rgba(0,0,0,0.03)",
+            borderRadius: "0 6px 6px 0",
+            fontStyle: "italic",
+          }}
+        >
+          {renderInline(blockquoteMatch[1])}
+        </blockquote>
+      );
+      return;
+    }
+
+    // Numbered list: 1. ...
     const numMatch = line.match(/^(\d+)\.\s+(.+)$/);
     if (numMatch) {
+      flushTable();
       nodes.push(
-        <div key={key} style={{ display: "flex", gap: "0.5em", marginTop: "0.3em", alignItems: "flex-start" }}>
-          <span style={{ fontWeight: 700, minWidth: "1.5em", opacity: 0.85 }}>{numMatch[1]}.</span>
+        <div key={key} style={{ display: "flex", gap: "0.4em", marginTop: "0.25em", alignItems: "flex-start" }}>
+          <span style={{ fontWeight: 700, minWidth: "1.4em", opacity: 0.85 }}>{numMatch[1]}.</span>
           <div style={{ flex: 1 }}>{renderInline(numMatch[2])}</div>
         </div>
       );
       return;
     }
 
-    // Match bullet item: - ... or • ... or * ...
+    // Bullet list: - ... or • ... or * ...
     const bulletMatch = line.match(/^[-•*]\s+(.+)$/);
     if (bulletMatch) {
+      flushTable();
       nodes.push(
-        <div key={key} style={{ display: "flex", gap: "0.5em", marginTop: "0.3em", alignItems: "flex-start" }}>
+        <div key={key} style={{ display: "flex", gap: "0.4em", marginTop: "0.25em", alignItems: "flex-start" }}>
           <span style={{ opacity: 0.7, minWidth: "1em" }}>•</span>
           <div style={{ flex: 1 }}>{renderInline(bulletMatch[1])}</div>
         </div>
@@ -146,48 +205,136 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
       return;
     }
 
-    // Normal line
+    // Table detection: | col1 | col2 |
+    const tableMatch = line.match(/^\s*\|(.+)\|\s*$/);
+    if (tableMatch) {
+      if (!inTable) {
+        inTable = true;
+        tableLines = [];
+        tableAlign = [];
+      }
+      const cells = tableMatch[1].split("|").map(c => c.trim());
+      tableLines.push(cells.join("|"));
+
+      if (/^[\s\|:\-]+\s*$/.test(line)) {
+        tableAlign = cells.map(c => {
+          if (c.startsWith(":") && c.endsWith(":")) return "center";
+          if (c.endsWith(":")) return "right";
+          return "left";
+        });
+      }
+      return;
+    }
+
+    if (inTable && !tableMatch) {
+      flushTable();
+    }
+
+    // Normal paragraph line
     nodes.push(
-      <div key={key} style={{ marginTop: lineIdx === 0 ? 0 : "0.2em" }}>
+      <div key={key} style={{ marginTop: lineIdx === 0 ? 0 : "0.15em" }}>
         {renderInline(line)}
       </div>
     );
   });
 
+  flushTable();
   return nodes;
 }
 
-// ─── Inline Token Parser (Math, Code, Bold) ───────────────────────────────────
+// ─── Inline Token Parser (Math, Code, Bold, Links) ─────────────────────────────
 
 function renderInline(text: string): React.ReactNode[] {
-  // Tokens:
-  // 1. Block Math: $$...$$
-  // 2. Inline Math: $...$
-  // 3. Inline Code: `...`
-  // 4. Bold: **...**
-  const TOKEN_REGEX = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|`[^`\n]+?`|\*\*[^*]+?\*\*)/g;
+  // Matches: block math $$...$$, inline math $...$, inline code `...`, bold **...**, links [text](url)
+  const TOKEN_REGEX = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|`[^`\n]+?`|\*\*[^*]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
 
   const parts = text.split(TOKEN_REGEX);
   return parts.map((part, i) => {
     if (!part) return null;
 
+    // Block math $$...$$
     if (part.startsWith("$$") && part.endsWith("$$")) {
       return <BlockMath key={i} latex={part.slice(2, -2).trim()} />;
     }
+    // Inline math $...$
     if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
       return <InlineMath key={i} latex={part.slice(1, -1).trim()} />;
     }
+    // Inline code `...`
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
       return <InlineCode key={i} code={part.slice(1, -1)} />;
     }
+    // Bold **...**
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i} style={{ fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
+    }
+    // Links [text](url)
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      return (
+        <a key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" style={{ color: "#2E7D32", textDecoration: "underline" }}>
+          {linkMatch[1]}
+        </a>
+      );
     }
     return <span key={i}>{part}</span>;
   });
 }
 
-// ─── Code Block Component with Dark Theme & Copy Button ───────────────────────
+// ─── Table Component ────────────────────────────────────────────────────────────
+
+function Table({ rows, align }: { rows: string[]; align: ("left" | "center" | "right")[] }) {
+  if (rows.length === 0) return null;
+
+  const parsedRows = rows.map(r => r.split("|").map(c => c.trim()));
+  const hasHeader = parsedRows.length > 1;
+
+  return (
+    <div style={{ overflowX: "auto", margin: "0.6em 0" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.9em" }}>
+        <thead>
+          {hasHeader && (
+            <tr style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
+              {parsedRows[0].map((cell, ci) => (
+                <th
+                  key={ci}
+                  style={{
+                    padding: "0.5em 0.7em",
+                    textAlign: align[ci] || "left",
+                    border: "1px solid #E2D9C2",
+                    fontWeight: 700,
+                  }}
+                >
+                  {renderInline(cell)}
+                </th>
+              ))}
+            </tr>
+          )}
+        </thead>
+        <tbody>
+          {parsedRows.slice(hasHeader ? 1 : 0).map((row, ri) => (
+            <tr key={ri} style={{ backgroundColor: ri % 2 === 0 ? "rgba(0,0,0,0.02)" : "transparent" }}>
+              {row.map((cell, ci) => (
+                <td
+                  key={ci}
+                  style={{
+                    padding: "0.4em 0.7em",
+                    textAlign: align[ci] || "left",
+                    border: "1px solid #E2D9C2",
+                  }}
+                >
+                  {renderInline(cell)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Code Block Component with Dark Theme & Copy Button ────────────────────────
 
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   const [copied, setCopied] = useState(false);
@@ -201,12 +348,12 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   return (
     <div
       style={{
-        margin: "0.8em 0",
-        borderRadius: "12px",
+        margin: "0.6em 0",
+        borderRadius: "10px",
         overflow: "hidden",
         backgroundColor: "#181825",
         color: "#CDD6F4",
-        boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+        boxShadow: "0 3px 12px rgba(0,0,0,0.12)",
         fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
         fontSize: "0.85em",
         border: "1px solid #313244",
@@ -216,12 +363,12 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
       <div
         style={{
           display: "flex",
-          justifyContent: "between",
+          justifyContent: "space-between",
           alignItems: "center",
-          padding: "0.4em 0.9em",
+          padding: "0.35em 0.8em",
           backgroundColor: "#11111B",
           borderBottom: "1px solid #313244",
-          fontSize: "0.82em",
+          fontSize: "0.8em",
           color: "#A6ADC8",
         }}
       >
@@ -229,13 +376,12 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
         <button
           onClick={handleCopy}
           style={{
-            marginLeft: "auto",
             background: "none",
             border: "1px solid #45475A",
-            borderRadius: "6px",
+            borderRadius: "5px",
             color: copied ? "#A6E3A1" : "#BAC2DE",
-            padding: "0.2em 0.6em",
-            fontSize: "0.82em",
+            padding: "0.15em 0.5em",
+            fontSize: "0.8em",
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
@@ -251,7 +397,7 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
       <pre
         style={{
           margin: 0,
-          padding: "0.9em 1.1em",
+          padding: "0.8em 1em",
           overflowX: "auto",
           lineHeight: 1.5,
           fontFamily: "inherit",
@@ -265,11 +411,25 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   );
 }
 
-// Simple lightweight syntax colorizer
+// Lightweight syntax highlighter
 function highlightSyntax(code: string, lang: string): React.ReactNode[] {
   const lines = code.split("\n");
+  const keywordsByLang: Record<string, string[]> = {
+    cpp: ["include", "using", "namespace", "int", "double", "float", "char", "string", "bool", "void", "class", "struct", "if", "else", "for", "while", "return", "cout", "cin", "endl", "std", "true", "false", "auto", "const", "nullptr"],
+    c: ["include", "int", "double", "float", "char", "bool", "void", "struct", "if", "else", "for", "while", "return", "printf", "scanf", "true", "false", "const", "NULL"],
+    python: ["def", "import", "from", "print", "in", "range", "if", "else", "elif", "for", "while", "return", "class", "try", "except", "finally", "with", "as", "lambda", "yield", "True", "False", "None", "self"],
+    javascript: ["const", "let", "var", "function", "return", "if", "else", "for", "while", "class", "import", "export", "from", "async", "await", "try", "catch", "true", "false", "null", "undefined", "this", "new"],
+    typescript: ["const", "let", "var", "function", "return", "if", "else", "for", "while", "class", "import", "export", "from", "async", "await", "try", "catch", "true", "false", "null", "undefined", "interface", "type", "enum"],
+    java: ["public", "private", "protected", "class", "interface", "extends", "implements", "static", "final", "void", "int", "double", "boolean", "String", "if", "else", "for", "while", "return", "new", "this", "true", "false", "null"],
+    go: ["func", "package", "import", "var", "const", "if", "else", "for", "range", "return", "struct", "interface", "true", "false", "nil", "defer"],
+    rust: ["fn", "let", "mut", "const", "struct", "enum", "impl", "trait", "pub", "use", "mod", "if", "else", "for", "while", "return", "match", "true", "false"],
+    sql: ["SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "JOIN", "INNER", "LEFT", "RIGHT", "GROUP", "BY", "ORDER", "HAVING", "LIMIT"],
+  };
+
+  const keywords = keywordsByLang[lang.toLowerCase()] || [];
+  const keywordSet = new Set(keywords.map(k => k.toLowerCase()));
+
   return lines.map((line, idx) => {
-    // Comment line
     if (line.trim().startsWith("//") || line.trim().startsWith("# ")) {
       return (
         <span key={idx} style={{ color: "#6C7086", fontStyle: "italic" }}>
@@ -281,22 +441,21 @@ function highlightSyntax(code: string, lang: string): React.ReactNode[] {
 
     return (
       <span key={idx}>
-        {colorLineKeywords(line, lang)}
+        {colorLineKeywords(line, keywordSet)}
         {idx < lines.length - 1 ? "\n" : ""}
       </span>
     );
   });
 }
 
-function colorLineKeywords(line: string, lang: string): React.ReactNode[] {
-  // Highlight C++/Python keywords, numbers, strings
-  const KEYWORD_REGEX = /\b(include|using|namespace|int|double|float|char|string|bool|void|class|struct|if|else|for|while|return|cout|cin|endl|std|true|false|auto|const|def|import|from|print|in|range)\b|("[^"]*"|'[^']*')|(\/\/.*$)/g;
+function colorLineKeywords(line: string, keywordSet: Set<string>): React.ReactNode[] {
+  const TOKEN_REGEX = /(\b\w+\b|"[^"]*"|'[^']*'|\/\/.*$|\b\d+\.?\d*\b)/g;
 
   const parts: React.ReactNode[] = [];
   let lastIdx = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = KEYWORD_REGEX.exec(line)) !== null) {
+  while ((match = TOKEN_REGEX.exec(line)) !== null) {
     if (match.index > lastIdx) {
       parts.push(line.substring(lastIdx, match.index));
     }
@@ -306,11 +465,15 @@ function colorLineKeywords(line: string, lang: string): React.ReactNode[] {
       parts.push(<span key={match.index} style={{ color: "#6C7086", fontStyle: "italic" }}>{matchedStr}</span>);
     } else if (matchedStr.startsWith('"') || matchedStr.startsWith("'")) {
       parts.push(<span key={match.index} style={{ color: "#A6E3A1" }}>{matchedStr}</span>);
-    } else {
+    } else if (/^\d+\.?\d*$/.test(matchedStr)) {
+      parts.push(<span key={match.index} style={{ color: "#FAB387" }}>{matchedStr}</span>);
+    } else if (keywordSet.has(matchedStr.toLowerCase())) {
       parts.push(<span key={match.index} style={{ color: "#F38BA8", fontWeight: 600 }}>{matchedStr}</span>);
+    } else {
+      parts.push(matchedStr);
     }
 
-    lastIdx = KEYWORD_REGEX.lastIndex;
+    lastIdx = TOKEN_REGEX.lastIndex;
   }
 
   if (lastIdx < line.length) {
@@ -326,13 +489,13 @@ function InlineCode({ code }: { code: string }) {
   return (
     <code
       style={{
-        backgroundColor: "rgba(0, 0, 0, 0.07)",
+        backgroundColor: "rgba(0, 0, 0, 0.06)",
         color: "#C41E3A",
-        padding: "0.15em 0.4em",
+        padding: "0.12em 0.35em",
         borderRadius: "4px",
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
         fontSize: "0.88em",
-        border: "1px solid rgba(0, 0, 0, 0.1)",
+        border: "1px solid rgba(0, 0, 0, 0.08)",
       }}
     >
       {code}
@@ -340,7 +503,7 @@ function InlineCode({ code }: { code: string }) {
   );
 }
 
-// ─── KaTeX Components ─────────────────────────────────────────────────────────
+// ─── KaTeX Components ──────────────────────────────────────────────────────────
 
 function renderKatex(latex: string, displayMode: boolean): string {
   try {
@@ -349,10 +512,18 @@ function renderKatex(latex: string, displayMode: boolean): string {
       displayMode,
       trust: false,
       strict: false,
+      output: "html",
     });
   } catch {
-    return latex;
+    return `<span style="color: #C41E3A; font-family: monospace;">${escapeHtml(latex)}</span>`;
   }
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function InlineMath({ latex }: { latex: string }) {
@@ -360,7 +531,7 @@ function InlineMath({ latex }: { latex: string }) {
   return (
     <span
       dangerouslySetInnerHTML={{ __html: html }}
-      style={{ display: "inline" }}
+      style={{ display: "inline", fontSize: "1em" }}
     />
   );
 }
@@ -368,13 +539,14 @@ function InlineMath({ latex }: { latex: string }) {
 function BlockMath({ latex }: { latex: string }) {
   const html = renderKatex(latex, true);
   return (
-    <span
+    <div
       dangerouslySetInnerHTML={{ __html: html }}
       style={{
         display: "block",
         overflowX: "auto",
-        margin: "0.5em 0",
+        margin: "0.6em 0",
         textAlign: "center",
+        fontSize: "1.05em",
       }}
     />
   );

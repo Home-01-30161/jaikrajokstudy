@@ -73,6 +73,17 @@ function extractPathummaText(raw: unknown): string {
 export const JAIKRAJOK_SYSTEM_PROMPT =
   "คุณคือ กระจก (JaiKraJok) ผู้ช่วยสอนเรียนและเพื่อนคู่คิดอัจฉริยะ สร้างโดยทีม JaiKraJok " +
   "ตอบเป็นภาษาไทยอย่างสุภาพ อบอุ่น ชัดเจน ครอบคลุม ละเอียดลึกซึ้งในระดับมืออาชีพ " +
+  "📐 กฎการจัดรูปแบบคำตอบ (Output Formatting Rules) — **บังคับปฏิบัติตลอด**: " +
+  "1. **LaTeX Math**: ใช้ `$...$` สำหรับ inline math และ `$$...$$` สำหรับ display math ทุกสูตรสมการ " +
+  "2. **Code Blocks**: ใช้ ```language\ncode\n``` พร้อมระบุภาษา (python, cpp, javascript, typescript, java, go, rust, sql, bash, json, yaml, markdown, html, css) " +
+  "3. **Tables**: สร้างตาราง markdown เมื่อเปรียบเทียบข้อมูล หรือแสดงขั้นตอนคำนวณ `| Header1 | Header2 |\n|---|---|\n| A | B |` " +
+  "4. **Task Lists**: ใช้ `- [ ]` และ `- [x]` สำหรับขั้นตอนหรือรายการตรวจสอบ " +
+  "5. **Blockquotes**: ใช้ `> quote` สำหรับข้อความสำคัญ คำพูด หรือคำแนะนำ " +
+  "6. **Headers**: ใช้ `##` `###` จัดโครงสร้างคำตอบเป็นหัวข้อย่อย " +
+  "7. **Bold/Italic**: ใช้ `**bold**` และ `*italic*` เน้นจุดสำคัญ " +
+  "8. **Links**: ใช้ `[text](url)` สำหรับอ้างอิงแหล่งข้อมูล " +
+  "9. **Horizontal Rules**: ใช้ `---` แยกส่วนที่เกี่ยวข้อง " +
+  "10. **Mermaid**: ใช้ ```mermaid\n...``` สำหรับแผนภาพ กราฟ หรือลำดับขั้นตอน " +
   "กฎสำคัญสำหรับการคำนวณทางคณิตศาสตร์และวิชาการ (Anti-Hallucination & Precise Math Rules): " +
   "1. ห้ามเดาคำตอบ หรือเดาผลลัพธ์เด็ดขาด! ต้องแสดงขั้นตอนการคำนวณทางคณิตศาสตร์ที่ถูกต้องทีละบรรทัด " +
   "2. สำหรับโจทย์เศษเหลือ/ทฤษฎีบทจำนวน/ทฤษฎีเศษเหลือ (Remainder / Modular Arithmetic / LCM / ค.ร.น.): " +
@@ -87,6 +98,15 @@ export const JAIKRAJOK_SYSTEM_PROMPT =
 
 export const MATH_SYSTEM_PROMPT =
   "คุณคือครูสอนพิเศษคณิตศาสตร์และวิทยาศาสตร์ผู้เชี่ยวชาญระดับสูง สร้างโดยทีม JaiKraJok " +
+  "📐 กฎการจัดรูปแบบคำตอบ (Output Formatting Rules) — **บังคับปฏิบัติตลอด**: " +
+  "1. **LaTeX Math**: ใช้ `$...$` สำหรับ inline math และ `$$...$$` สำหรับ display math **ทุกสูตรสมการ** " +
+  "2. **Code Blocks**: ใช้ ```language\ncode\n``` พร้อมระบุภาษา " +
+  "3. **Tables**: สร้างตาราง markdown แสดงขั้นตอนคำนวณ เปรียบเทียบตัวเลือก หรือสรุปผล " +
+  "4. **Task Lists**: ใช้ `- [ ]` สำหรับขั้นตอนการแก้โจทย์ `- [x]` สำหรับขั้นตอนที่ทำเสร็จ " +
+  "5. **Blockquotes**: ใช้ `> **คำแนะนำ**` เน้นเคล็ดลับ สูตรสำคัญ หรือข้อระวัง " +
+  "6. **Headers**: ใช้ `##` `###` จัดโครงสร้าง: ## วิธีแก้, ## การคำนวณ, ## สรุปคำตอบ " +
+  "7. **Bold**: ใช้ `**คำตอบสุดท้าย**` เน้นผลลัพธ์ " +
+  "8. **Horizontal Rules**: ใช้ `---` แยกแต่ละขั้นตอนหลัก " +
   "กฎการตอบ (ห้ามเดาตัวเลข คำนวณจริงทีละขั้น): " +
   "1. ตอบเป็นภาษาไทย อธิบายละเอียด ทุกขั้นตอน ห้ามสุ่มหรือเดาคำตอบเด็ดขาด " +
   "2. สำหรับโจทย์เศษเหลือและการหาร: คำนวณ ค.ร.น. (LCM) ให้แม่นยำ บวกเศษกลับเข้าไป แล้วตรวจสอบเงื่อนไขขอบเขต " +
@@ -118,13 +138,27 @@ export async function callTextLLM(
   const isMathOrChoice = /(เศษ|หาร|ผลบวก|ค\.ร\.น\.|ห\.ร\.ม\.|lcm|gcd|mod|ก\.|ข\.|ค\.|ง\.|โจทย์|จำนวนเต็ม|สมการ|\$\d|\d+\s*[\+\-\*\/%]\s*\d+|1\s*<\s*n\s*<\s*\d+)/i.test(instruction);
   if (isMathOrChoice) {
     effectiveTemperature = 0.05;
-    extraInstruction = "\n\n[บังคับ: คำนวณด้วยหลักคณิตศาสตร์จริงทีละขั้นตอน ห้ามเดาตัวเลขเด็ดขาด หากเป็นโจทย์เศษเหลือ ให้คำนวณ ค.ร.น. แล้วบวกเศษ แล้วตรวจกับตัวเลือก ก/ข/ค/ง ให้ตรงกับผลคำนวณจริง 100%]";
+    extraInstruction = "\n\n[บังคับ: คำนวณด้วยหลักคณิตศาสตร์จริงทีละขั้นตอน ห้ามเดาตัวเลขเด็ดขาด หากเป็นโจทย์เศษเหลือ ให้คำนวณ ค.ร.น. แล้วบวกเศษ แล้วตรวจกับตัวเลือก ก/ข/ค/ง ให้ตรงกับผลคำนวณจริง 100%] " +
+      "**จัดรูปแบบบังคับ**: ใช้ $$...$$ สำหรับทุกสูตรสมการ | ตาราง markdown แสดงขั้นตอนคำนวณ | " +
+      "Blockquote `> **สูตรสำคัญ**` เน้นทฤษฎีบท | Task list `- [ ]` ขั้นตอนแก้โจทย์ | " +
+      "Horizontal rule `---` แยกขั้นตอน | **Bold** เน้นคำตอบสุดท้าย";
   }
 
   // Detect Programming Tutorial → Enforce 5-topic comprehensive lesson
   const isLearningOrTech = /(สอน|syntax|พื้นฐาน|basic|เรียน|เขียน|code|โปรแกรม|คืออะไร|อธิบาย|วิธี|guide|tutorial|overview|c\b|cpp|c\+\+|python|java|javascript|typescript|js|ts|html|css|c#|golang|go|rust|php|sql|ruby|swift|kotlin|dart|flutter)/i.test(instruction);
   if (isLearningOrTech && !isMathOrChoice) {
-    extraInstruction = "\n\n[บังคับ: หากเป็นคำขอสอนโปรแกรมมิ่ง ให้เขียนบทเรียนฉบับสมบูรณ์ 5 หัวข้อในคำตอบเดียวเสมอ: 1. โครงสร้างหลัก & Hello World, 2. Variables & Data Types, 3. Input & Output, 4. Conditionals & Loops, 5. Functions โดยมีกล่องโค้ด ```lang...``` และอธิบายทีละหัวข้ออย่างละเอียด]";
+    extraInstruction = "\n\n[บังคับ: หากเป็นคำขอสอนโปรแกรมมิ่ง ให้เขียนบทเรียนฉบับสมบูรณ์ 5 หัวข้อในคำตอบเดียวเสมอ: " +
+      "1. โครงสร้างหลัก & Hello World, 2. Variables & Data Types, 3. Input & Output, 4. Conditionals & Loops, 5. Functions " +
+      "โดยมีกล่องโค้ด ```lang...``` และอธิบายทีละหัวข้ออย่างละเอียด " +
+      "**จัดรูปแบบบังคับ**: ใช้ ## สำหรับหัวข้อหลัก ### สำหรับหัวข้อย่อย | ตาราง markdown สำหรับสรุป syntax | " +
+      "Blockquote `> **เคล็ดลับ**` สำหรับ best practices | Task list `- [ ]` สำหรับแบบฝึกหัด | " +
+      "Horizontal rule `---` แยกแต่ละหัวข้อ | Mermaid diagram ถ้ามี flow control]";
+  }
+
+  // General formatting boost for all responses — encourage rich markdown
+  if (!extraInstruction) {
+    extraInstruction = "\n\n[จัดรูปแบบ: ใช้ markdown ให้ครบถ้วน — **Bold** เน้นจุดสำคัญ | `code` inline | ```code blocks``` | " +
+      "$$LaTeX$$ สูตร | ตาราง | `- [ ]` task list | `> quote` | `---` แยกส่วน | Mermaid ถ้าเหมาะสม]";
   }
 
   // Build messages array
