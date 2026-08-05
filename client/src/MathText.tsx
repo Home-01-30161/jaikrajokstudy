@@ -42,25 +42,7 @@ export default function MathText({ text, className, style }: Props) {
 // ─── Single-Pass Sequential Block Tokenizer ────────────────────────────────────
 
 function parseFullMarkdown(raw: string): React.ReactNode[] {
-  // Safety: Strip leaked <think>...</think> blocks from Qwen3-Think model.
-  // Two-phase approach: remove full blocks, then handle orphan closing tags.
-  let text = raw;
-
-  // Phase 1: Remove complete <think>...</think> blocks
-  text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
-
-  // Phase 2: If an orphan </think> remains, everything BEFORE it is raw reasoning — discard it
-  const orphanCloseIdx = text.toLowerCase().lastIndexOf("</think>");
-  if (orphanCloseIdx !== -1) {
-    const afterOrphan = text.slice(orphanCloseIdx + 8).trim();
-    text = afterOrphan || text.replace(/<\/think>/gi, "");
-  }
-
-  // Phase 3: Strip any remaining orphan <think> opening tags
-  text = text.replace(/<\/?think>/gi, "");
-
-  // Normalize line endings and trim
-  text = text.replace(/\r\n/g, "\n").trim();
+  let text = raw.replace(/\r\n/g, "\n");
 
   // Normalize delimiters for consistent handling:
   //   \[ ... \]  =>  $$ ... $$
@@ -193,28 +175,6 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
       );
       return;
     }
-    // H4: ####
-    const h4Match = line.match(/^####\s+(.+)$/);
-    if (h4Match) {
-      flushTable();
-      nodes.push(
-        <h5 key={key} style={{ fontWeight: 700, fontSize: "0.97em", marginTop: "0.45em", marginBottom: "0.15em", color: "inherit", opacity: 0.9 }}>
-          {renderInline(h4Match[1])}
-        </h5>
-      );
-      return;
-    }
-    // H5-H6: ##### / ######
-    const h5Match = line.match(/^#{5,}\s+(.+)$/);
-    if (h5Match) {
-      flushTable();
-      nodes.push(
-        <h6 key={key} style={{ fontWeight: 600, fontSize: "0.93em", marginTop: "0.4em", marginBottom: "0.1em", color: "inherit", opacity: 0.8 }}>
-          {renderInline(h5Match[1])}
-        </h6>
-      );
-      return;
-    }
 
     // Blockquote: > text
     const blockquoteMatch = line.match(/^>\s*(.+)$/);
@@ -251,39 +211,14 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
       return;
     }
 
-    // Task list: - [ ] or - [x]
-    const taskMatch = line.match(/^(\s*)[-*]\s+\[( |x|X)\]\s+(.+)$/);
-    if (taskMatch) {
-      flushTable();
-      const done = taskMatch[2].toLowerCase() === "x";
-      const indent = taskMatch[1].length > 0;
-      nodes.push(
-        <div key={key} style={{ display: "flex", gap: "0.5em", marginTop: "0.25em", alignItems: "flex-start", paddingLeft: indent ? "1.5em" : undefined }}>
-          <span style={{
-            display: "inline-block", width: "1em", height: "1em", border: "1.5px solid currentColor",
-            borderRadius: "3px", textAlign: "center", lineHeight: "1em", fontSize: "0.85em",
-            flexShrink: 0, marginTop: "0.15em", opacity: done ? 1 : 0.6,
-            background: done ? "currentColor" : "transparent",
-          }}>
-            {done && <span style={{ color: "white", fontSize: "0.75em" }}>✓</span>}
-          </span>
-          <div style={{ flex: 1, textDecoration: done ? "line-through" : undefined, opacity: done ? 0.7 : 1 }}>
-            {renderInline(taskMatch[3])}
-          </div>
-        </div>
-      );
-      return;
-    }
-
-    // Bullet list: - ... or • ... or * ... (including indented  - )
-    const bulletMatch = line.match(/^(\s{0,3})[-•*]\s+(.+)$/);
+    // Bullet list: - ... or • ... or * ...
+    const bulletMatch = line.match(/^[-•*]\s+(.+)$/);
     if (bulletMatch) {
       flushTable();
-      const indent = bulletMatch[1].length > 0;
       nodes.push(
-        <div key={key} style={{ display: "flex", gap: "0.4em", marginTop: "0.25em", alignItems: "flex-start", paddingLeft: indent ? "1.2em" : undefined }}>
-          <span style={{ opacity: 0.7, minWidth: "1em", flexShrink: 0 }}>{indent ? "◦" : "•"}</span>
-          <div style={{ flex: 1 }}>{renderInline(bulletMatch[2])}</div>
+        <div key={key} style={{ display: "flex", gap: "0.4em", marginTop: "0.25em", alignItems: "flex-start" }}>
+          <span style={{ opacity: 0.7, minWidth: "1em" }}>•</span>
+          <div style={{ flex: 1 }}>{renderInline(bulletMatch[1])}</div>
         </div>
       );
       return;
@@ -329,43 +264,28 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
 // ─── Inline Token Parser (Math, Code, Bold, Links) ─────────────────────────────
 
 function renderInline(text: string): React.ReactNode[] {
-  // Token regex order matters — longer/more specific patterns first:
+  // Tokens:
   // 1. Inline Math: $...$
   // 2. Inline Code: `...`
-  // 3. Bold+Italic: ***...***
-  // 4. Bold: **...**
-  // 5. Italic: *...* (but NOT ** or ***)
-  // 6. Strikethrough: ~~...~~
-  // 7. Links: [text](url)
-  const TOKEN_REGEX = /(\$[^$\n]+?\$|`[^`\n]+?`|\*{3}[^*\n]+?\*{3}|\*{2}[^*\n]+?\*{2}|(?<!\*)\*(?!\*)[^*\n]+?(?<!\*)\*(?!\*)|~~[^~\n]+?~~|\[[^\]]+\]\([^)]+\))/g;
+  // 3. Bold: **...**
+  // 4. Links: [text](url)
+  const TOKEN_REGEX = /(\$[^$\n]+?\$|`[^`\n]+?`|\*\*[^*]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
 
   const parts = text.split(TOKEN_REGEX);
   return parts.map((part, i) => {
     if (!part) return null;
 
     // Inline math: $...$
-    if (part.startsWith("$") && part.endsWith("$") && part.length > 2 && !part.startsWith("$$")) {
+    if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
       return <InlineMath key={i} latex={part.slice(1, -1).trim()} />;
     }
     // Inline code: `...`
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
       return <InlineCode key={i} code={part.slice(1, -1)} />;
     }
-    // Bold+Italic: ***...***
-    if (part.startsWith("***") && part.endsWith("***")) {
-      return <strong key={i} style={{ fontWeight: 700 }}><em>{part.slice(3, -3)}</em></strong>;
-    }
     // Bold: **...**
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i} style={{ fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
-    }
-    // Italic: *...*
-    if (part.startsWith("*") && part.endsWith("*") && part.length > 2 && !part.startsWith("**")) {
-      return <em key={i}>{part.slice(1, -1)}</em>;
-    }
-    // Strikethrough: ~~...~~
-    if (part.startsWith("~~") && part.endsWith("~~")) {
-      return <s key={i} style={{ opacity: 0.6 }}>{part.slice(2, -2)}</s>;
     }
     // Links: [text](url)
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
