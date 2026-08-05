@@ -301,6 +301,12 @@ export default defineConfig({
         secure: true,
         rewrite: (path: string) => path.replace(/^\/api\/typhoon/, ''),
       },
+      '/api/tavily': {
+        target: 'https://api.tavily.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path: string) => path.replace(/^\/api\/tavily/, ''),
+      },
     },
     allowedHosts: [
       ".manuspre.computer",

@@ -896,7 +896,10 @@ function AppShell() {
     if (hasApiKey()) {
       // ── Real Pathumma Text LLM ──
       try {
-        const { emotionKey, reply } = await chat(textToSend, currentHistory);
+        const { emotionKey, reply, searchUsed } = await chat(textToSend, currentHistory);
+        if (searchUsed) {
+          toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ (Tavily Search)");
+        }
         setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: reply, timestamp: Date.now() }]);
         pushTrend(emotionKey, sourceLabel);
       } catch (err) {

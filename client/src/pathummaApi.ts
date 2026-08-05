@@ -21,6 +21,8 @@ const GEMINI_KEY: string = (import.meta.env.VITE_GEMINI_API_KEY as string) ?? ""
 const GEMINI_PROXY = "/api/gemini";
 const TYPHOON_ASR_KEY: string = (import.meta.env.VITE_TYPHOON_ASR_KEY as string) ?? "";
 const TYPHOON_PROXY = "/api/typhoon";
+const TAVILY_KEY: string = (import.meta.env.VITE_TAVILY_API_KEY as string) ?? "";
+const TAVILY_PROXY = "/api/tavily";
 
 export function hasApiKey(): boolean {
   return THAILLM_KEY.trim().length > 0;
@@ -278,6 +280,137 @@ export async function callTextLLM(
   const text = stripThink(content);
   if (!text) throw new Error("ThaiLLM returned empty response");
   return text;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 1b. WEB SEARCH — Tavily Search API
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface TavilyResult {
+  title: string;
+  url: string;
+  content: string;
+  score: number;
+}
+
+export interface TavilySearchResponse {
+  query: string;
+  results: TavilyResult[];
+  answer?: string;
+}
+
+/**
+ * Search the web using Tavily Search API.
+ * Returns up to `maxResults` results with titles, URLs and content snippets.
+ */
+export async function searchWeb(
+  query: string,
+  maxResults = 5,
+  searchDepth: "basic" | "advanced" = "basic"
+): Promise<TavilySearchResponse> {
+  if (!TAVILY_KEY.trim()) throw new Error("Tavily API key not configured");
+
+  const res = await fetch(`${TAVILY_PROXY}/search`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${TAVILY_KEY}`,
+    },
+    body: JSON.stringify({
+      query,
+      max_results: maxResults,
+      search_depth: searchDepth,
+      include_answer: true,
+      include_raw_content: false,
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    console.error("[Tavily] HTTP error", res.status, errBody.slice(0, 300));
+    throw new Error(`Tavily ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+
+  const raw = await res.json() as TavilySearchResponse;
+  console.debug("[Tavily] Search results for:", query, "| count:", raw.results?.length);
+  return raw;
+}
+
+/**
+ * Keywords/patterns that indicate the user needs current web information.
+ * Questions about live data, news, prices, events, people, etc.
+ */
+const NEEDS_SEARCH_RE = new RegExp(
+  [
+    // Explicit search intent
+    "ค้นหา|search|หาข้อมูล|ข้อมูลล่าสุด|latest|recent",
+    // News / current events
+    "ข่าว|news|วันนี้|today|ล่าสุด|ปัจจุบัน|current|now|ตอนนี้|เมื่อกี้",
+    // Prices / market
+    "ราคา|price|หุ้น|stock|บิทคอยน์|bitcoin|crypto|เงิน|dollar|baht|บาท",
+    // Weather
+    "อากาศ|weather|ฝน|rain|อุณหภูมิ|temperature|forecast|พยากรณ์",
+    // People / places / events
+    "นักการเมือง|politician|นายก|prime minister|รัฐบาล|government",
+    "ผู้ชนะ|winner|แชมป์|champion|รางวัล|award",
+    "กีฬา|sport|ฟุตบอล|football|บาสเกตบอล|basketball",
+    "ภาพยนตร์|movie|ซีรีส์|series|เพลง|song",
+    // Science / tech facts needing current info
+    "ค้นพบ|discovery|งานวิจัย|research|ใหม่|new|เปิดตัว|launch|release",
+  ].join("|"),
+  "i"
+);
+
+/**
+ * Smart wrapper around callTextLLM:
+ * - Detects if the query needs web search (using NEEDS_SEARCH_RE)
+ * - If yes: fetches Tavily results, injects them into the prompt as context
+ * - Returns the LLM reply with source links appended (if search was used)
+ */
+export async function callTextLLMWithSearch(
+  instruction: string,
+  systemPrompt: string = JAIKRAJOK_SYSTEM_PROMPT,
+  maxTokens: number = 2048,
+  temperature: number = 0.4,
+  history?: { role: string; text: string }[]
+): Promise<{ reply: string; searchUsed: boolean; sources: { title: string; url: string }[] }> {
+  const needsSearch = TAVILY_KEY.trim().length > 0 && NEEDS_SEARCH_RE.test(instruction);
+
+  if (!needsSearch) {
+    const reply = await callTextLLM(instruction, systemPrompt, maxTokens, temperature, history);
+    return { reply, searchUsed: false, sources: [] };
+  }
+
+  // Perform web search
+  let searchCtx = "";
+  let sources: { title: string; url: string }[] = [];
+  try {
+    const data = await searchWeb(instruction, 4, "basic");
+    sources = data.results.map(r => ({ title: r.title, url: r.url }));
+
+    // Build context block for the prompt
+    const snippets = data.results
+      .map((r, i) => `[${i + 1}] **${r.title}**\n${r.content.slice(0, 400)}`)
+      .join("\n\n");
+
+    searchCtx =
+      `\n\n---\n**ผลการค้นหาจากอินเทอร์เน็ต (Tavily Search):**\n${snippets}\n` +
+      (data.answer ? `\n**สรุปจาก AI:** ${data.answer}\n` : "") +
+      `---\n\nโปรดใช้ข้อมูลด้านบนนี้ในการตอบคำถาม และอ้างอิงแหล่งที่มาด้วยเลข [1], [2], ... หากใช้ข้อมูลนั้น`;
+  } catch (err) {
+    console.warn("[Tavily] Search failed, answering without search context:", err);
+    // Fall through — answer without search context
+  }
+
+  const reply = await callTextLLM(
+    instruction + searchCtx,
+    systemPrompt,
+    maxTokens,
+    temperature,
+    history
+  );
+
+  return { reply, searchUsed: sources.length > 0, sources };
 }
 
 /**
@@ -614,15 +747,22 @@ export function classifyMoodFromText(text: string): string {
 export interface ChatResult {
   reply: string;
   emotionKey: string;
+  searchUsed?: boolean;
+  sources?: { title: string; url: string }[];
 }
 
 export async function chat(
   userMessage: string,
   history?: { role: string; text: string }[]
 ): Promise<ChatResult> {
-  const [reply, emotionKey] = await Promise.all([
-    callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history),
+  const [searchResult, emotionKey] = await Promise.all([
+    callTextLLMWithSearch(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history),
     analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
   ]);
-  return { reply, emotionKey };
+  return {
+    reply: searchResult.reply,
+    emotionKey,
+    searchUsed: searchResult.searchUsed,
+    sources: searchResult.sources,
+  };
 }
