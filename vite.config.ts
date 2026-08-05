@@ -295,6 +295,12 @@ export default defineConfig({
         secure: true,
         rewrite: (path: string) => path.replace(/^\/api\/gemini/, ''),
       },
+      '/api/typhoon': {
+        target: 'https://api.opentyphoon.ai',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path: string) => path.replace(/^\/api\/typhoon/, ''),
+      },
     },
     allowedHosts: [
       ".manuspre.computer",

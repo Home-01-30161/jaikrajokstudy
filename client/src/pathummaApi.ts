@@ -19,6 +19,8 @@ const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?
 const PATHUMMA_PROXY = "/api/pathumma";
 const GEMINI_KEY: string = (import.meta.env.VITE_GEMINI_API_KEY as string) ?? "";
 const GEMINI_PROXY = "/api/gemini";
+const TYPHOON_ASR_KEY: string = (import.meta.env.VITE_TYPHOON_ASR_KEY as string) ?? "";
+const TYPHOON_PROXY = "/api/typhoon";
 
 export function hasApiKey(): boolean {
   return THAILLM_KEY.trim().length > 0;
@@ -394,7 +396,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 3. AUDIO LLM — Pathumma AudioQA (ThaiLLM is text-only)
+// 3. AUDIO — Typhoon ASR (primary) + Pathumma AudioQA (fallback)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface AudioResult {
@@ -403,15 +405,47 @@ export interface AudioResult {
   emotionKey: string;
 }
 
-export async function callAudioLLM(audioBlob: Blob, instruction: string): Promise<string> {
-  const form = new FormData();
-
+/** Typhoon ASR — OpenAI-compatible transcription endpoint */
+export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
   const mimeToExt: Record<string, string> = {
     "audio/wav": "wav", "audio/wave": "wav", "audio/x-wav": "wav",
     "audio/mp3": "mp3", "audio/mpeg": "mp3", "audio/ogg": "ogg",
     "audio/mp4": "mp4", "audio/webm": "webm", "video/webm": "webm",
   };
   const ext = mimeToExt[audioBlob.type] ?? "webm";
+
+  const form = new FormData();
+  form.append("file", audioBlob, `recording.${ext}`);
+  form.append("model", "typhoon-asr-realtime");
+
+  const res = await fetch(`${TYPHOON_PROXY}/v1/audio/transcriptions`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${TYPHOON_ASR_KEY}` },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    console.error("[TyphoonASR] HTTP error", res.status, errBody.slice(0, 300));
+    throw new Error(`Typhoon ASR ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+
+  const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  console.debug("[TyphoonASR] raw response:", raw);
+  const text = (raw.text as string) ?? "";
+  if (!text.trim()) throw new Error("Typhoon ASR returned empty transcription");
+  return text.trim();
+}
+
+/** Pathumma AudioQA fallback */
+export async function callAudioLLM(audioBlob: Blob, instruction: string): Promise<string> {
+  const mimeToExt: Record<string, string> = {
+    "audio/wav": "wav", "audio/wave": "wav", "audio/x-wav": "wav",
+    "audio/mp3": "mp3", "audio/mpeg": "mp3", "audio/ogg": "ogg",
+    "audio/mp4": "mp4", "audio/webm": "webm", "video/webm": "webm",
+  };
+  const ext = mimeToExt[audioBlob.type] ?? "webm";
+  const form = new FormData();
   form.append("file", audioBlob, `recording.${ext}`);
   form.append("instruction", instruction);
 
@@ -435,27 +469,38 @@ export async function callAudioLLM(audioBlob: Blob, instruction: string): Promis
 }
 
 export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
-  const audioInstruction =
-    "ฟังเสียงนี้และแปลงเป็นข้อความภาษาไทยให้ครบถ้วน " +
-    "ตอบในรูปแบบ: [ข้อความ: ...ข้อความที่ได้ยิน...] แล้วตามด้วยสรุปสั้น ๆ ว่าผู้พูดกำลังพูดถึงอะไร";
-
-  let audioResponse = "";
   let transcription = "";
 
-  try {
-    audioResponse = await callAudioLLM(audioBlob, audioInstruction);
-    const match = audioResponse.match(/\[ข้อความ[:\s]+([^\]]+)\]/i);
-    transcription = match ? match[1].trim() : audioResponse;
-  } catch (err) {
-    console.warn("AudioQA failed:", err);
-    return {
-      transcription: "",
-      llmReply: "ขอโทษนะคะ กระจกได้ยินเสียงไม่ชัด ลองพูดอีกครั้งหรือพิมพ์ข้อความแทนได้ค่ะ",
-      emotionKey: "neutral",
-    };
+  // Primary: Typhoon ASR (OpenAI-compatible, high-accuracy Thai ASR)
+  if (TYPHOON_ASR_KEY.trim().length > 0) {
+    try {
+      transcription = await callTyphoonASR(audioBlob);
+      console.debug("[TyphoonASR] Transcription:", transcription);
+    } catch (err) {
+      console.warn("[TyphoonASR] Failed, falling back to Pathumma AudioQA:", err);
+    }
   }
 
-  const textForAnalysis = transcription || audioResponse;
+  // Fallback: Pathumma AudioQA
+  if (!transcription) {
+    const audioInstruction =
+      "ฟังเสียงนี้และแปลงเป็นข้อความภาษาไทยให้ครบถ้วน " +
+      "ตอบในรูปแบบ: [ข้อความ: ...ข้อความที่ได้ยิน...] แล้วตามด้วยสรุปสั้น ๆ ว่าผู้พูดกำลังพูดถึงอะไร";
+    try {
+      const audioResponse = await callAudioLLM(audioBlob, audioInstruction);
+      const match = audioResponse.match(/\[ข้อความ[:\s]+([^\]]+)\]/i);
+      transcription = match ? match[1].trim() : audioResponse;
+    } catch (err) {
+      console.warn("Pathumma AudioQA also failed:", err);
+      return {
+        transcription: "",
+        llmReply: "ขอโทษนะคะ กระจกได้ยินเสียงไม่ชัด ลองพูดอีกครั้งหรือพิมพ์ข้อความแทนได้ค่ะ",
+        emotionKey: "neutral",
+      };
+    }
+  }
+
+  const textForAnalysis = transcription;
   const emotionKey = await analyzeSentiment(textForAnalysis);
 
   let llmReply: string;
@@ -464,8 +509,7 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
       `ผู้ใช้พูดว่า: "${textForAnalysis}"\nตอบสนองด้วยความเข้าใจและเห็นอกเห็นใจ ถ้ามีคำถามช่วยตอบด้วย ตอบไม่เกิน 3 ประโยค`
     );
   } catch {
-    llmReply = audioResponse.replace(/\[ข้อความ[:\s]+[^\]]+\]/i, "").trim()
-      || "กระจกได้ยินคุณแล้วค่ะ วันนี้รู้สึกเป็นยังไงบ้าง?";
+    llmReply = transcription || "กระจกได้ยินคุณแล้วค่ะ วันนี้รู้สึกเป็นยังไงบ้าง?";
   }
 
   return { transcription, llmReply, emotionKey };
