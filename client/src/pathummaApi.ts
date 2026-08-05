@@ -208,14 +208,13 @@ export async function callTextLLM(
   let effectiveTemperature = temperature;
   let extraInstruction = "";
 
-  // Detect Math / Remainder / Multiple Choice → Force Low Temp (0.05) + CoT
-  const isMathOrChoice = /(เศษ|หาร|ผลบวก|ค\.ร\.น\.|ห\.ร\.ม\.|lcm|gcd|mod|ก\.|ข\.|ค\.|ง\.|โจทย์|จำนวนเต็ม|สมการ|\$\d|\d+\s*[\+\-\*\/%]\s*\d+|1\s*<\s*n\s*<\s*\d+)/i.test(instruction);
+  // Detect Math / Calculation / Explicit Math Homework Prompt
+  // (Excludes simple range hyphens like "2-3 ประโยค" from false-triggering math mode)
+  const isMathOrChoice = /(โจทย์คณิต|คำนวณ|สมการ|ค\.ร\.น\.|ห\.ร\.ม\.|เศษเหลือ|ข้อสอบ|lcm|gcd|\bmod\b|\$\d|\d+\s*[\+\*\/%]\s*\d+|\d+\s*=\s*\d+)/i.test(instruction);
   if (isMathOrChoice) {
     effectiveTemperature = 0.05;
-    extraInstruction = "\n\n[บังคับ: คำนวณด้วยหลักคณิตศาสตร์จริงทีละขั้นตอน ห้ามเดาตัวเลขเด็ดขาด หากเป็นโจทย์เศษเหลือ ให้คำนวณ ค.ร.น. แล้วบวกเศษ แล้วตรวจกับตัวเลือก ก/ข/ค/ง ให้ตรงกับผลคำนวณจริง 100%] " +
-      "**จัดรูปแบบบังคับ**: ใช้ $$...$$ สำหรับทุกสูตรสมการ | ตาราง markdown แสดงขั้นตอนคำนวณ | " +
-      "Blockquote `> **สูตรสำคัญ**` เน้นทฤษฎีบท | Task list `- [ ]` ขั้นตอนแก้โจทย์ | " +
-      "Horizontal rule `---` แยกขั้นตอน | **Bold** เน้นคำตอบสุดท้าย";
+    extraInstruction = "\n\n[หากมีโจทย์คณิตศาสตร์ในคำขอ: แสดงขั้นตอนการคำนวณอย่างแม่นยำทีละบรรทัด ห้ามเดาตัวเลข " +
+      "จัดรูปแบบด้วย $$...$$ สำหรับทุกสูตรสมการ และ **Bold** เน้นคำตอบสุดท้าย]";
   }
 
   // Detect Programming Tutorial → Enforce 5-topic comprehensive lesson
