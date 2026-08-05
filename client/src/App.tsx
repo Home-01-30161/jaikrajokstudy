@@ -956,7 +956,11 @@ function AppShell() {
     try {
       const { answer, llmReply } = await analyzeSelfie(file);
       // Classify emotion from the Vision LLM's description
-      const emotionKey = classifyMoodFromText(answer) || "neutral";
+      // Priority: detect smile/positive keywords first before general classifyMoodFromText
+      const lowerAnswer = answer.toLowerCase();
+      const positiveSmileKeywords = ["ยิ้ม", "สดใส", "มีความสุข", "แจ่มใส", "ดีใจ", "สุขสดชื่น", "หัวเราะ", "สนุก", "ภูมิใจ", "smile", "smiling", "happy", "joy", "bright", "cheerful", "laughing", "grinning"];
+      const isSmiling = positiveSmileKeywords.some(k => lowerAnswer.includes(k));
+      const emotionKey = isSmiling ? "positive" : (classifyMoodFromText(answer) || "neutral");
       const info = EMO[emotionKey] || EMO.neutral;
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: answer, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note: answer, color: info.color, bg: info.bg, text: info.text } }]);
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() }]);
@@ -1098,9 +1102,9 @@ function AppShell() {
     setIsAnalyzing(true);
     try {
       const { answer, llmReply } = await analyzeHomework(file);
+      // Show the vision transcription as a collapsible OCR card, then the full analysis directly
       setMessages((prev) => [...prev,
-        { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์เรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer}"` },
-        { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() + 50 },
+        { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now(), cardType: "ocr", ocrText: answer },
       ]);
       pushTrend("neutral", "รูปการบ้าน");
     } catch (err) {
@@ -2023,9 +2027,19 @@ function ChatView({
                   <p>{msg.emotionData.note}</p>
                 </div>
               ) : msg.cardType === "ocr" ? (
-                <div className="max-w-[85%] p-4 rounded-2xl text-sm" style={{ backgroundColor: T.cream, border: "1.5px dashed #aaa" }}>
-                  <p className="font-bold text-xs text-gray-500 mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>📷 ผลจาก OCR API</p>
-                  <p className="text-xs text-gray-500 italic border-l-2 pl-3 py-1 my-1" style={{ borderColor: T.teal }}>{msg.ocrText}</p>
+                <div className="max-w-[95%] p-4 rounded-2xl text-sm" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 10px rgba(26,26,26,0.06)" }}>
+                  {/* OCR source label */}
+                  <details className="mb-3" style={{ cursor: "pointer" }}>
+                    <summary className="font-bold text-xs text-gray-500 select-none flex items-center gap-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace", listStyle: "none" }}>
+                      <span style={{ color: T.teal }}>▶</span> 📷 ผลจาก OCR API <span className="opacity-50">(คลิกเพื่อดู)</span>
+                    </summary>
+                    <div className="mt-2 text-xs italic border-l-2 pl-3 py-1 overflow-auto max-h-40" style={{ borderColor: T.teal, color: "#555" }}>
+                      <MathText text={msg.ocrText ?? ""} />
+                    </div>
+                  </details>
+                  {/* Full analysis rendered below */}
+                  <MathText text={msg.text} />
+                  <button onClick={() => speakText(msg.text)} className="mt-2 text-xs opacity-50 hover:opacity-100 transition-opacity">🔊 ฟังเสียง</button>
                 </div>
               ) : (
                 <div
