@@ -109,15 +109,67 @@ async function blobToWav(blob: Blob): Promise<Blob> {
   return new Blob([wavBuffer], { type: "audio/wav" });
 }
 
-/** Strip <think>...</think> reasoning blocks from Qwen3-Think model */
+/** Strip <think>...</think> reasoning blocks, or leaked English reasoning, from Qwen3-Think model */
 function stripThink(text: string): string {
   if (!text) return "";
-  // If there's a closed </think>, extract the final answer that follows it
+
+  // 1. Proper <think>...</think> tags — extract the final answer that follows </think>
   if (text.includes("</think>")) {
     const after = text.split("</think>").slice(1).join("</think>").trim();
     if (after) return after;
   }
-  // If token limit was hit inside <think>, strip the opening tag and return the reasoning
+
+  // 2. Unclosed <think> at start — find a Thai answer section after
+  if (text.trimStart().startsWith("<think>")) {
+    // Look for a section that starts with Thai characters or markdown headers after a long English block
+    const thaiSection = text.replace(/^<think>[\s\S]*?(?=[\u0E00-\u0E7F]|#{1,3}\s|```|\*\*[^\n]+\*\*)/m, "").trim();
+    if (thaiSection && thaiSection.length > 30) return thaiSection;
+    // fallback: strip tag only
+    return text.replace(/<think>/gi, "").trim();
+  }
+
+  // 3. Leaked / untagged reasoning — detect long English "thinking" preamble patterns
+  //    These patterns appear when the model outputs its chain-of-thought without tags
+  const leakedReasoningRE = /^(Okay[,.]|Alright[,.]|Let me|The user|Wait[,.]|First[,.]|So[,.]|I need|I'll|I will|I should|Hmm[,.]|Let's think|The question|Looking at|Looking for|To solve|To answer)/i;
+  if (leakedReasoningRE.test(text.trimStart())) {
+    // Try to find the real Thai/final answer by looking for a substantial Thai block or markdown header
+    const lines = text.split("\n");
+    let thaiStartIndex = -1;
+    let consecutiveThaiLines = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const hasThaiChars = /[\u0E00-\u0E7F]/.test(lines[i]);
+      const isMdHeader = /^#{1,3}\s/.test(lines[i].trim());
+      const isCodeBlock = lines[i].trim().startsWith("```");
+
+      if (hasThaiChars || isMdHeader || isCodeBlock) {
+        consecutiveThaiLines++;
+        if (thaiStartIndex === -1) thaiStartIndex = i;
+        if (consecutiveThaiLines >= 2 && thaiStartIndex !== -1) {
+          // Found a real Thai answer block — return from here onward
+          return lines.slice(thaiStartIndex).join("\n").trim();
+        }
+      } else {
+        // Non-Thai line — reset only if it's not a blank line between Thai content
+        if (lines[i].trim().length > 0) {
+          consecutiveThaiLines = 0;
+          if (thaiStartIndex !== -1 && i - thaiStartIndex > 5) {
+            // already found a Thai block; stop searching
+            break;
+          }
+          thaiStartIndex = -1;
+        }
+      }
+    }
+    // Last resort: return from where the first Thai character appears
+    const thaiMatch = text.match(/[\u0E00-\u0E7F]/);
+    if (thaiMatch && thaiMatch.index !== undefined) {
+      const lineStart = text.lastIndexOf("\n", thaiMatch.index) + 1;
+      const trimmed = text.slice(lineStart).trim();
+      if (trimmed.length > 20) return trimmed;
+    }
+  }
+
   return text.replace(/<think>/gi, "").trim();
 }
 
