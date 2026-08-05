@@ -52,13 +52,22 @@ function blobToBase64(blob: Blob): Promise<string> {
 /** Strip <think>...</think> reasoning blocks from Qwen3-Think model */
 function stripThink(text: string): string {
   if (!text) return "";
-  // If there's a closed </think>, extract the final answer that follows it
-  if (text.includes("</think>")) {
-    const after = text.split("</think>").slice(1).join("</think>").trim();
-    if (after) return after;
+  let cleaned = text;
+
+  // 1. If there's a closed </think>, extract everything after the LAST </think> tag
+  if (cleaned.includes("</think>")) {
+    const parts = cleaned.split("</think>");
+    const after = parts[parts.length - 1].trim();
+    if (after) {
+      cleaned = after;
+    }
   }
-  // If token limit was hit inside <think>, strip the opening tag and return the reasoning
-  return text.replace(/<think>/gi, "").trim();
+
+  // 2. Strip any remaining <think>...</think> or orphan <think> / </think> tags
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  cleaned = cleaned.replace(/<\/?think\s*\/?>/gi, "").trim();
+
+  return cleaned || text.replace(/<\/?think\s*\/?>/gi, "").trim();
 }
 
 /** Extract text from Pathumma (VQA/Audio) raw response shapes */
