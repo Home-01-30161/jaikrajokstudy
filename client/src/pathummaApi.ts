@@ -1,5 +1,5 @@
 /**
- * pathummaApi.ts — JaiKraJok Pathumma LLM client (v3)
+ * pathummaApi.ts — JaiKraJok Pathumma LLM client (v4)
  * =====================================================
  * OFFICIAL Pathumma LLM endpoints from the aift Python library source:
  *   textqa.py  → POST https://api.aiforthai.in.th/textqa/completion
@@ -8,7 +8,7 @@
  *
  * All calls route through the Vite proxy /api/pathumma → https://api.aiforthai.in.th
  *
- * IMPORTANT content-type per endpoint (matches Python requests library behaviour):
+ * IMPORTANT content-type per endpoint:
  *   textqa  → application/x-www-form-urlencoded  (data={...}, no files)
  *   vqa     → multipart/form-data                (files=[('file',...)], data={'query':...})
  *   audioqa → multipart/form-data                (files=[('file',...)], data={'instruction':...})
@@ -40,7 +40,6 @@ function stripThink(text: string): string {
 /**
  * Extract the bot reply string from every shape the API can return.
  * Pathumma primary format: { content: "..." }
- * Also handles OpenAI-compat and other field names as fallback.
  */
 function extractText(raw: unknown): string {
   if (typeof raw === "string") return raw.trim();
@@ -55,7 +54,7 @@ function extractText(raw: unknown): string {
     if (c.text) return String(c.text).trim();
   }
 
-  // Pathumma direct fields — try 'content' first (confirmed from README)
+  // Pathumma direct fields — try 'content' first
   for (const k of ["content", "response", "output", "text", "result", "generated_text", "answer"]) {
     if (r[k] && typeof r[k] === "string") return (r[k] as string).trim();
   }
@@ -65,44 +64,34 @@ function extractText(raw: unknown): string {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 1. TEXT LLM — POST /textqa/completion
-//    Content-Type: application/x-www-form-urlencoded  ← CRITICAL
-//    Body: instruction, system_prompt, max_new_tokens, temperature
-//    Response:  { instruction, system_prompt, content, temperature, max_new_tokens, ... }
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const JAIKRAJOK_SYSTEM_PROMPT =
   "คุณคือ กระจก (JaiKraJok) ผู้ช่วยสอนเรียนและเพื่อนคู่คิดอัจฉริยะ สร้างโดยทีม JaiKraJok " +
   "ตอบเป็นภาษาไทยอย่างสุภาพ อบอุ่น ชัดเจน ครอบคลุม ละเอียดลึกซึ้งในระดับมืออาชีพ (สไตล์ Gemini / Claude) " +
-  "กฎสำคัญสำหรับการสอนโปรแกรมมิ่งและวิชาการให้ครอบคลุมทุกหัวข้อ (Complete Master Lesson): " +
-  "1. เมื่อผู้ใช้ขอให้สอนไวยากรณ์พื้นฐาน (Basic Syntax) หรือการเขียนโปรแกรมภาษาใดๆ (เช่น C, C++, Python, Java, JS, TS, C#, Go, Rust, PHP, SQL ฯลฯ) " +
-  "   ต้องอธิบายให้ครบถ้วนครอบคลุมทั้ง 5 หัวข้อหลักในคำตอบเดียวเสมอ ห้ามตอบเพียงเรื่องเดียวเด็ดขาด: " +
-  "   - โครงสร้างโปรแกรมหลักและ Hello World (พร้อมกล่องโค้ด ```c หรือ ```cpp) " +
-  "   - 1. การประกาศตัวแปรและชนิดข้อมูล (Variables & Data Types) (พร้อมกล่องโค้ดตัวอย่าง) " +
-  "   - 2. การรับค่าและการแสดงผล (Input & Output - printf/scanf หรือ cin/cout หรือ print/input) (พร้อมกล่องโค้ดตัวอย่าง) " +
-  "   - 3. เงื่อนไขทางเลือก (Conditional Statements - if/else) (พร้อมกล่องโค้ดตัวอย่าง) " +
-  "   - 4. การวนลูป (Loops - for/while) (พร้อมกล่องโค้ดตัวอย่าง) " +
-  "   - 5. ฟังก์ชัน (Functions) (พร้อมกล่องโค้ดตัวอย่าง) " +
-  "2. โค้ดทุกกล่องต้องถูกต้องตามไวยากรณ์ภาษา 100% (เช่น ภาษา C ใช้ #include <stdio.h> int main(), printf, scanf; C++ ใช้ #include <iostream> std::cout; ห้ามใช้คำว่า var ใน C/C++) " +
-  "3. ทุกหัวข้อต้องมีกล่องโค้ด ```lang ... ``` แยกเฉพาะ และมี Comment อธิบายในโค้ดอย่างละเอียด " +
+  "กฎสำคัญสำหรับการคำนวณทางคณิตศาสตร์และวิชาการ (Anti-Hallucination & Precise Math Rules): " +
+  "1. ห้ามเดาคำตอบ หรือเดาผลลัพธ์การทำงานของโค้ด/การรันโปรแกรมเด็ดขาด! ต้องแสดงขั้นตอนการคำนวณทางคณิตศาสตร์ที่ถูกต้องทีละบรรทัด " +
+  "2. สำหรับโจทย์เศษเหลือ/ทฤษฎีบทจำนวน/ทฤษฎีเศษเหลือ (Remainder / Modular Arithmetic / LCM / ค.ร.น.): " +
+  "   - เขียนนิยามสมมูล $n \\equiv r \\pmod m \\implies n - r$ เป็นพหุคูณของ ค.ร.น. " +
+  "   - คำนวณ ค.ร.น. ของตัวหารอย่างแม่นยำ (เช่น ค.ร.น. ของ 7, 10, 13 คือ $7 \\times 10 \\times 13 = 910$) " +
+  "   - คำนวณค่า $n = 910 + 1 = 911$ แล้วตรวจสอบเงื่อนไขช่วง (เช่น $1 < n < 1000$) " +
+  "   - ตรวจสอบกับตัวเลือก ก. ข. ค. ง. และสรุปคำตอบให้ตรงกับข้อที่คำนวณได้ถูกต้อง 100% " +
+  "3. สำหรับโจทย์การโปรแกรม/เขียนโค้ด (C, C++, Python, Java, JS, TS, Go, Rust ฯลฯ): อธิบาย 5 หัวข้อหลักพร้อมกล่องโค้ด ```lang ... ``` " +
   "4. สำหรับโจทย์คณิตศาสตร์/วิทยาศาสตร์ ใช้ LaTeX $...$ และ $$...$$ แสดงสมการแบบละเอียดทุกขั้นตอน " +
   "5. หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย";
 
-
 export const MATH_SYSTEM_PROMPT =
   "คุณคือครูสอนพิเศษคณิตศาสตร์และวิทยาศาสตร์ผู้เชี่ยวชาญระดับสูง สร้างโดยทีม JaiKraJok " +
-  "กฎการตอบ: " +
-  "1. ตอบเป็นภาษาไทย อธิบายละเอียด ทุกขั้นตอน " +
-  "2. แสดงสูตรและสมการด้วย LaTeX: inline ใช้ $...$ และ block ใช้ $$...$$ " +
-  "3. อธิบายขั้นตอนการคำนวณทีละขั้นอย่างชัดเจน พร้อมสรุปคำตอบสุดท้ายในกรอบ $$...$$ " +
-  "4. จัดรูปแบบด้วย Markdown: ใช้หัวข้อ ##, ลำดับข้อ 1. 2. 3. และกล่องโค้ด ``` เมื่อมีตัวอย่างโปรแกรม " +
-  "5. ให้กำลังใจและแนะนำโจทย์ฝึกเพิ่มเติมที่ปลายคำตอบเสมอ";
-
+  "กฎการตอบ (ห้ามเดาตัวเลข คำนวณจริงทีละขั้น): " +
+  "1. ตอบเป็นภาษาไทย อธิบายละเอียด ทุกขั้นตอน ห้ามสุ่มหรือเดาคำตอบเด็ดขาด " +
+  "2. สำหรับโจทย์เศษเหลือและการหาร: คำนวณ ค.ร.น. (LCM) ให้แม่นยำ บวกเศษกลับเข้าไป แล้วตรวจสอบเงื่อนไขขอบเขต " +
+  "3. หากมีตัวเลือก ก. ข. ค. ง. ให้ตรวจทานคำตอบที่คำนวณได้กับตัวเลือกอย่างระมัดระวัง แล้วระบุข้อที่ถูกต้อง " +
+  "4. แสดงสูตรและสมการด้วย LaTeX: inline ใช้ $...$ และ block ใช้ $$...$$ " +
+  "5. สรุปคำตอบสุดท้ายในกรอบ $$...$$ และให้กำลังใจผู้เรียนเสมอ";
 
 /**
  * TEXT LLM: Send a text prompt → get a Thai language reply
- *
- * Uses URLSearchParams (application/x-www-form-urlencoded) — matching how
- * the Python requests library sends `data=payload` with no files.
+ * Uses URLSearchParams (application/x-www-form-urlencoded)
  */
 export async function callTextLLM(
   instruction: string,
@@ -111,16 +100,22 @@ export async function callTextLLM(
   temperature: number = 0.4,
   history?: { role: string; text: string }[]
 ): Promise<string> {
-  // If there's history, we format it into the prompt since Pathumma TextQA doesn't take a messages array natively
   let fullInstruction = instruction;
+  let effectiveTemperature = temperature;
+
+  // Detect Math / Remainder / Multiple Choice queries → Force Low Temp (0.05) & Chain-of-Thought
+  const isMathOrChoice = /(เศษ|หาร|ผลบวก|ค\.ร\.น\.|ห\.ร\.ม\.|lcm|gcd|mod|ก\.|ข\.|ค\.|ง\.|โจทย์|จำนวนเต็ม|สมการ|\$\d|\d+\s*[\+\-\*\/%]\s*\d+|1\s*<\s*n\s*<\s*\d+)/i.test(instruction);
+  if (isMathOrChoice) {
+    effectiveTemperature = 0.05; // Force deterministic precision for math
+    fullInstruction += "\n\n[ข้อบังคับสำหรับการคำนวณคณิตศาสตร์: คำนวณด้วยหลักคณิตศาสตร์จริงทีละขั้นตอน ห้ามเดาผลลัพธ์หรือเดาตัวเลขเด็ดขาด! หากเป็นโจทย์เศษเหลือ (Remainder) ให้คำนวณ ค.ร.น. แล้วบวกเศษ จากนั้นตรวจกับตัวเลือก ก, ข, ค, ง ให้ตรงกับผลคำนวณจริง 100%]";
+  }
 
   // Enhance tutorial & learning requests to GUARANTEE comprehensive coverage in ALL chats
   const isLearningOrTech = /(สอน|syntax|พื้นฐาน|basic|เรียน|เขียน|code|โปรแกรม|คืออะไร|อธิบาย|วิธี|guide|tutorial|overview|c\b|cpp|c\+\+|python|java|javascript|typescript|js|ts|html|css|c#|golang|go|rust|php|sql|ruby|swift|kotlin|dart|flutter)/i.test(instruction);
   
-  if (isLearningOrTech) {
+  if (isLearningOrTech && !isMathOrChoice) {
     fullInstruction += "\n\n[ข้อบังคับสำคัญสำหรับการตอบ: หากเป็นคำขอสอนโปรแกรมมิ่งหรือเรื่องเทคโนโลยี ให้เขียนบทเรียนฉบับสมบูรณ์ที่ครอบคลุมครบถ้วนทั้ง 5 หัวข้อหลักในคำตอบเดียวเสมอ: 1. โครงสร้างหลัก & Hello World, 2. ตัวแปรและชนิดข้อมูล (Variables & Data Types), 3. การรับส่งข้อมูล (Input & Output), 4. เงื่อนไขทางเลือกและการวนลูป (Conditionals & Loops), 5. ฟังก์ชัน (Functions) โดยต้องมีกล่องโค้ด ```...``` ตัวอย่างและอธิบายทีละหัวข้ออย่างละเอียดสมบูรณ์แบบ]";
   }
-
 
   if (history && history.length > 0) {
     const historyText = history
@@ -130,15 +125,11 @@ export async function callTextLLM(
     fullInstruction = `ประวัติการสนทนา:\n${historyText}\n\nข้อความปัจจุบันจากผู้ใช้:\n${fullInstruction}`;
   }
 
-
-  // Use URLSearchParams → sends as application/x-www-form-urlencoded
-
-  // This matches the Python SDK: requests.post(url, data=payload, headers=headers)
   const body = new URLSearchParams({
     instruction: fullInstruction,
     system_prompt: systemPrompt,
     max_new_tokens: String(maxTokens),
-    temperature: String(temperature),
+    temperature: String(effectiveTemperature),
   });
 
   const res = await fetch(`${PROXY}/textqa/completion`, {
@@ -186,9 +177,6 @@ export async function analyzeSentiment(text: string): Promise<string> {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 2. VISION LLM — POST /vqa/inference/
-//    Content-Type: multipart/form-data
-//    Body: query (text), file (image blob)
-//    Response:  { content: "..." }
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface VisionResult {
@@ -196,23 +184,18 @@ export interface VisionResult {
   llmReply: string;  // Empathetic/instructional follow-up from Text LLM
 }
 
-/**
- * VISION LLM: Analyse an image with a text question.
- * Uses POST /vqa/inference/ with multipart/form-data.
- * Field confirmed from source: 'query' (text), 'file' (image).
- */
 export async function callVisionLLM(
   imageBlob: Blob,
   query: string,
   filename = "image.jpg"
 ): Promise<string> {
   const form = new FormData();
-  form.append("query", query);          // confirmed field name from vqa.py
+  form.append("query", query);
   form.append("file", imageBlob, filename);
 
   const res = await fetch(`${PROXY}/vqa/inference/`, {
     method: "POST",
-    headers: authHeaders(),             // Do NOT set Content-Type — browser sets boundary
+    headers: authHeaders(),
     body: form,
   });
 
@@ -229,11 +212,6 @@ export async function callVisionLLM(
   return text;
 }
 
-/**
- * Selfie emotion analysis:
- * 1. Vision LLM describes face/emotion in the photo
- * 2. Text LLM gives an empathetic follow-up response
- */
 export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult> {
   const visionQuery =
     "ดูใบหน้าของคนในภาพนี้แล้วบรรยายอารมณ์และความรู้สึกที่สังเกตเห็นเป็นภาษาไทย " +
@@ -261,11 +239,6 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult> {
   return { answer, llmReply };
 }
 
-/**
- * Homework/math photo analysis:
- * 1. Vision LLM reads the problem (including calculus equations)
- * 2. Text LLM solves it step-by-step with MATH_SYSTEM_PROMPT
- */
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   const visionQuery =
     "อ่านและถอดความโจทย์ทั้งหมดในภาพนี้เป็นภาษาไทย " +
@@ -282,12 +255,12 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
 
   const instruction =
     `โจทย์จากภาพ: "${answer}"\n\n` +
-    `อธิบายวิธีแก้โจทย์ทีละขั้นตอน ถ้าเป็นแคลคูลัสให้แสดงสูตรและการคำนวณชัดเจน ` +
-    `ให้กำลังใจผู้เรียนด้วย`;
+    `อธิบายวิธีแก้โจทย์ทีละขั้นตอน ถ้าเป็นแคลคูลัสหรือคณิตศาสตร์ให้แสดงสูตรและการคำนวณชัดเจน ` +
+    `หากมีตัวเลือก ก. ข. ค. ง. ให้คำนวณจริงทีละขั้นตอน ห้ามเดาเด็ดขาด`;
 
   let llmReply: string;
   try {
-    llmReply = await callTextLLM(instruction, MATH_SYSTEM_PROMPT, 768, 0.3);
+    llmReply = await callTextLLM(instruction, MATH_SYSTEM_PROMPT, 1024, 0.05);
   } catch {
     llmReply = answer || "กระจกเห็นการบ้านแล้วค่ะ ติดขั้นตอนไหนบอกกระจกได้เลยนะ";
   }
@@ -297,11 +270,6 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 3. AUDIO LLM — POST /audioqa/inference/
-//    Content-Type: multipart/form-data
-//    Body: instruction (text), file (audio blob)
-//    Response:  { content: "..." }
-//
-//    Two-step pipeline: AudioQA (STT) → TextQA (sentiment + empathetic reply)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface AudioResult {
@@ -310,15 +278,9 @@ export interface AudioResult {
   emotionKey: string;     // Mood key for UI
 }
 
-/**
- * Low-level AudioQA call.
- * Uses POST /audioqa/inference/ with multipart/form-data.
- * Supported audio: wav, mp3, ogg, mp4, webm.
- */
 export async function callAudioLLM(audioBlob: Blob, instruction: string): Promise<string> {
   const form = new FormData();
 
-  // Map MIME type → extension for the filename
   const mimeToExt: Record<string, string> = {
     "audio/wav": "wav",
     "audio/wave": "wav",
@@ -332,7 +294,7 @@ export async function callAudioLLM(audioBlob: Blob, instruction: string): Promis
   };
   const ext = mimeToExt[audioBlob.type] ?? "webm";
   form.append("file", audioBlob, `recording.${ext}`);
-  form.append("instruction", instruction);  // confirmed field from audioqa.py
+  form.append("instruction", instruction);
 
   const res = await fetch(`${PROXY}/audioqa/inference/`, {
     method: "POST",
@@ -353,14 +315,7 @@ export async function callAudioLLM(audioBlob: Blob, instruction: string): Promis
   return text;
 }
 
-/**
- * Full audio pipeline:
- *   Step 1 — AudioQA: speech-to-text + basic response
- *   Step 2 — TextQA sentiment: classify emotion from transcription
- *   Step 3 — TextQA reply: warm empathetic response
- */
 export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
-  // Step 1: AudioQA — speech to text
   const audioInstruction =
     "ฟังเสียงนี้และแปลงเป็นข้อความภาษาไทยให้ครบถ้วน " +
     "ตอบในรูปแบบ: [ข้อความ: ...ข้อความที่ได้ยิน...] แล้วตามด้วยสรุปสั้น ๆ ว่าผู้พูดกำลังพูดถึงอะไร";
@@ -370,7 +325,6 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
 
   try {
     audioResponse = await callAudioLLM(audioBlob, audioInstruction);
-    // Extract transcription from "[ข้อความ: ...]" pattern
     const match = audioResponse.match(/\[ข้อความ[:\s]+([^\]]+)\]/i);
     transcription = match ? match[1].trim() : audioResponse;
   } catch (err) {
@@ -382,11 +336,9 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
     };
   }
 
-  // Step 2: Classify emotion from transcription
   const textForAnalysis = transcription || audioResponse;
   const emotionKey = await analyzeSentiment(textForAnalysis);
 
-  // Step 3: Empathetic reply via Text LLM
   let llmReply: string;
   try {
     const replyInstruction =
@@ -402,8 +354,7 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Mood Classifier — Thai keyword-based (local, no API needed)
-// Used as fallback when API calls fail
+// Mood Classifier — Thai keyword-based (local fallback)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const MOOD_CUES: [string, string[]][] = [
@@ -432,18 +383,14 @@ export interface ChatResult {
   emotionKey: string;
 }
 
-/**
- * Main chat: sends user message to Text LLM, runs sentiment in parallel.
- * Uses 2048 tokens for comprehensive, structured, Gemini-quality responses.
- */
 export async function chat(
   userMessage: string,
   history?: { role: string; text: string }[]
 ): Promise<ChatResult> {
+  // If math query, use lower temp automatically in callTextLLM
   const [reply, emotionKey] = await Promise.all([
-    callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 2048, 0.5, history),
+    callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 2048, 0.4, history),
     analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
   ]);
   return { reply, emotionKey };
 }
-
