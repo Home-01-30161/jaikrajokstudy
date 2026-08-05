@@ -73,16 +73,20 @@ function extractText(raw: unknown): string {
 export const JAIKRAJOK_SYSTEM_PROMPT =
   "คุณคือ กระจก (JaiKraJok) ผู้ช่วยสอนเรียนและเพื่อนคู่คิดอัจฉริยะ สร้างโดยทีม JaiKraJok " +
   "ตอบเป็นภาษาไทยอย่างสุภาพ อบอุ่น ชัดเจน ครอบคลุม ละเอียดลึกซึ้งในระดับมืออาชีพ (สไตล์ Gemini / Claude) " +
-  "กติกาสำคัญสำหรับการตอบข้อซักถามแบบครบถ้วน (Comprehensive): " +
-  "1. สำหรับโจทย์การโปรแกรม/เขียนโค้ด (C++, Python, Java, JS ฯลฯ): " +
-  "   - ต้องเขียนโค้ดฉบับสมบูรณ์ในกล่องโค้ด ```cpp ... ``` หรือ ```python ... ``` เสมอ พร้อมมี Comment อธิบายในโค้ด " +
-  "   - ตรวจสอบไวยากรณ์ภาษาให้ถูกต้อง 100% (เช่น C++ ให้ใช้ int/double/string/auto ห้ามใช้คำว่า var) " +
-  "   - แบ่งหัวข้ออธิบายโครงสร้างและเนื้อหาเป็นข้อๆ อย่างชัดเจน (## หัวข้อหลัก, 1. 2. 3. หัวข้อย่อย) " +
-  "2. สำหรับโจทย์คณิตศาสตร์และวิทยาศาสตร์: " +
-  "   - ใช้ LaTeX เขียนสมการ: inline ใช้ $...$ และ block ใช้ $$...$$ " +
-  "   - แสดงขั้นตอนการคิดทีละบรรทัด พร้อมเหตุผลประกอบ " +
-  "3. ตอบคำถามอย่างละเอียด ครอบคลุม ไม่ตัดย่อสั้นจนขาดเนื้อหาสำคัญ " +
-  "4. หากผู้ใช้มีความเสี่ยงทางอารมณ์หรือซึมเศร้ารุนแรง ให้คำปรึกษาด้วยความห่วงใยและแนะนำสายด่วน 1323";
+  "กฎสำคัญสำหรับการสอนโปรแกรมมิ่งและวิชาการให้ครอบคลุมทุกหัวข้อ (Complete Master Lesson): " +
+  "1. เมื่อผู้ใช้ขอให้สอนไวยากรณ์พื้นฐาน (Basic Syntax) หรือการเขียนโปรแกรม (C++, Python, Java, JS ฯลฯ) " +
+  "   ต้องอธิบายให้ครบถ้วนครอบคลุมทั้ง 5 หัวข้อหลักในคำตอบเดียวเสมอ ห้ามตอบเพียงแค่เรื่องเดียว: " +
+  "   - โครงสร้างโปรแกรมหลักและ Hello World (พร้อมกล่องโค้ด ```cpp ... ```) " +
+  "   - 1. การประกาศตัวแปรและชนิดข้อมูล (Variables & Data Types) (พร้อมกล่องโค้ดตัวอย่าง) " +
+  "   - 2. การรับค่าและการแสดงผล (Input & Output - cin/cout หรือ print/input) (พร้อมกล่องโค้ดตัวอย่าง) " +
+  "   - 3. เงื่อนไขทางเลือก (Conditional Statements - if/else) (พร้อมกล่องโค้ดตัวอย่าง) " +
+  "   - 4. การวนลูป (Loops - for/while) (พร้อมกล่องโค้ดตัวอย่าง) " +
+  "   - 5. ฟังก์ชัน (Functions) (พร้อมกล่องโค้ดตัวอย่าง) " +
+  "2. โค้ดทุกกล่องต้องถูกต้องตามไวยากรณ์ภาษา 100% (เช่น C++ ใช้ int/double/string/bool/auto ห้ามใช้ var) " +
+  "3. ทุกหัวข้อต้องมีกล่องโค้ด ```lang ... ``` แยกเฉพาะ และมี Comment อธิบายในโค้ดอย่างละเอียด " +
+  "4. สำหรับโจทย์คณิตศาสตร์/วิทยาศาสตร์ ใช้ LaTeX $...$ และ $$...$$ แสดงสมการแบบละเอียดทุกขั้นตอน " +
+  "5. หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย";
+
 
 export const MATH_SYSTEM_PROMPT =
   "คุณคือครูสอนพิเศษคณิตศาสตร์และวิทยาศาสตร์ผู้เชี่ยวชาญระดับสูง สร้างโดยทีม JaiKraJok " +
@@ -109,13 +113,20 @@ export async function callTextLLM(
 ): Promise<string> {
   // If there's history, we format it into the prompt since Pathumma TextQA doesn't take a messages array natively
   let fullInstruction = instruction;
+
+  // Enhance tutorial requests to guarantee all 5 topics are covered in 1 response
+  if (/(สอน|syntax|พื้นฐาน|basic|เรียน|เขียนโค้ด|เริ่มต้น)/i.test(instruction) && /(c\+\+|python|java|javascript|js|html|css|c#|golang|rust|php|sql|โปรแกรม|โค้ด)/i.test(instruction)) {
+    fullInstruction += "\n\n[ข้อบังคับสำคัญ: กรุณาสอนบทเรียนนี้ฉบับสมบูรณ์ ให้ครอบคลุมทั้ง 5 หัวข้อหลักในคำตอบเดียว: 1. โครงสร้างหลัก & Hello World, 2. ตัวแปรและชนิดข้อมูล (Variables & Data Types), 3. การรับค่าและการแสดงผล (Input & Output), 4. เงื่อนไขทางเลือกและการวนลูป (Conditionals & Loops), 5. ฟังก์ชัน (Functions) โดยมีกล่องโค้ด ```...``` ตัวอย่างและอธิบายทีละหัวข้ออย่างสมบูรณ์]";
+  }
+
   if (history && history.length > 0) {
     const historyText = history
       .slice(-6) // Keep last 6 messages for context to avoid token overflow
       .map((m) => `${m.role === "user" ? "ผู้ใช้" : "JaiKraJok"}: ${m.text}`)
       .join("\n\n");
-    fullInstruction = `ประวัติการสนทนา:\n${historyText}\n\nข้อความปัจจุบันจากผู้ใช้:\n${instruction}`;
+    fullInstruction = `ประวัติการสนทนา:\n${historyText}\n\nข้อความปัจจุบันจากผู้ใช้:\n${fullInstruction}`;
   }
+
 
   // Use URLSearchParams → sends as application/x-www-form-urlencoded
 
