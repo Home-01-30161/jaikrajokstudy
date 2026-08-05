@@ -2,7 +2,8 @@
  * MathText.tsx — Robust Rich Text, Code & KaTeX Math Renderer for JaiKraJok
  * Renders:
  *   - Code blocks ```lang\ncode``` (with dark theme, syntax colors & Copy button)
- *   - LaTeX math ($...$ and $$...$$ via KaTeX)
+ *   - LaTeX Display Math ($...$, \[...\], \begin{aligned}...\end{aligned}) via KaTeX
+ *   - LaTeX Inline Math ($...$, \(...\)) via KaTeX
  *   - Markdown headers (#, ##, ###), bold (**text**), lists (1., -), blockquotes (>), inline code (`code`), tables
  */
 import { useState } from "react";
@@ -38,25 +39,25 @@ export default function MathText({ text, className, style }: Props) {
   );
 }
 
-// ─── Main Markdown Parser ──────────────────────────────────────────────────────
+// ─── Single-Pass Sequential Block Tokenizer ────────────────────────────────────
 
 function parseFullMarkdown(raw: string): React.ReactNode[] {
-  // Normalize line endings and LaTeX delimiters:
+  let text = raw.replace(/\r\n/g, "\n");
+
+  // Normalize delimiters for consistent handling:
   //   \[ ... \]  =>  $$ ... $$
   //   \( ... \)  =>  $ ... $
-  let text = raw.replace(/\r\n/g, "\n");
   text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => `\n$$\n${latex.trim()}\n$$\n`);
   text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => `$${latex.trim()}$`);
 
-  // Auto-wrap any bare \begin{env}...\end{env} in $$...$$ for block rendering
-  text = text.replace(/\\begin\{([a-zA-Z0-9*]+)\}([\s\S]*?)\\end\{\1\}/gi, (match, env, inner) => {
-    return `\n$$\n\\begin{${env}}${inner}\\end{${env}}\n$$\n`;
-  });
-
   const nodes: React.ReactNode[] = [];
 
-  // Master Block Regex: extracts Code Blocks ```...``` AND Block Math $$...$$
-  const MASTER_BLOCK_REGEX = /(```[a-zA-Z0-9_+#-]*[ \t]*\n?[\s\S]*?(?:```|$))|(\$\$[\s\S]*?\$\$)/g;
+  // Master Block Matcher:
+  //   Group 1: Code blocks ```lang\ncode...```
+  //   Group 2: Display Math $$...$$
+  //   Group 3: Bare LaTeX Environments \begin{env}...\end{env}
+  const MASTER_BLOCK_REGEX = /(```[a-zA-Z0-9_+#-]*[ \t]*\n?[\s\S]*?(?:```|$))|(\$\$[\s\S]*?\$\$)|(\\begin\{[a-zA-Z0-9*]+\}[\s\S]*?\\end\{[a-zA-Z0-9*]+\})/gi;
+
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -65,11 +66,13 @@ function parseFullMarkdown(raw: string): React.ReactNode[] {
       MASTER_BLOCK_REGEX.lastIndex++;
     }
 
+    // 1. Text BEFORE this block -> parse line-by-line Markdown
     const preText = text.substring(lastIndex, match.index);
     if (preText) {
       nodes.push(...parseLinesAndBlocks(preText, `pre-${lastIndex}`));
     }
 
+    // 2. The block itself:
     if (match[1]) {
       // Fenced Code Block
       const codeMatch = match[1].match(/^```([a-zA-Z0-9_+#-]*)[ \t]*\n?([\s\S]*?)(?:```|$)/);
@@ -77,8 +80,14 @@ function parseFullMarkdown(raw: string): React.ReactNode[] {
       const codeContent = codeMatch ? codeMatch[2].trim() : match[1].trim();
       nodes.push(<CodeBlock key={`code-${match.index}`} lang={lang} code={codeContent} />);
     } else if (match[2]) {
-      // Block Math $$...$$
+      // Display Math $$...$$
       const latex = match[2].slice(2, -2).trim();
+      if (latex) {
+        nodes.push(<BlockMath key={`math-${match.index}`} latex={latex} />);
+      }
+    } else if (match[3]) {
+      // Bare LaTeX Environment \begin{aligned}...\end{aligned}
+      const latex = match[3].trim();
       if (latex) {
         nodes.push(<BlockMath key={`math-${match.index}`} latex={latex} />);
       }
@@ -88,6 +97,7 @@ function parseFullMarkdown(raw: string): React.ReactNode[] {
     if (match.index + match[0].length === text.length) break;
   }
 
+  // 3. Text AFTER the last block -> parse line-by-line Markdown
   const remainingText = text.substring(lastIndex);
   if (remainingText && lastIndex < text.length) {
     nodes.push(...parseLinesAndBlocks(remainingText, `post-${lastIndex}`));
@@ -131,14 +141,6 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
     if (/^[-*]{3,}\s*$/.test(line.trim())) {
       flushTable();
       nodes.push(<hr key={key} style={{ border: "none", borderTop: "1px solid #E2D9C2", margin: "0.8em 0" }} />);
-      return;
-    }
-
-    // Block math: $$...$$ or \[...\]
-    const blockMathMatch = line.match(/^\s*(?:\$\$|\\\[)([\s\S]*?)(?:\$\$|\\\])\s*$/);
-    if (blockMathMatch) {
-      flushTable();
-      nodes.push(<BlockMath key={key} latex={blockMathMatch[1].trim()} />);
       return;
     }
 
@@ -262,36 +264,30 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
 // ─── Inline Token Parser (Math, Code, Bold, Links) ─────────────────────────────
 
 function renderInline(text: string): React.ReactNode[] {
-  // Matches: block math $$...$$, bare \begin{env}...\end{env}, inline math $...$, inline code `...`, bold **...**, links [text](url)
-  const TOKEN_REGEX = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\begin\{(?:aligned|align|equation|matrix|pmatrix|bmatrix|vmatrix|cases|array|gather|alignat)\}[\s\S]*?\\end\{(?:aligned|align|equation|matrix|pmatrix|bmatrix|vmatrix|cases|array|gather|alignat)\}|\$[^$\n]+?\$|\\\([\s\S]*?\\\)|`[^`\n]+?`|\*\*[^*]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
+  // Tokens:
+  // 1. Inline Math: $...$
+  // 2. Inline Code: `...`
+  // 3. Bold: **...**
+  // 4. Links: [text](url)
+  const TOKEN_REGEX = /(\$[^$\n]+?\$|`[^`\n]+?`|\*\*[^*]+?\*\*|\[[^\]]+\]\([^)]+\))/g;
 
   const parts = text.split(TOKEN_REGEX);
   return parts.map((part, i) => {
     if (!part) return null;
 
-    // Block math $$...$$ or \[...\]
-    if ((part.startsWith("$$") && part.endsWith("$$")) || (part.startsWith("\\[") && part.endsWith("\\]"))) {
-      const latex = part.startsWith("$$") ? part.slice(2, -2) : part.slice(2, -2);
-      return <BlockMath key={i} latex={latex.trim()} />;
+    // Inline math: $...$
+    if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
+      return <InlineMath key={i} latex={part.slice(1, -1).trim()} />;
     }
-    // Bare \begin{...}...\end{...}
-    if (part.startsWith("\\begin{") && part.includes("\\end{")) {
-      return <BlockMath key={i} latex={part.trim()} />;
-    }
-    // Inline math $...$ or \(...\)
-    if ((part.startsWith("$") && part.endsWith("$") && part.length > 2) || (part.startsWith("\\(") && part.endsWith("\\)"))) {
-      const latex = part.startsWith("$") ? part.slice(1, -1) : part.slice(2, -2);
-      return <InlineMath key={i} latex={latex.trim()} />;
-    }
-    // Inline code `...`
+    // Inline code: `...`
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
       return <InlineCode key={i} code={part.slice(1, -1)} />;
     }
-    // Bold **...**
+    // Bold: **...**
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i} style={{ fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
     }
-    // Links [text](url)
+    // Links: [text](url)
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
       return (
@@ -357,7 +353,7 @@ function Table({ rows, align }: { rows: string[]; align: ("left" | "center" | "r
   );
 }
 
-// ─── Code Block Component with Dark Theme & Copy Button ────────────────────────
+// ─── Code Block Component with Dark Theme & Copy Button ──────────────────────────
 
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   const [copied, setCopied] = useState(false);
@@ -446,7 +442,7 @@ function highlightSyntax(code: string, lang: string): React.ReactNode[] {
     java: ["public", "private", "protected", "class", "interface", "extends", "implements", "static", "final", "void", "int", "double", "boolean", "String", "if", "else", "for", "while", "return", "new", "this", "true", "false", "null"],
     go: ["func", "package", "import", "var", "const", "if", "else", "for", "range", "return", "struct", "interface", "true", "false", "nil", "defer"],
     rust: ["fn", "let", "mut", "const", "struct", "enum", "impl", "trait", "pub", "use", "mod", "if", "else", "for", "while", "return", "match", "true", "false"],
-    sql: ["SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "JOIN", "INNER", "LEFT", "RIGHT", "GROUP", "BY", "ORDER", "HAVING", "LIMIT"],
+    sql: ["SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "JOIN", "INNER", "LEFT", "RIGHT", "GROUP", "BY", "ORDER", "HAVING", "LIMIT", "OFFSET", "CREATE", "TABLE", "INDEX", "PRIMARY", "KEY", "FOREIGN", "REFERENCES"],
   };
 
   const keywords = keywordsByLang[lang.toLowerCase()] || [];
@@ -472,7 +468,7 @@ function highlightSyntax(code: string, lang: string): React.ReactNode[] {
 }
 
 function colorLineKeywords(line: string, keywordSet: Set<string>): React.ReactNode[] {
-  const TOKEN_REGEX = /(\b\w+\b|"[^"]*"|'[^']*'|\/\/.*$|\b\d+\.?\d*\b)/g;
+  const TOKEN_REGEX = /(\b\w+\b|"[^"]*"|'[^']*'|\/\/.*$|\/\*[\s\S]*?\*\/|\b\d+\.?\d*\b)/g;
 
   const parts: React.ReactNode[] = [];
   let lastIdx = 0;
@@ -484,7 +480,7 @@ function colorLineKeywords(line: string, keywordSet: Set<string>): React.ReactNo
     }
 
     const matchedStr = match[0];
-    if (matchedStr.startsWith("//")) {
+    if (matchedStr.startsWith("//") || matchedStr.startsWith("/*")) {
       parts.push(<span key={match.index} style={{ color: "#6C7086", fontStyle: "italic" }}>{matchedStr}</span>);
     } else if (matchedStr.startsWith('"') || matchedStr.startsWith("'")) {
       parts.push(<span key={match.index} style={{ color: "#A6E3A1" }}>{matchedStr}</span>);
@@ -506,7 +502,7 @@ function colorLineKeywords(line: string, keywordSet: Set<string>): React.ReactNo
   return parts;
 }
 
-// ─── Inline Code Badge ────────────────────────────────────────────────────────
+// ─── Inline Code Badge ──────────────────────────────────────────────────────────
 
 function InlineCode({ code }: { code: string }) {
   return (
@@ -544,9 +540,9 @@ function renderKatex(latex: string, displayMode: boolean): string {
 
 function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/&/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">");
 }
 
 function InlineMath({ latex }: { latex: string }) {
