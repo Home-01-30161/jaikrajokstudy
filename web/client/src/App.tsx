@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import {
   api,
   type ExportResult,
@@ -36,6 +38,79 @@ const IMG = {
     redstar: "/collage/redstar.png",
     star: "/collage/star.png",
 };
+
+/* ============ KATEX RENDERER ============ */
+function renderMessageWithLatex(text: string): string {
+  // Match LaTeX patterns: $...$ for inline, $$...$$ for display
+  const parts: string[] = [];
+  let lastIndex = 0;
+
+  // First handle display math ($$...$$)
+  const displayMathRegex = /\$\$([^\$]+)\$\$/g;
+  let match;
+  let tempText = text;
+
+  while ((match = displayMathRegex.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      parts.push(escapeHtml(text.slice(lastIndex, match.index)));
+    }
+
+    // Render the LaTeX
+    try {
+      const latex = match[1].trim();
+      const rendered = katex.renderToString(latex, {
+        displayMode: true,
+        throwOnError: false,
+      });
+      parts.push(rendered);
+    } catch (e) {
+      parts.push(`<span style="color: #EF4444;">[LaTeX Error: ${match[1]}]</span>`);
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    let remaining = text.slice(lastIndex);
+
+    // Now handle inline math ($...$) in the remaining text
+    const inlineMathRegex = /\$([^\$]+)\$/g;
+    let inlineLastIndex = 0;
+
+    while ((match = inlineMathRegex.exec(remaining)) !== null) {
+      if (match.index > inlineLastIndex) {
+        parts.push(escapeHtml(remaining.slice(inlineLastIndex, match.index)));
+      }
+
+      try {
+        const latex = match[1].trim();
+        const rendered = katex.renderToString(latex, {
+          displayMode: false,
+          throwOnError: false,
+        });
+        parts.push(rendered);
+      } catch (e) {
+        parts.push(`<span style="color: #EF4444;">[LaTeX Error: ${match[1]}]</span>`);
+      }
+
+      inlineLastIndex = match.index + match[0].length;
+    }
+
+    if (inlineLastIndex < remaining.length) {
+      parts.push(escapeHtml(remaining.slice(inlineLastIndex)));
+    }
+  }
+
+  return parts.join('');
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 /* ============ DESIGN TOKENS ============ */
 const T = {
@@ -2123,7 +2198,11 @@ function ChatView({
                     fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
                   }}
                 >
-                  {msg.text}
+                  {msg.role === "bot" ? (
+                    <div dangerouslySetInnerHTML={{ __html: renderMessageWithLatex(msg.text) }} />
+                  ) : (
+                    msg.text
+                  )}
                   {msg.role === "bot" && (
                     <button onClick={() => speakText(msg.text)} className="ml-2 text-xs opacity-50 hover:opacity-100 transition-opacity">
                       <SpeakerIcon size={14} />
