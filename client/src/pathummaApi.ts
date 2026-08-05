@@ -240,15 +240,20 @@ export async function callTextLLM(
       "จัดรูปแบบด้วย $$...$$ สำหรับทุกสูตรสมการ และ **Bold** เน้นคำตอบสุดท้าย]";
   }
 
-  // Detect Programming Tutorial → Enforce 5-topic comprehensive lesson
-  const isLearningOrTech = /(สอน|syntax|พื้นฐาน|basic|เรียน|เขียน|code|โปรแกรม|คืออะไร|อธิบาย|วิธี|guide|tutorial|overview|c\b|cpp|c\+\+|python|java|javascript|typescript|js|ts|html|css|c#|golang|go|rust|php|sql|ruby|swift|kotlin|dart|flutter)/i.test(instruction);
-  if (isLearningOrTech && !isMathOrChoice) {
-    extraInstruction = "\n\n[บังคับ: หากเป็นคำขอสอนโปรแกรมมิ่ง ให้เขียนบทเรียนฉบับสมบูรณ์ 5 หัวข้อในคำตอบเดียวเสมอ: " +
-      "1. โครงสร้างหลัก & Hello World, 2. Variables & Data Types, 3. Input & Output, 4. Conditionals & Loops, 5. Functions " +
-      "โดยมีกล่องโค้ด ```lang...``` และอธิบายทีละหัวข้ออย่างละเอียด " +
-      "**จัดรูปแบบบังคับ**: ใช้ ## สำหรับหัวข้อหลัก ### สำหรับหัวข้อย่อย | ตาราง markdown สำหรับสรุป syntax | " +
-      "Blockquote `> **เคล็ดลับ**` สำหรับ best practices | Task list `- [ ]` สำหรับแบบฝึกหัด | " +
-      "Horizontal rule `---` แยกแต่ละหัวข้อ | Mermaid diagram ถ้ามี flow control]";
+  // Detect Problem Solving Request (e.g. solve problem, URL, tasks, competitive programming)
+  const isProblemSolving = /(solve|แก้โจทย์|คำตอบ|ส่งผ่าน|pass|tasks\/|problem\/|contest\/|toi\d|codecube|leetcode|hackerrank)/i.test(instruction);
+  
+  // Detect Programming Tutorial (ONLY when explicitly asked to teach/tutorial, NOT when solving a problem)
+  const isExplicitTutorial = /(สอน|tutorial|คู่มือ|เรียนรู้|overview|เรียนเขียน)/i.test(instruction);
+
+  if (isProblemSolving) {
+    extraInstruction = "\n\n[ข้อบังคับในการตอบโจทย์โปรแกรมมิ่ง]: " +
+      "1. ตอบตรงจุดทันทีด้วยโค้ดภาษาที่ระบุ (เช่น C++) " +
+      "2. อธิบายแนวคิด/อัลกอริทึม (Algorithm & Complexity) อย่างกระชับ " +
+      "3. แสดงกล่องโค้ด ```cpp ... ``` ฉบับสมบูรณ์ที่พร้อมนำไปคอมไพล์และรันส่งผ่าน 100% " +
+      "4. ❌ ห้ามเขียนบทเรียน Hello World หรือบทเรียนพื้นฐานเด็ดขาด ให้แก้โจทย์ที่ระบุทันที";
+  } else if (isExplicitTutorial && !isMathOrChoice) {
+    extraInstruction = "\n\n[คำขอสอนโปรแกรมมิ่ง: เขียนบทเรียน 5 หัวข้อ: 1. โครงสร้างหลัก & Hello World, 2. Variables & Data Types, 3. Input & Output, 4. Conditionals & Loops, 5. Functions โดยมีกล่องโค้ด ```lang...```]";
   }
 
   // General formatting boost for all responses — encourage rich markdown
@@ -417,7 +422,12 @@ export async function callTextLLMWithSearch(
   let searchCtx = "";
   let sources: { title: string; url: string }[] = [];
   try {
-    const data = await searchWeb(instruction, 5, "advanced");
+    let searchQuery = instruction;
+    const taskMatch = instruction.match(/(tasks\/|problem\/)([a-zA-Z0-9_-]+)/i);
+    if (taskMatch) {
+      searchQuery = `${taskMatch[2]} programming.in.th problem solution`;
+    }
+    const data = await searchWeb(searchQuery, 5, "advanced");
     sources = (data.results || []).map(r => ({ title: r.title || "เว็บอ้างอิง", url: r.url }));
 
     // Build context block for the prompt with explicit URLs
