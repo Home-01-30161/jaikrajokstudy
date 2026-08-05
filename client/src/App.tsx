@@ -957,10 +957,10 @@ function AppShell() {
     noteMultimodal("เซลฟี่");
     setIsAnalyzing(true);
     try {
-      const { answer, llmReply } = await analyzeSelfie(file);
-      // Classify emotion from the Vision LLM's description
-      const emotionKey = classifyMoodFromText(answer) || "neutral";
-      const info = EMO[emotionKey] || EMO.neutral;
+      const { answer, llmReply, emotionKey: returnedKey } = await analyzeSelfie(file);
+      // Classify emotion from returned key or robust fallback
+      const emotionKey = returnedKey || classifyMoodFromText(answer) || "positive";
+      const info = EMO[emotionKey] || EMO.positive;
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: answer, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note: answer, color: info.color, bg: info.bg, text: info.text } }]);
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() }]);
       pushTrend(emotionKey, "เซลฟี่");

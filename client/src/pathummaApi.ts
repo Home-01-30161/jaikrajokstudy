@@ -552,10 +552,11 @@ export async function callVisionLLM(
   return text;
 }
 
-export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult> {
+export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { emotionKey?: string }> {
   const visionQuery =
     "ดูใบหน้าของคนในภาพนี้แล้วบรรยายอารมณ์และความรู้สึกที่สังเกตเห็นเป็นภาษาไทย " +
-    "สังเกตจากแววตา สีหน้า และท่าทาง ตอบสั้น ๆ 1-2 ประโยค";
+    "สังเกตจากแววตา รอยยิ้ม สีหน้า และท่าทาง ตอบสั้น ๆ 1-2 ประโยค " +
+    "แล้วลงท้ายด้วย: [อารมณ์: <คำเดียว เช่น ยิ้มแย้ม / สดใส / เศร้า / เครียด / เหนื่อย / สงบ>]";
 
   let answer: string;
   try {
@@ -563,6 +564,14 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult> {
   } catch (e) {
     console.warn("Vision LLM selfie failed:", e);
     answer = "ไม่สามารถวิเคราะห์ภาพใบหน้าได้ในขณะนี้";
+  }
+
+  // Derive emotionKey: use LLM sentiment first, fall back to keyword classifier
+  let emotionKey = "neutral";
+  try {
+    emotionKey = await analyzeSentiment(answer);
+  } catch {
+    emotionKey = classifyMoodFromText(answer);
   }
 
   let llmReply: string;
@@ -574,7 +583,7 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult> {
     llmReply = answer || "กระจกเห็นรูปคุณแล้วค่ะ วันนี้รู้สึกเป็นยังไงบ้าง?";
   }
 
-  return { answer, llmReply };
+  return { answer, llmReply, emotionKey };
 }
 
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
@@ -750,11 +759,11 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const MOOD_CUES: [string, string[]][] = [
-  ["stressed", ["เครียด", "กดดัน", "กังวล", "วิตก", "ประหม่า", "รับไม่ไหว", "stress", "สอบ", "ไม่ทัน", "หนักมาก"]],
+  ["positive", ["ยิ้ม", "สดใส", "ร่าเริง", "มีความสุข", "อารมณ์ดี", "ดีใจ", "สนุก", "เยี่ยม", "ภูมิใจ", "ชอบมาก", "happy", "สุขใจ", "สำเร็จ", "เบิกบาน", "เป็นมิตร", "หัวเราะ"]],
+  ["calm",     ["ผ่อนคลาย", "สบายใจ", "สงบ", "โล่งใจ", "ปกติดี", "calm", "โอเค"]],
+  ["stressed", ["เครียด", "กดดัน", "กังวล", "วิตก", "ประหม่า", "รับไม่ไหว", "stress", "สอบไม่ทัน", "หนักมาก"]],
   ["tired",    ["เหนื่อย", "ง่วง", "อ่อนเพลีย", "หมดแรง", "ไม่มีแรง", "เพลีย", "tired", "นอนไม่หลับ", "ล้า"]],
-  ["sad",      ["เศร้า", "ร้องไห้", "เสียใจ", "ท้อ", "หมดกำลังใจ", "เหงา", "โดดเดี่ยว", "ผิดหวัง", "sad", "แย่"]],
-  ["positive", ["ดีใจ", "สนุก", "เยี่ยม", "มีความสุข", "ภูมิใจ", "ชอบมาก", "happy", "สุขใจ", "สำเร็จ"]],
-  ["calm",     ["สงบ", "ผ่อนคลาย", "สบายใจ", "โล่งใจ", "ปกติดี", "calm", "โอเค"]],
+  ["sad",      ["เศร้า", "ร้องไห้", "เสียใจ", "ท้อแท้", "ท้อใจ", "สิ้นหวัง", "หมดกำลังใจ", "เหงา", "โดดเดี่ยว", "ผิดหวัง", "sad"]],
 ];
 
 export function classifyMoodFromText(text: string): string {
