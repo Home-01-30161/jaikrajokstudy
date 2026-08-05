@@ -121,19 +121,19 @@ function stripThink(text: string): string {
 
   // 2. Unclosed <think> tag at start
   if (text.trimStart().startsWith("<think>")) {
-    const cleaned = text.replace(/^<think>[\s\S]*?(?=[\u0E00-\u0E7F]|#{1,3}\s|```)/m, "").trim();
+    const cleaned = text.replace(/^<think>[\s\S]*?(?=[\u0E00-\u0E7F]|#{1,3}\s*(เฉลย|วิธี|โค้ด|วิธีคิด|คำตอบ|Solution|Algorithm|C\+\+)|```)/m, "").trim();
     if (cleaned && cleaned.length > 20) return cleaned;
     return text.replace(/<think>/gi, "").trim();
   }
 
-  // 3. Leaked / untagged reasoning — detect English chain-of-thought preambles
-  const leakedReasoningRE = /^(Wait[,.]|Okay[,.]|Alright[,.]|Let me|The user|First[,.]|So[,.]|I need|I'll|I will|I should|Hmm[,.]|Let's think|The question|Looking at|Looking for|To solve|To answer|Because when|In this problem)/i;
-  if (leakedReasoningRE.test(text.trimStart())) {
-    // Search for the first Markdown header (##), Thai text, or Code Block (```)
-    const match = text.match(/(^#{1,3}\s[\s\S]*|^```[\s\S]*|[\u0E00-\u0E7F][\s\S]*)/m);
-    if (match && match[0]) {
-      const idx = text.indexOf(match[0]);
-      if (idx !== -1) {
+  // 3. Leaked / untagged reasoning cleanup:
+  // Find first occurrence of Thai text, explicit answer markdown header, or code block
+  const answerMatch = text.match(/([\u0E00-\u0E7F][\s\S]*|^#{1,3}\s*(เฉลย|วิธี|โค้ด|วิธีคิด|คำตอบ|Solution|Algorithm|C\+\+)[\s\S]*|^```(?:cpp|c\+\+|c|code|json|python)?[\s\S]*)/m);
+  if (answerMatch && answerMatch[0]) {
+    const idx = text.indexOf(answerMatch[0]);
+    if (idx > 0) {
+      const preamble = text.slice(0, idx).trim();
+      if (/^(Also|Wait|Okay|Alright|Let|The|First|So|I|Hmm|Looking|To|Because|In|#\s*Wait|#\s*So|#\s*Alternatively)/i.test(preamble)) {
         const lineStart = text.lastIndexOf("\n", idx) + 1;
         const result = text.slice(lineStart).trim();
         if (result.length > 20) return result;
@@ -398,6 +398,14 @@ export const SEARCH_SYSTEM_PROMPT =
   "5. อ้างอิงส่วนที่นำมาตอบด้วยเลข [1], [2], ... ให้ตรงกับแหล่งข้อมูลจริง " +
   "6. หากข้อมูลใดไม่มีระบุในผลการค้นหา ให้ระบุเพียงว่า 'ไม่มีระบุในผลการค้นหาที่พบ'";
 
+export const CODING_SOLVER_PROMPT =
+  "คุณคือ กระจก (JaiKraJok) ผู้เชี่ยวชาญการแก้โจทย์โปรแกรมมิ่งและการแข่งขันอัลกอริทึม (Competitive Programming) " +
+  "🎯 กฎสำคัญในการตอบโจทย์โปรแกรมมิ่ง:\n" +
+  "1. ตอบตรงประเด็นด้วยโค้ดฉบับเต็มภาษา C++ (หรือภาษาที่ขอ) พร้อมใช้งาน 100%\n" +
+  "2. อธิบายแนวคิดหลัก (Algorithm & Time Complexity) อย่างกระชับชัดเจน\n" +
+  "3. ครอบคลุมการจัดการ I/O (cin/cout), Data Types และ Corner Cases ทั้งหมด\n" +
+  "4. ❌ ห้ามแสดงความคิดส่วนตัวแบบร่างภาษาอังกฤษ (Reasoning/Chain-of-thought) ออกมา ให้แสดงเฉพาะผลลัพธ์สุดท้ายที่เป็นภาษาไทยและกล่องโค้ด ```cpp ... ``` เท่านั้น";
+
 /**
  * Smart wrapper around callTextLLM:
  * - Detects if the query needs web search (using NEEDS_SEARCH_RE)
@@ -443,10 +451,13 @@ export async function callTextLLMWithSearch(
     console.warn("[Tavily] Search failed, answering without search context:", err);
   }
 
-  // Use SEARCH_SYSTEM_PROMPT and ultra-low temperature (0.01) when web search is active
+  const isProblemSolving = /(solve|แก้โจทย์|คำตอบ|ส่งผ่าน|pass|tasks\/|problem\/|contest\/|toi\d|codecube|leetcode|hackerrank)/i.test(instruction);
+  const activeSystemPrompt = isProblemSolving ? CODING_SOLVER_PROMPT : SEARCH_SYSTEM_PROMPT;
+
+  // Use activeSystemPrompt and ultra-low temperature (0.01) when web search is active
   const rawReply = await callTextLLM(
     instruction + searchCtx,
-    SEARCH_SYSTEM_PROMPT,
+    activeSystemPrompt,
     maxTokens,
     0.01,
     history
