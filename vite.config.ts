@@ -283,6 +283,12 @@ export default defineConfig({
         secure: true,
         rewrite: (path: string) => path.replace(/^\/api\/pathumma/, ''),
       },
+      '/api/thaillm': {
+        target: 'http://thaillm.or.th',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path: string) => path.replace(/^\/api\/thaillm/, ''),
+      },
     },
     allowedHosts: [
       ".manuspre.computer",

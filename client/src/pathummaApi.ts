@@ -1,35 +1,41 @@
 /**
- * pathummaApi.ts — JaiKraJok Pathumma LLM client (v4)
+ * pathummaApi.ts — JaiKraJok ThaiLLM client (v5)
  * =====================================================
- * OFFICIAL Pathumma LLM endpoints from the aift Python library source:
- *   textqa.py  → POST https://api.aiforthai.in.th/textqa/completion
- *   vqa.py     → POST https://api.aiforthai.in.th/vqa/inference/
- *   audioqa.py → POST https://api.aiforthai.in.th/audioqa/inference/
+ * Uses the NEW ThaiLLM API (OpenAI-compatible):
+ *   Model:    pathumma-thaillm-qwen3-8b-think-3.0.0
+ *   Endpoint: POST http://thaillm.or.th/api/v1/chat/completions
+ *   Auth:     Authorization: Bearer <VITE_THAILLM_API_KEY>
  *
- * All calls route through the Vite proxy /api/pathumma → https://api.aiforthai.in.th
- *
- * IMPORTANT content-type per endpoint:
- *   textqa  → application/x-www-form-urlencoded  (data={...}, no files)
- *   vqa     → multipart/form-data                (files=[('file',...)], data={'query':...})
- *   audioqa → multipart/form-data                (files=[('file',...)], data={'instruction':...})
+ * VQA + Audio: Still uses Pathumma API (aiforthai.in.th) since ThaiLLM is text-only.
  */
 
-const API_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
-const PROXY   = "/api/pathumma";
+// ─── Config ───────────────────────────────────────────────────────────────────
 
-/** Returns true when a real key has been configured in .env */
+const THAILLM_KEY: string = (import.meta.env.VITE_THAILLM_API_KEY as string) ?? "CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T";
+const THAILLM_PROXY  = "/api/thaillm";
+const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
+
+const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
+const PATHUMMA_PROXY = "/api/pathumma";
+
 export function hasApiKey(): boolean {
-  return API_KEY.trim().length > 0 && !API_KEY.includes("YOUR_API_KEY");
+  return THAILLM_KEY.trim().length > 0;
 }
 
-/** Auth header required on every Pathumma API call */
-function authHeaders(): Record<string, string> {
-  return { Apikey: API_KEY, "X-lib": "jaikrajok-web" };
+function thaiLLMHeaders(): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${THAILLM_KEY}`,
+  };
 }
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
+function pathummaHeaders(): Record<string, string> {
+  return { Apikey: PATHUMMA_KEY, "X-lib": "jaikrajok-web" };
+}
 
-/** Strip <think>…</think> reasoning blocks the model sometimes emits */
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Strip <think>...</think> reasoning blocks the Qwen3-Think model emits */
 function stripThink(text: string): string {
   text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
   const idx = text.toLowerCase().indexOf("<think>");
@@ -37,16 +43,12 @@ function stripThink(text: string): string {
   return text.trim();
 }
 
-/**
- * Extract the bot reply string from every shape the API can return.
- * Pathumma primary format: { content: "..." }
- */
-function extractText(raw: unknown): string {
+/** Extract text from Pathumma (VQA/Audio) raw response shapes */
+function extractPathummaText(raw: unknown): string {
   if (typeof raw === "string") return raw.trim();
   if (!raw || typeof raw !== "object") return "";
   const r = raw as Record<string, unknown>;
 
-  // OpenAI-compatible: choices[0].message.content
   if (Array.isArray(r.choices) && r.choices.length > 0) {
     const c = r.choices[0] as Record<string, unknown>;
     const msg = c.message as Record<string, unknown> | undefined;
@@ -54,29 +56,28 @@ function extractText(raw: unknown): string {
     if (c.text) return String(c.text).trim();
   }
 
-  // Pathumma direct fields — try 'content' first
   for (const k of ["content", "response", "output", "text", "result", "generated_text", "answer"]) {
     if (r[k] && typeof r[k] === "string") return (r[k] as string).trim();
   }
-
   return "";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 1. TEXT LLM — POST /textqa/completion
+// 1. TEXT LLM — ThaiLLM Chat Completions (OpenAI-compatible)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const JAIKRAJOK_SYSTEM_PROMPT =
   "คุณคือ กระจก (JaiKraJok) ผู้ช่วยสอนเรียนและเพื่อนคู่คิดอัจฉริยะ สร้างโดยทีม JaiKraJok " +
-  "ตอบเป็นภาษาไทยอย่างสุภาพ อบอุ่น ชัดเจน ครอบคลุม ละเอียดลึกซึ้งในระดับมืออาชีพ (สไตล์ Gemini / Claude) " +
+  "ตอบเป็นภาษาไทยอย่างสุภาพ อบอุ่น ชัดเจน ครอบคลุม ละเอียดลึกซึ้งในระดับมืออาชีพ " +
   "กฎสำคัญสำหรับการคำนวณทางคณิตศาสตร์และวิชาการ (Anti-Hallucination & Precise Math Rules): " +
-  "1. ห้ามเดาคำตอบ หรือเดาผลลัพธ์การทำงานของโค้ด/การรันโปรแกรมเด็ดขาด! ต้องแสดงขั้นตอนการคำนวณทางคณิตศาสตร์ที่ถูกต้องทีละบรรทัด " +
+  "1. ห้ามเดาคำตอบ หรือเดาผลลัพธ์เด็ดขาด! ต้องแสดงขั้นตอนการคำนวณทางคณิตศาสตร์ที่ถูกต้องทีละบรรทัด " +
   "2. สำหรับโจทย์เศษเหลือ/ทฤษฎีบทจำนวน/ทฤษฎีเศษเหลือ (Remainder / Modular Arithmetic / LCM / ค.ร.น.): " +
-  "   - เขียนนิยามสมมูล $n \\equiv r \\pmod m \\implies n - r$ เป็นพหุคูณของ ค.ร.น. " +
-  "   - คำนวณ ค.ร.น. ของตัวหารอย่างแม่นยำ (เช่น ค.ร.น. ของ 7, 10, 13 คือ $7 \\times 10 \\times 13 = 910$) " +
-  "   - คำนวณค่า $n = 910 + 1 = 911$ แล้วตรวจสอบเงื่อนไขช่วง (เช่น $1 < n < 1000$) " +
-  "   - ตรวจสอบกับตัวเลือก ก. ข. ค. ง. และสรุปคำตอบให้ตรงกับข้อที่คำนวณได้ถูกต้อง 100% " +
-  "3. สำหรับโจทย์การโปรแกรม/เขียนโค้ด (C, C++, Python, Java, JS, TS, Go, Rust ฯลฯ): อธิบาย 5 หัวข้อหลักพร้อมกล่องโค้ด ```lang ... ``` " +
+  "   - คำนวณ ค.ร.น. ของตัวหารอย่างแม่นยำ " +
+  "   - บวกเศษกลับเข้าไป ตรวจสอบเงื่อนไขช่วง " +
+  "   - ตรวจสอบกับตัวเลือก ก. ข. ค. ง. ให้ตรงกับข้อที่คำนวณได้ถูกต้อง 100% " +
+  "3. สำหรับโจทย์การโปรแกรม/เขียนโค้ด (C, C++, Python, Java, JS ฯลฯ): " +
+  "   - สอน 5 หัวข้อหลักพร้อมกล่องโค้ด ```lang ... ``` แยกแต่ละหัวข้อ " +
+  "   - โค้ดต้องถูกต้องตามไวยากรณ์ภาษา 100% " +
   "4. สำหรับโจทย์คณิตศาสตร์/วิทยาศาสตร์ ใช้ LaTeX $...$ และ $$...$$ แสดงสมการแบบละเอียดทุกขั้นตอน " +
   "5. หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย";
 
@@ -89,82 +90,97 @@ export const MATH_SYSTEM_PROMPT =
   "4. แสดงสูตรและสมการด้วย LaTeX: inline ใช้ $...$ และ block ใช้ $$...$$ " +
   "5. สรุปคำตอบสุดท้ายในกรอบ $$...$$ และให้กำลังใจผู้เรียนเสมอ";
 
+/** OpenAI-compatible message type */
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
 /**
- * TEXT LLM: Send a text prompt → get a Thai language reply
- * Uses URLSearchParams (application/x-www-form-urlencoded)
+ * TEXT LLM: Call ThaiLLM pathumma-thaillm-qwen3-8b-think-3.0.0
+ * Uses proper OpenAI messages[] array format — no need to inject history into prompt strings.
  */
 export async function callTextLLM(
   instruction: string,
   systemPrompt: string = JAIKRAJOK_SYSTEM_PROMPT,
-  maxTokens: number = 512,
+  maxTokens: number = 2048,
   temperature: number = 0.4,
   history?: { role: string; text: string }[]
 ): Promise<string> {
-  let fullInstruction = instruction;
   let effectiveTemperature = temperature;
+  let extraInstruction = "";
 
-  // Detect Math / Remainder / Multiple Choice queries → Force Low Temp (0.05) & Chain-of-Thought
+  // Detect Math / Remainder / Multiple Choice → Force Low Temp (0.05) + CoT
   const isMathOrChoice = /(เศษ|หาร|ผลบวก|ค\.ร\.น\.|ห\.ร\.ม\.|lcm|gcd|mod|ก\.|ข\.|ค\.|ง\.|โจทย์|จำนวนเต็ม|สมการ|\$\d|\d+\s*[\+\-\*\/%]\s*\d+|1\s*<\s*n\s*<\s*\d+)/i.test(instruction);
   if (isMathOrChoice) {
-    effectiveTemperature = 0.05; // Force deterministic precision for math
-    fullInstruction += "\n\n[ข้อบังคับสำหรับการคำนวณคณิตศาสตร์: คำนวณด้วยหลักคณิตศาสตร์จริงทีละขั้นตอน ห้ามเดาผลลัพธ์หรือเดาตัวเลขเด็ดขาด! หากเป็นโจทย์เศษเหลือ (Remainder) ให้คำนวณ ค.ร.น. แล้วบวกเศษ จากนั้นตรวจกับตัวเลือก ก, ข, ค, ง ให้ตรงกับผลคำนวณจริง 100%]";
+    effectiveTemperature = 0.05;
+    extraInstruction = "\n\n[บังคับ: คำนวณด้วยหลักคณิตศาสตร์จริงทีละขั้นตอน ห้ามเดาตัวเลขเด็ดขาด หากเป็นโจทย์เศษเหลือ ให้คำนวณ ค.ร.น. แล้วบวกเศษ แล้วตรวจกับตัวเลือก ก/ข/ค/ง ให้ตรงกับผลคำนวณจริง 100%]";
   }
 
-  // Enhance tutorial & learning requests to GUARANTEE comprehensive coverage in ALL chats
+  // Detect Programming Tutorial → Enforce 5-topic comprehensive lesson
   const isLearningOrTech = /(สอน|syntax|พื้นฐาน|basic|เรียน|เขียน|code|โปรแกรม|คืออะไร|อธิบาย|วิธี|guide|tutorial|overview|c\b|cpp|c\+\+|python|java|javascript|typescript|js|ts|html|css|c#|golang|go|rust|php|sql|ruby|swift|kotlin|dart|flutter)/i.test(instruction);
-  
   if (isLearningOrTech && !isMathOrChoice) {
-    fullInstruction += "\n\n[ข้อบังคับสำคัญสำหรับการตอบ: หากเป็นคำขอสอนโปรแกรมมิ่งหรือเรื่องเทคโนโลยี ให้เขียนบทเรียนฉบับสมบูรณ์ที่ครอบคลุมครบถ้วนทั้ง 5 หัวข้อหลักในคำตอบเดียวเสมอ: 1. โครงสร้างหลัก & Hello World, 2. ตัวแปรและชนิดข้อมูล (Variables & Data Types), 3. การรับส่งข้อมูล (Input & Output), 4. เงื่อนไขทางเลือกและการวนลูป (Conditionals & Loops), 5. ฟังก์ชัน (Functions) โดยต้องมีกล่องโค้ด ```...``` ตัวอย่างและอธิบายทีละหัวข้ออย่างละเอียดสมบูรณ์แบบ]";
+    extraInstruction = "\n\n[บังคับ: หากเป็นคำขอสอนโปรแกรมมิ่ง ให้เขียนบทเรียนฉบับสมบูรณ์ 5 หัวข้อในคำตอบเดียวเสมอ: 1. โครงสร้างหลัก & Hello World, 2. Variables & Data Types, 3. Input & Output, 4. Conditionals & Loops, 5. Functions โดยมีกล่องโค้ด ```lang...``` และอธิบายทีละหัวข้ออย่างละเอียด]";
   }
 
+  // Build messages array
+  const messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
+
+  // Add conversation history as proper assistant/user messages
   if (history && history.length > 0) {
-    const historyText = history
-      .slice(-6) // Keep last 6 messages for context to avoid token overflow
-      .map((m) => `${m.role === "user" ? "ผู้ใช้" : "JaiKraJok"}: ${m.text}`)
-      .join("\n\n");
-    fullInstruction = `ประวัติการสนทนา:\n${historyText}\n\nข้อความปัจจุบันจากผู้ใช้:\n${fullInstruction}`;
+    for (const m of history.slice(-10)) { // Keep last 10 messages
+      messages.push({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text,
+      });
+    }
   }
 
-  const body = new URLSearchParams({
-    instruction: fullInstruction,
-    system_prompt: systemPrompt,
-    max_new_tokens: String(maxTokens),
-    temperature: String(effectiveTemperature),
+  // Add current user message (with any extra instruction appended)
+  messages.push({ role: "user", content: instruction + extraInstruction });
+
+  const body = JSON.stringify({
+    model: THAILLM_MODEL,
+    messages,
+    max_tokens: maxTokens,
+    temperature: effectiveTemperature,
   });
 
-  const res = await fetch(`${PROXY}/textqa/completion`, {
+  const res = await fetch(`${THAILLM_PROXY}/api/v1/chat/completions`, {
     method: "POST",
-    headers: {
-      ...authHeaders(),
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: body.toString(),
+    headers: thaiLLMHeaders(),
+    body,
   });
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    console.error("[TextLLM] HTTP error", res.status, errBody.slice(0, 300));
-    throw new Error(`Text LLM ${res.status}: ${errBody.slice(0, 200)}`);
+    console.error("[ThaiLLM] HTTP error", res.status, errBody.slice(0, 300));
+    throw new Error(`ThaiLLM ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
-  const raw = await res.json().catch(() => ({}));
-  console.debug("[TextLLM] raw response:", raw);
-  const text = stripThink(extractText(raw));
-  if (!text) throw new Error("Text LLM returned empty response");
+  const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
+  console.debug("[ThaiLLM] raw response:", raw);
+
+  // OpenAI-compatible extraction
+  const choices = raw.choices as { message?: { content?: string } }[] | undefined;
+  const content = choices?.[0]?.message?.content ?? "";
+
+  const text = stripThink(content);
+  if (!text) throw new Error("ThaiLLM returned empty response");
   return text;
 }
 
 /**
- * SENTIMENT ANALYSIS via Text LLM
- * Classifies the dominant emotion in text. Falls back to keyword classifier.
+ * SENTIMENT ANALYSIS via ThaiLLM
  */
 export async function analyzeSentiment(text: string): Promise<string> {
   try {
-    const instruction =
-      `วิเคราะห์อารมณ์หลักจากข้อความต่อไปนี้: "${text}"\n` +
-      `ตอบด้วยคำเดียวเท่านั้น (ห้ามมีคำอื่น): stressed, sad, tired, positive, calm, หรือ neutral`;
-
-    const result = await callTextLLM(instruction, JAIKRAJOK_SYSTEM_PROMPT, 16, 0.1);
+    const result = await callTextLLM(
+      `วิเคราะห์อารมณ์หลักจากข้อความต่อไปนี้: "${text}"\nตอบด้วยคำเดียวเท่านั้น (ห้ามมีคำอื่น): stressed, sad, tired, positive, calm, หรือ neutral`,
+      JAIKRAJOK_SYSTEM_PROMPT,
+      16,
+      0.1
+    );
     const lower = result.toLowerCase().trim();
     for (const key of ["stressed", "sad", "tired", "positive", "calm", "neutral"]) {
       if (lower.includes(key)) return key;
@@ -176,12 +192,12 @@ export async function analyzeSentiment(text: string): Promise<string> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 2. VISION LLM — POST /vqa/inference/
+// 2. VISION LLM — Pathumma VQA (still uses aiforthai API — ThaiLLM is text-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface VisionResult {
-  answer: string;    // Vision model's direct description
-  llmReply: string;  // Empathetic/instructional follow-up from Text LLM
+  answer: string;
+  llmReply: string;
 }
 
 export async function callVisionLLM(
@@ -193,9 +209,9 @@ export async function callVisionLLM(
   form.append("query", query);
   form.append("file", imageBlob, filename);
 
-  const res = await fetch(`${PROXY}/vqa/inference/`, {
+  const res = await fetch(`${PATHUMMA_PROXY}/vqa/inference/`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: pathummaHeaders(),
     body: form,
   });
 
@@ -207,7 +223,7 @@ export async function callVisionLLM(
 
   const raw = await res.json().catch(() => ({}));
   console.debug("[VisionLLM] raw response:", raw);
-  const text = stripThink(extractText(raw));
+  const text = stripThink(extractPathummaText(raw));
   if (!text) throw new Error("Vision LLM returned empty response");
   return text;
 }
@@ -225,13 +241,11 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult> {
     answer = "ไม่สามารถวิเคราะห์ภาพใบหน้าได้ในขณะนี้";
   }
 
-  const instruction =
-    `จากการวิเคราะห์ภาพใบหน้า: "${answer}" ` +
-    `ตอบสนองด้วยความเห็นอกเห็นใจ สอบถามความรู้สึกของผู้ใช้ ไม่เกิน 2-3 ประโยค`;
-
   let llmReply: string;
   try {
-    llmReply = await callTextLLM(instruction);
+    llmReply = await callTextLLM(
+      `จากการวิเคราะห์ภาพใบหน้า: "${answer}" ตอบสนองด้วยความเห็นอกเห็นใจ สอบถามความรู้สึกของผู้ใช้ ไม่เกิน 2-3 ประโยค`
+    );
   } catch {
     llmReply = answer || "กระจกเห็นรูปคุณแล้วค่ะ วันนี้รู้สึกเป็นยังไงบ้าง?";
   }
@@ -253,14 +267,14 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
     answer = "ไม่สามารถอ่านโจทย์จากภาพได้ในขณะนี้";
   }
 
-  const instruction =
-    `โจทย์จากภาพ: "${answer}"\n\n` +
-    `อธิบายวิธีแก้โจทย์ทีละขั้นตอน ถ้าเป็นแคลคูลัสหรือคณิตศาสตร์ให้แสดงสูตรและการคำนวณชัดเจน ` +
-    `หากมีตัวเลือก ก. ข. ค. ง. ให้คำนวณจริงทีละขั้นตอน ห้ามเดาเด็ดขาด`;
-
   let llmReply: string;
   try {
-    llmReply = await callTextLLM(instruction, MATH_SYSTEM_PROMPT, 1024, 0.05);
+    llmReply = await callTextLLM(
+      `โจทย์จากภาพ: "${answer}"\n\nอธิบายวิธีแก้โจทย์ทีละขั้นตอน ถ้าเป็นแคลคูลัสหรือคณิตศาสตร์ให้แสดงสูตรและการคำนวณชัดเจน หากมีตัวเลือก ก. ข. ค. ง. ให้คำนวณจริงทีละขั้นตอน ห้ามเดาเด็ดขาด`,
+      MATH_SYSTEM_PROMPT,
+      1024,
+      0.05
+    );
   } catch {
     llmReply = answer || "กระจกเห็นการบ้านแล้วค่ะ ติดขั้นตอนไหนบอกกระจกได้เลยนะ";
   }
@@ -269,36 +283,30 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 3. AUDIO LLM — POST /audioqa/inference/
+// 3. AUDIO LLM — Pathumma AudioQA (ThaiLLM is text-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface AudioResult {
-  transcription: string;  // Speech-to-text result
-  llmReply: string;       // Empathetic/supportive reply
-  emotionKey: string;     // Mood key for UI
+  transcription: string;
+  llmReply: string;
+  emotionKey: string;
 }
 
 export async function callAudioLLM(audioBlob: Blob, instruction: string): Promise<string> {
   const form = new FormData();
 
   const mimeToExt: Record<string, string> = {
-    "audio/wav": "wav",
-    "audio/wave": "wav",
-    "audio/x-wav": "wav",
-    "audio/mp3": "mp3",
-    "audio/mpeg": "mp3",
-    "audio/ogg": "ogg",
-    "audio/mp4": "mp4",
-    "audio/webm": "webm",
-    "video/webm": "webm",
+    "audio/wav": "wav", "audio/wave": "wav", "audio/x-wav": "wav",
+    "audio/mp3": "mp3", "audio/mpeg": "mp3", "audio/ogg": "ogg",
+    "audio/mp4": "mp4", "audio/webm": "webm", "video/webm": "webm",
   };
   const ext = mimeToExt[audioBlob.type] ?? "webm";
   form.append("file", audioBlob, `recording.${ext}`);
   form.append("instruction", instruction);
 
-  const res = await fetch(`${PROXY}/audioqa/inference/`, {
+  const res = await fetch(`${PATHUMMA_PROXY}/audioqa/inference/`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: pathummaHeaders(),
     body: form,
   });
 
@@ -310,7 +318,7 @@ export async function callAudioLLM(audioBlob: Blob, instruction: string): Promis
 
   const raw = await res.json().catch(() => ({}));
   console.debug("[AudioLLM] raw response:", raw);
-  const text = stripThink(extractText(raw));
+  const text = stripThink(extractPathummaText(raw));
   if (!text) throw new Error("Audio LLM returned empty response");
   return text;
 }
@@ -341,10 +349,9 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
 
   let llmReply: string;
   try {
-    const replyInstruction =
-      `ผู้ใช้พูดว่า: "${textForAnalysis}"\n` +
-      `ตอบสนองด้วยความเข้าใจและเห็นอกเห็นใจ ถ้ามีคำถามช่วยตอบด้วย ตอบไม่เกิน 3 ประโยค`;
-    llmReply = await callTextLLM(replyInstruction);
+    llmReply = await callTextLLM(
+      `ผู้ใช้พูดว่า: "${textForAnalysis}"\nตอบสนองด้วยความเข้าใจและเห็นอกเห็นใจ ถ้ามีคำถามช่วยตอบด้วย ตอบไม่เกิน 3 ประโยค`
+    );
   } catch {
     llmReply = audioResponse.replace(/\[ข้อความ[:\s]+[^\]]+\]/i, "").trim()
       || "กระจกได้ยินคุณแล้วค่ะ วันนี้รู้สึกเป็นยังไงบ้าง?";
@@ -375,7 +382,7 @@ export function classifyMoodFromText(text: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Unified chat handler — Text LLM + parallel sentiment analysis
+// Unified chat handler — ThaiLLM + parallel sentiment analysis
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface ChatResult {
@@ -387,7 +394,6 @@ export async function chat(
   userMessage: string,
   history?: { role: string; text: string }[]
 ): Promise<ChatResult> {
-  // If math query, use lower temp automatically in callTextLLM
   const [reply, emotionKey] = await Promise.all([
     callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 2048, 0.4, history),
     analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
