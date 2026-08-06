@@ -98,6 +98,16 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("TOKENMIND_TTS_VOICE", "APP_TOKENMIND_TTS_VOICE"),
     )
 
+    # Typhoon OCR (SCB 10X) - replaces AI for Thai OCR to avoid "roi" errors
+    typhoon_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("TYPHOON_API_KEY", "APP_TYPHOON_API_KEY"),
+    )
+    typhoon_base_url: str = Field(
+        default="https://api.opentyphoon.ai/v1/ocr",
+        validation_alias=AliasChoices("TYPHOON_BASE_URL", "APP_TYPHOON_BASE_URL"),
+    )
+
     line_channel_access_token: str = Field(
         default="",
         validation_alias=AliasChoices(

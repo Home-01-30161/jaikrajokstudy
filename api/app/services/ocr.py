@@ -1,4 +1,9 @@
-﻿"""AI for Thai OCR / Handwritten Text Recognition client."""
+﻿"""OCR client for JaiKrajok homework photos.
+
+Fallback chain: Typhoon OCR (SCB 10X) → AI for Thai document OCR → AI for Thai VQA.
+
+Typhoon OCR is tried first to avoid AI for Thai /handwritten "roi" errors.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ import httpx
 from app.config import get_settings
 from app.services.base import ServiceResult
 from app.services.image_prep import prepare_for_ocr
+from app.services.typhoon_ocr import extract_text_typhoon
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -35,11 +41,9 @@ _OCR_MAX_BYTES = 900_000
 async def transcribe_image(image_bytes: bytes) -> ServiceResult:
     """Transcribe an image, trying each OCR backend until one returns text.
 
-    Order: T-OCR/DeepOCR (printed documents) -> /handwritten (per-character
-    glyph detector) -> Pathumma VQA (whole-image fallback).
+    Order: Typhoon OCR (SCB 10X) -> AI for Thai Document OCR -> AI for Thai VQA.
 
-    Applies automatic image preprocessing (shadow removal, CLAHE, denoising,
-    deskewing, adaptive binarization) before sending to OCR APIs.
+    Applies automatic image preprocessing before sending to OCR APIs.
     """
     errors: list[str] = []
 
@@ -50,18 +54,21 @@ async def transcribe_image(image_bytes: bytes) -> ServiceResult:
         logger.warning("Image preprocessing failed: %s", e)
         # Continue with original image if preprocessing fails
 
+    # Try Typhoon OCR first (avoids AI for Thai "roi" errors)
+    typhoon = await extract_text_typhoon(image_bytes)
+    if typhoon.ok and (typhoon.text or "").strip():
+        return typhoon
+    errors.append(f"typhoon: {typhoon.error}")
+    logger.warning("Typhoon OCR failed (%s); trying AI for Thai document OCR", typhoon.error)
+
+    # Fallback to AI for Thai document OCR
     doc = await extract_text_document(image_bytes)
     if doc.ok and (doc.text or "").strip():
         return doc
     errors.append(f"doc: {doc.error}")
-    logger.warning("Document OCR failed (%s); trying /handwritten", doc.error)
+    logger.warning("Document OCR failed (%s); falling back to VQA", doc.error)
 
-    hand = await extract_text(image_bytes)
-    if hand.ok and (hand.text or "").strip():
-        return hand
-    errors.append(f"handwritten: {hand.error}")
-    logger.warning("/handwritten failed (%s); falling back to VQA", hand.error)
-
+    # Final fallback to VQA
     vqa = await extract_text_vqa(image_bytes)
     if vqa.ok and (vqa.text or "").strip():
         return vqa
