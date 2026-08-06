@@ -2214,6 +2214,14 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
       return;
     }
     if (overrideText === undefined) setInputText("");
+
+    // Build history BEFORE setMessages (React state is async — messages still
+    // reflects the previous render here, which is exactly what we want as context)
+    const chatHistory = messages
+      .filter((m) => m.text && !m.imageUrl)
+      .slice(-10)
+      .map((m) => ({ role: m.role, text: m.text }));
+
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
     noteMultimodal(sourceLabel);
     setIsAnalyzing(true);
@@ -2221,12 +2229,6 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
 
     const startTime = Date.now();
     try {
-      // Build history from current messages (last 10, text only, skip images)
-      const chatHistory = messages
-        .filter((m) => m.text && !m.imageUrl)
-        .slice(-10)
-        .map((m) => ({ role: m.role, text: m.text }));
-
       const result = await api.sendMessage(textToSend.trim(), chatHistory);
       const duration = Date.now() - startTime;
       setModalityState({ mode: "text", status: "success", startedAt: startTime, duration });
