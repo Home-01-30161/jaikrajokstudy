@@ -44,10 +44,28 @@ const IMG = {
 // Configure marked for safe, clean output
 marked.setOptions({ breaks: true, gfm: true });
 
+// Bare LaTeX patterns the LLM emits without $...$ delimiters.
+// Matches things like: \frac{R}{4}  \sqrt{2}  \alpha  \times  \int_{0}^{1}
+const BARE_LATEX_RE = /(?<![\\$`])\\(?:frac|sqrt|sum|int|prod|lim|infty|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|omega|phi|psi|chi|rho|tau|eta|nu|xi|zeta|times|div|pm|mp|leq|geq|neq|approx|equiv|cdot|ldots|cdots|partial|nabla|forall|exists|in|notin|subset|supset|cup|cap|rightarrow|leftarrow|Rightarrow|Leftarrow|leftrightarrow|to|vec|hat|bar|dot|ddot|tilde|mathbf|mathrm|text|left|right|begin|end)\b[^$\n`]*/g;
+
+function wrapBareLaTeX(text: string): string {
+  // Wrap \command{...} patterns that aren't already inside $...$ or $$...$$
+  // Strategy: split on existing delimiters, only process plain-text segments
+  const segments = text.split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|`[^`]+`)/g);
+  return segments.map((seg, i) => {
+    // Odd indexes are the matched delimiters — leave them alone
+    if (i % 2 === 1) return seg;
+    // Wrap bare LaTeX commands in $...$
+    return seg.replace(BARE_LATEX_RE, (match) => `$${match.trim()}$`);
+  }).join("");
+}
+
 function renderMessageWithLatex(text: string): string {
+  // 0. Wrap bare LaTeX commands (e.g. \frac{R}{4}) into $...$
+  let protected_text = wrapBareLaTeX(text);
+
   // 1. Protect LaTeX blocks from markdown parser by replacing with placeholders
   const latexBlocks: string[] = [];
-  let protected_text = text;
 
   // Protect display math $$...$$
   protected_text = protected_text.replace(/\$\$([^$]+)\$\$/g, (_match, latex) => {
