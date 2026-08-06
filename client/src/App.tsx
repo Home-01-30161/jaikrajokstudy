@@ -39,15 +39,29 @@ const IMG = {
   star: "/collage/star.png",
 };
 
-/* ============ DESIGN TOKENS ============ */
+/* ============ DESIGN TOKENS — Cassette Inlay World ============ */
+/*
+  THESIS: The liner note as diary. Every emotion logged is a track listing.
+  The interface is a folded insert card — handwritten Thai over newsprint,
+  lo-fi xerox texture, hand-underlined titles. Refuses the SaaS portal.
+  OWN-WORLD: newsprint #EDE8DC ground · deep ink #1A1208 · signal red #C8382A
+  · teal grove #3D6B5A · ruled line khaki #C4B88A. Type: Sarabun display,
+  Noto Sans Thai body. No gradients on the card. No rounded-full buttons.
+  FORM: cassette inlay card · candidate 3 · seed e1f48e4b
+*/
 const T = {
-  cream: "#F5F0E8",
-  black: "#08090A",
-  salmon: "#FF3366",
-  teal: "#FF3366",
-  red: "#C41E3A",
-  white: "#F0EFE9",
-  gridLine: "rgba(26,20,10,0.08)",
+  paper: "#EDE8DC",       // newsprint ground
+  ink: "#1A1208",         // deep ink — text, borders
+  red: "#C8382A",         // signal red — primary action, brand accent
+  teal: "#3D6B5A",        // teal grove — secondary actions, calm states
+  khaki: "#C4B88A",       // ruled line — dividers, muted labels
+  smoke: "#F7F4EE",       // lighter paper — input backgrounds
+  white: "#FAFAF7",       // near-white — card face
+  // legacy aliases used by interior screens (kept for compat)
+  cream: "#EDE8DC",
+  black: "#1A1208",
+  salmon: "#C8382A",
+  gridLine: "rgba(26,18,8,0.08)",
 };
 
 /* ============ EMOJI / MOOD DATA ============ */
@@ -765,8 +779,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
         if (emailExists) {
           toast("รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
         } else {
-          toast("ไม่พบบัญชีนี้ ระบบกำลังเปลี่ยนเป็นสมัครสมาชิกให้คุณ");
-          setMode("signup");
+          toast("ไม่พบบัญชีนี้ — ต้องการสมัครสมาชิกด้วยอีเมลนี้ไหม? กด 'สมัครสมาชิก' ด้านบน");
         }
       }
     } else {
@@ -918,153 +931,287 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden" style={{ backgroundColor: T.black }}>
-      <CheckerStrip className="fixed top-0 left-0 right-0 z-50" />
+    <div className="relative min-h-screen overflow-hidden login-page" style={{ backgroundColor: T.paper }}>
+      {/* Ruled-line texture overlay — the newsprint ground */}
+      <div aria-hidden="true" className="absolute inset-0 pointer-events-none z-0" style={{
+        backgroundImage: `repeating-linear-gradient(transparent, transparent 27px, ${T.khaki}55 27px, ${T.khaki}55 28px)`,
+        opacity: 0.5,
+      }} />
 
-      {/* LEFT: collage only (no grid) */}
+      {/* Left panel — collage, tilted 1.5deg, lo-fi multiply blend */}
       <div
         className="absolute left-0 top-0 bottom-0 z-0 login-img"
-        style={{
-          width: "55%",
-          backgroundColor: "#E5E0D8", // Light background for collage visibility
-        }}
+        style={{ width: "52%", backgroundColor: T.paper }}
       >
         <img
           src={IMG.loginCollage}
           alt=""
           className="absolute inset-0 w-full h-full object-cover object-left-top"
-          style={{ mixBlendMode: "multiply", opacity: 0.88 }}
+          style={{ mixBlendMode: "multiply", opacity: 0.72 }}
         />
-
-        {/* Black curved divider sweeping right fully connected */}
-        <div className="absolute inset-y-0 right-0 z-10" style={{ width: "25%" }}>
-          <svg viewBox="0 0 120 100" preserveAspectRatio="none" className="w-full h-full block">
-            <path d="M120,0 C60,20 20,50 20,100 L120,100 Z" fill={T.black} />
-          </svg>
+        {/* Ink-wash fade to right */}
+        <div aria-hidden="true" className="absolute inset-y-0 right-0" style={{
+          width: "40%",
+          background: `linear-gradient(to right, transparent, ${T.paper})`,
+        }} />
+        {/* Cassette label strip — bottom of collage panel */}
+        <div className="absolute bottom-0 left-0 right-0 px-8 py-4 z-10" style={{
+          borderTop: `1px solid ${T.khaki}`,
+          background: `${T.paper}cc`,
+        }}>
+          <p className="text-xs tracking-widest uppercase" style={{ color: T.khaki, fontFamily: "'Noto Sans Thai', sans-serif", letterSpacing: "0.18em" }}>
+            Side A — บันทึกความรู้สึก
+          </p>
         </div>
       </div>
 
-      {/* RIGHT: black panel with form card */}
-      <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-10 pointer-events-none" style={{ width: "45%" }}>
-        {/* Hand-pen collage */}
-        <div className="fixed bottom-0 right-0 z-10 pointer-events-none" style={{ width: "150px" }}>
-          <img src={IMG.hand} alt="" className="w-full h-auto opacity-80" />
-        </div>
-      </div>
+      {/* Right panel — the insert card */}
+      <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center z-30 login-form"
+        style={{ width: "52%", paddingLeft: "2%", paddingRight: "6%" }}>
 
-      <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-8 z-30 login-form" style={{ width: "50%" }}>
-        {/* Form card */}
-        <div
-          style={{
-            width: "100%",
-            maxWidth: "380px",
-            background: "linear-gradient(150deg, #FBCFCA 0%, #FCD5CF 55%, #FDDDD9 100%)",
-            borderRadius: "24px",
-            padding: "36px 32px",
-            boxShadow: "0 12px 60px rgba(0,0,0,0.4)",
-            position: "relative",
-          }}
-        >
-          <p className="text-xl font-semibold mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>Welcome To</p>
-          <h1 className="text-5xl font-black mb-6" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red, lineHeight: 1.1 }}>JaiKraJok</h1>
-
-          <div
-            className="flex mb-5 rounded-2xl overflow-hidden"
-            style={{ border: "1.5px solid rgba(26,26,26,0.12)", background: "rgba(255,255,255,0.55)" }}
-          >
-            <button
-              onClick={() => setMode("login")}
-              className="flex-1 py-2.5 text-sm font-semibold transition-all"
-              style={{
-                background: mode === "login" ? T.white : "transparent",
-                color: T.black,
-                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
-                borderRight: "1.5px solid rgba(26,26,26,0.12)",
-              }}
-            >
-              Log In
-            </button>
-            <button
-              onClick={() => setMode("signup")}
-              className="flex-1 py-2.5 text-sm font-semibold transition-all"
-              style={{
-                background: mode === "signup" ? T.white : "transparent",
-                color: T.black,
-                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
-              }}
-            >
-              Sign Up
-            </button>
+        {/* The insert card itself */}
+        <div style={{
+          width: "100%",
+          maxWidth: "400px",
+          backgroundColor: T.white,
+          border: `1px solid ${T.khaki}`,
+          padding: "40px 36px 32px",
+          position: "relative",
+          transform: "rotate(0.6deg)",
+          boxShadow: `3px 4px 0 ${T.khaki}, 6px 8px 24px rgba(26,18,8,0.14)`,
+        }}>
+          {/* Corner stamp — top right */}
+          <div aria-hidden="true" style={{
+            position: "absolute", top: 14, right: 16,
+            width: 28, height: 28,
+            border: `1.5px solid ${T.red}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <span style={{ fontSize: 9, color: T.red, fontFamily: "monospace", letterSpacing: "0.05em", lineHeight: 1 }}>
+              {mode === "login" ? "A1" : "B1"}
+            </span>
           </div>
 
-          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red }}>
-            Email
+          {/* Header — handwritten-weight label + big title */}
+          <p className="text-xs tracking-widest uppercase mb-1" style={{
+            color: T.khaki,
+            fontFamily: "'Noto Sans Thai', sans-serif",
+            letterSpacing: "0.2em",
+          }}>
+            {mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
+          </p>
+          <h1 style={{
+            fontFamily: "'Noto Sans Thai', 'Sarabun', sans-serif",
+            fontWeight: 800,
+            fontSize: "clamp(2rem, 5vw, 2.75rem)",
+            color: T.ink,
+            lineHeight: 1.05,
+            marginBottom: 4,
+            letterSpacing: "-0.03em",
+          }}>
+            JaiKraJok
+          </h1>
+          {/* Hand-underline */}
+          <div aria-hidden="true" style={{
+            height: 2,
+            background: T.red,
+            marginBottom: 28,
+            width: "72%",
+            transform: "rotate(-0.5deg)",
+          }} />
+
+          {/* Mode tabs — inline ruled style, no pill */}
+          <div role="tablist" className="flex mb-6" style={{ borderBottom: `1px solid ${T.khaki}`, gap: 0 }}>
+            {(["login", "signup"] as const).map((m) => (
+              <button
+                key={m}
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => setMode(m)}
+                style={{
+                  flex: 1,
+                  paddingBottom: 8,
+                  paddingTop: 4,
+                  fontSize: 13,
+                  fontWeight: mode === m ? 700 : 500,
+                  fontFamily: "'Noto Sans Thai', sans-serif",
+                  color: mode === m ? T.ink : T.khaki,
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: mode === m ? `2px solid ${T.ink}` : "2px solid transparent",
+                  cursor: "pointer",
+                  transition: "all 0.18s",
+                  marginBottom: -1,
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {m === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
+              </button>
+            ))}
+          </div>
+
+          {/* Email field */}
+          <label htmlFor="lp-email" style={{
+            display: "block",
+            fontSize: 11,
+            fontWeight: 600,
+            color: T.khaki,
+            fontFamily: "'Noto Sans Thai', sans-serif",
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            marginBottom: 6,
+          }}>
+            อีเมล
           </label>
           <input
+            id="lp-email"
             type="email"
             placeholder="example@gmail.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
-            className="w-full px-4 py-3 rounded-2xl mb-4 outline-none transition-all focus:ring-2 placeholder:text-gray-400"
             style={{
-              backgroundColor: "rgba(255,255,255,0.8)",
-              border: "1px solid rgba(0,0,0,0.05)",
-              color: T.black,
-              fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+              width: "100%",
+              padding: "10px 0",
+              marginBottom: 20,
+              background: "transparent",
+              border: "none",
+              borderBottom: `1px solid ${T.khaki}`,
+              outline: "none",
+              color: T.ink,
+              fontFamily: "'Noto Sans Thai', sans-serif",
+              fontSize: 15,
+              boxSizing: "border-box",
             }}
+            onFocus={(e) => { e.currentTarget.style.borderBottomColor = T.ink; }}
+            onBlur={(e) => { e.currentTarget.style.borderBottomColor = T.khaki; }}
           />
 
-          <label className="block text-sm font-bold mb-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.red }}>
-            Password
-          </label>
+          {/* Password field */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+            <label htmlFor="lp-pass" style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: T.khaki,
+              fontFamily: "'Noto Sans Thai', sans-serif",
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+            }}>
+              รหัสผ่าน
+            </label>
+            {mode === "login" && (
+              <button
+                onClick={() => toast("ระบบรีเซ็ตรหัสผ่านกำลังพัฒนา — ติดต่อผู้ดูแลระบบ")}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: 11, color: T.teal,
+                  fontFamily: "'Noto Sans Thai', sans-serif",
+                  textDecoration: "underline",
+                  textUnderlineOffset: 2,
+                  padding: 0,
+                }}
+              >
+                ลืมรหัสผ่าน?
+              </button>
+            )}
+          </div>
           <input
+            id="lp-pass"
             type="password"
-            placeholder="••••••••"
+            placeholder="อย่างน้อย 4 ตัวอักษร"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
-            className="w-full px-4 py-3 rounded-2xl mb-6 outline-none transition-all focus:ring-2 placeholder:text-gray-400"
             style={{
-              backgroundColor: "rgba(255,255,255,0.8)",
-              border: "1px solid rgba(0,0,0,0.05)",
-              color: T.black,
-              fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+              width: "100%",
+              padding: "10px 0",
+              marginBottom: 28,
+              background: "transparent",
+              border: "none",
+              borderBottom: `1px solid ${T.khaki}`,
+              outline: "none",
+              color: T.ink,
+              fontFamily: "'Noto Sans Thai', sans-serif",
+              fontSize: 15,
+              boxSizing: "border-box",
             }}
+            onFocus={(e) => { e.currentTarget.style.borderBottomColor = T.ink; }}
+            onBlur={(e) => { e.currentTarget.style.borderBottomColor = T.khaki; }}
           />
 
+          {/* Primary CTA — ink-block style */}
           <button
             onClick={handleSubmit}
-            className="w-full py-3.5 rounded-full font-bold text-white text-base mb-3 transition-all active:scale-[0.97]"
-            style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
+            style={{
+              width: "100%",
+              padding: "13px 0",
+              marginBottom: 12,
+              background: T.ink,
+              color: T.paper,
+              fontFamily: "'Noto Sans Thai', sans-serif",
+              fontSize: 15,
+              fontWeight: 700,
+              border: "none",
+              cursor: "pointer",
+              letterSpacing: "0.04em",
+              transition: "background 0.15s, transform 0.1s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = T.red; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = T.ink; }}
+            onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.98)"; }}
+            onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
           >
-            {mode === "login" ? "Log In" : "Sign Up"}
+            {mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
           </button>
 
-          <div className="text-center text-xs mb-3" style={{ color: "rgba(26,26,26,0.6)", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>or</div>
-
-          <button
-            onClick={() => setMode(mode === "login" ? "signup" : "login")}
-            className="w-full py-3 rounded-full font-bold text-base mb-3 transition-all active:scale-[0.97] bg-white flex items-center justify-center border border-black/10"
-            style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
-          >
-            {mode === "login" ? "Sign Up" : "Log In"}
-          </button>
-
+          {/* Google sign-in — correct branding */}
           <button
             onClick={handleGoogleLogin}
-            className="w-full py-3 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] flex items-center justify-center gap-2"
-            style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
+            style={{
+              width: "100%",
+              padding: "11px 0",
+              background: T.white,
+              color: "#3c4043",
+              fontFamily: "'Noto Sans Thai', 'Roboto', sans-serif",
+              fontSize: 14,
+              fontWeight: 600,
+              border: `1px solid #dadce0`,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              transition: "background 0.15s",
+              marginBottom: 20,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#f8f9fa"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = T.white; }}
           >
-            Log In With Google
-            <svg width="16" height="16" viewBox="0 0 48 48">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
               <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
               <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
               <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
               <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
             </svg>
+            เข้าสู่ระบบด้วย Google
           </button>
+
+          {/* Footer note */}
+          <p style={{
+            fontSize: 10,
+            color: T.khaki,
+            fontFamily: "'Noto Sans Thai', sans-serif",
+            textAlign: "center",
+            lineHeight: 1.6,
+          }}>
+            พื้นที่นี้เป็นของคุณคนเดียว — ไม่มีใครเห็นสิ่งที่คุณเขียน
+          </p>
         </div>
+      </div>
+
+      {/* Hand image — repositioned to not overlap CTAs */}
+      <div className="fixed bottom-0 left-0 z-10 pointer-events-none" style={{ width: 180, opacity: 0.55 }}>
+        <img src={IMG.hand} alt="" className="w-full h-auto" />
       </div>
 
       {showOtpModal && pendingRegistration && (
