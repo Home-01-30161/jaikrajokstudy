@@ -2177,8 +2177,8 @@ function ChatView({
                 }
               }}
               rows={3}
-              className="w-full bg-transparent outline-none text-sm resize-none"
-              style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}
+              className="w-full bg-transparent outline-none text-sm resize-none text-black placeholder:text-gray-400"
+              style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#000000", fontWeight: 500 }}
             />
             <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-2">
               <div className="flex items-center gap-1.5">
@@ -2387,8 +2387,8 @@ function ChatView({
                   }
                 }}
                 rows={2}
-                className="w-full bg-transparent outline-none text-sm resize-none"
-                style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+                className="w-full bg-transparent outline-none text-sm resize-none text-black placeholder:text-gray-400"
+                style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#000000", fontWeight: 500 }}
               />
               <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-1">
                 <div className="flex items-center gap-1.5">
