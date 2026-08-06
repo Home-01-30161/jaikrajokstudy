@@ -112,7 +112,7 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
     payload = {
         "model": settings.tokenmind_llm_model,
         "messages": messages,
-        "max_tokens": 1024,
+        "max_tokens": 4096,
         "temperature": 0.4,
     }
     try:
