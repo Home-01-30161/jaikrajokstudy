@@ -1300,7 +1300,7 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
           ขอความยินยอมจากผู้ปกครอง
         </h2>
         <p className="text-base mb-8 leading-relaxed" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
-          เนื่องจากคุณอายุต่ำกว่า 13 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณ
+          เนื่องจากคุณอายุต่ำกว่า 18 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณก่อนเข้าใช้งาน
         </p>
         {!approved ? (
           <div className="flex flex-col gap-6">
@@ -1378,7 +1378,6 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [age] = useState("16");
   const [guardianConsent] = useState(true);
-  const [lineNotify, setLineNotify] = useState(false);
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
@@ -2192,8 +2191,6 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
                   onGoChat={() => setCurrentView("chat")}
                   onGoTrend={() => setCurrentView("trend")}
                   tryMode={tryMode}
-                  lineNotify={lineNotify}
-                  setLineNotify={setLineNotify}
                   trendData={trendData}
                   onMoodTap={(key: string) => {
                     const info = EMO[key] || EMO.neutral;
@@ -2369,15 +2366,13 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
 }
 
 function HomeView({
-  mood, setMood, onGoChat, onGoTrend, tryMode, lineNotify, setLineNotify, trendData, onMoodTap,
+  mood, setMood, onGoChat, onGoTrend, tryMode, trendData, onMoodTap,
 }: {
   mood: string;
   setMood: (v: string) => void;
   onGoChat: () => void;
   onGoTrend: () => void;
   tryMode: (mode: "camera" | "keyboard" | "mic" | "photo") => void;
-  lineNotify: boolean;
-  setLineNotify: (v: boolean) => void;
   trendData: TrendPoint[];
   onMoodTap: (key: string) => void;
 }) {
@@ -2500,10 +2495,10 @@ function HomeView({
           </div>
         </div>
 
-        {/* MOOD SELECTOR — B-SIDE track listing */}
+        {/* MOOD SELECTOR */}
         <div style={{ borderBottom: `1px solid ${T.khaki}`, padding: "20px 24px 20px 24px" }}>
           <p style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: "0.1em", color: T.khaki, textTransform: "uppercase", marginBottom: 10 }}>
-            B-SIDE · วันนี้รู้สึกอย่างไร?
+            วันนี้รู้สึกอย่างไร?
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {moodOrder.map((key) => {
@@ -2571,32 +2566,6 @@ function HomeView({
               </button>
             ))}
           </div>
-        </div>
-
-        {/* LINE Notify toggle */}
-        <div style={{ padding: "12px 24px", borderTop: `1px solid ${T.khaki}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: 600, fontSize: 12, color: T.ink }}>แจ้งเตือนรายวัน (LINE Notify)</p>
-            <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 10, color: `${T.ink}77` }}>รับการเตือนใจบันทึกความรู้สึกทุกวัน</p>
-          </div>
-          <button
-            onClick={() => setLineNotify(!lineNotify)}
-            style={{
-              width: 44, height: 22,
-              background: lineNotify ? T.ink : T.khaki,
-              border: "none", borderRadius: 0, cursor: "pointer",
-              position: "relative", transition: "background 0.15s",
-            }}
-            aria-pressed={lineNotify}
-            aria-label="สลับการแจ้งเตือน LINE"
-          >
-            <span style={{
-              position: "absolute", top: 3, left: lineNotify ? 24 : 4,
-              width: 16, height: 16,
-              background: T.paper,
-              transition: "left 0.15s",
-            }} />
-          </button>
         </div>
 
         {/* Catalog footer */}
@@ -3040,7 +3009,7 @@ function SchoolView() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { title: "บริการฟรี", desc: "นักเรียนใช้งานรายบุคคลผ่าน LINE Official Account ได้ฟรีเสมอ" },
+          { title: "บริการฟรี", desc: "นักเรียนและครูใช้งานผ่านเว็บแอปพลิเคชันได้ฟรีเสมอ" },
           { title: "แพ็กเกจโรงเรียน", desc: "ค่าบริการรายเดือนสำหรับภาพรวมสถิติระดับสถาบัน ไม่ระบุตัวตนนักเรียน" },
           { title: "บริการวิเคราะห์ข้อมูล", desc: "สำหรับหน่วยงานด้านการศึกษาที่ต้องการข้อมูลเชิงลึกระดับภาพรวม" },
         ].map((plan, i) => (
@@ -3151,9 +3120,9 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
       {subTab === "arch" && (
         <div className="space-y-3">
           {[
-            { layer: "ชั้น 1", title: "User Interface", desc: "LINE Official Account และ Web Application — พิมพ์ ถ่ายเซลฟี่ พูด หรือถ่ายรูปการบ้าน" },
+            { layer: "ชั้น 1", title: "User Interface", desc: "เว็บแอปพลิเคชัน (React) — พิมพ์ ถ่ายเซลฟี่ พูด หรือถ่ายรูปการบ้าน" },
             { layer: "ชั้น 2", title: "API Gateway", desc: "ตรวจสอบสิทธิ์ กระจายคำขอไปยังบริการที่ถูกต้อง บันทึก Log แบบไม่ระบุตัวตน" },
-            { layer: "ชั้น 3", title: "AI Services · AI for Thai", desc: "Face Recognition · Sentiment Analysis · Speech-to-Text · OCR · Pathumma LLM (โมเดลหลัก)" },
+            { layer: "ชั้น 3", title: "AI Services", desc: "Gemini (Google) · Typhoon (OpenTyphoon) · Pathumma (AI for Thai) · Tavily Search — วิเคราะห์อารมณ์ สรุปแนวโน้ม ค้นหาข้อมูล" },
             { layer: "ชั้น 4", title: "Data Storage", desc: "เก็บประวัติแนวโน้มอารมณ์แบบไม่ระบุตัวตน เข้ารหัส AES-256 ปฏิบัติตาม PDPA" },
           ].map((item, i) => (
             <div key={i} className="p-5 rounded-2xl flex items-center gap-4" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2" }}>
@@ -3260,7 +3229,7 @@ export default function App() {
             setAge={setAge}
             onNext={() => {
               const ageNum = parseInt(age);
-              setPage(ageNum < 13 ? "guardian" : "privacy");
+              setPage(ageNum < 18 ? "guardian" : "privacy");
             }}
           />
         </PageWrapper>
