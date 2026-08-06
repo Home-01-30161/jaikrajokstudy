@@ -778,9 +778,10 @@ function fixThaiChoices(reply: string, ocrText: string): string {
 }
 
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
+  // Step 1: OCR/Vision — extract problem text faithfully, no assumptions about format
   const visionQuery =
-    "คัดลอกโจทย์ ข้อมูลประกอบ และตัวเลือก (ก. ข. ค. ง.) จากภาพนี้ให้ครบถ้วน 100% " +
-    "และวิเคราะห์ว่าตัวเลือกใด (ก., ข., ค., หรือ ง.) ถูกต้องที่สุดตามหลักวิชาการ พร้อมระบุคำตอบสุดท้าย";
+    "คัดลอกโจทย์และข้อมูลทั้งหมดในภาพนี้ให้ครบถ้วน 100% ตามที่ปรากฏจริงในภาพ " +
+    "รวมถึงตัวเลือก (ก. ข. ค. ง.) ถ้ามีในภาพ ห้ามเพิ่มเติมหรือประดิษฐ์ข้อมูลที่ไม่มีในภาพ";
 
   let answer: string;
   try {
@@ -790,16 +791,47 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
     answer = "ไม่สามารถอ่านโจทย์จากภาพได้ในขณะนี้";
   }
 
+  // Step 2: Detect whether OCR actually found real multiple-choice items.
+  // Require choice labels (ก. / ข. / ค. / ง.) to appear at the START of a line
+  // (list items), NOT just anywhere in the text (avoids matching disclaimer notes
+  // like "*(หมายเหตุ: ในภาพไม่มีตัวเลือก ก. ข. ค. ง.)*").
+  // Also require at least 2 distinct labels to confirm it's truly multiple-choice.
+  const lineStartChoiceRe = /(?:^|\n)\s*([กขคง])\.\s/g;
+  const choiceLettersFound = new Set<string>();
+  let _cm: RegExpExecArray | null;
+  // eslint-disable-next-line no-cond-assign
+  while ((_cm = lineStartChoiceRe.exec(answer)) !== null) {
+    choiceLettersFound.add(_cm[1]);
+  }
+  const hasChoices = choiceLettersFound.size >= 2;
+
   let llmReply: string;
   try {
+    let solvePrompt: string;
+
+    if (hasChoices) {
+      // Multiple-choice problem — use the choices extracted from OCR, never invent new ones
+      solvePrompt =
+        `ข้อมูลโจทย์และตัวเลือกที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
+        `คำสั่งเรียบเรียงเฉลย:\n` +
+        `1. **โจทย์และข้อมูลในภาพ**: สรุปโจทย์และรายละเอียดสั้น ๆ\n` +
+        `2. **ตัวเลือกทั้งหมด**: แสดงตัวเลือก ก., ข., ค., ง. ที่ **ถอดความได้จากภาพข้างต้นเท่านั้น** — ห้ามประดิษฐ์หรือแต่งตัวเลือกใหม่เด็ดขาด\n` +
+        `3. **วิเคราะห์ตัวเลือก**: อธิบายเหตุผลของแต่ละตัวเลือกว่าถูกหรือผิด\n` +
+        `4. **สรุปคำตอบ**: ปิดท้ายด้วยบรรทัด **คำตอบที่ถูกต้องคือ: [ก./ข./ค./ง.]** เพียง 1 ครั้งเท่านั้น\n\n` +
+        `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
+    } else {
+      // Open-ended / individual problem — no choices, just solve step-by-step
+      solvePrompt =
+        `โจทย์ที่อ่านได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
+        `คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์\n` +
+        `1. **โจทย์**: สรุปสิ่งที่โจทย์กำหนดให้และสิ่งที่ต้องหา\n` +
+        `2. **วิเคราะห์และหาคำตอบ**: แสดงขั้นตอนการคำนวณหรืออธิบายทีละขั้นอย่างละเอียด\n` +
+        `3. **คำตอบสุดท้าย**: ระบุค่าคำตอบที่ได้ชัดเจน\n\n` +
+        `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด เพราะโจทย์นี้ไม่มีตัวเลือก`;
+    }
+
     const rawReply = await callTextLLM(
-      `ข้อมูลโจทย์และตัวเลือกที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
-      `คำสั่งเรียบเรียงเฉลย:\n` +
-      `1. **โจทย์และข้อมูลในภาพ**: สรุปโจทย์และรายละเอียดเคมี/คณิต/วิทยาศาสตร์สั้น ๆ\n` +
-      `2. **ตัวเลือกทั้งหมด**: แสดงข้อความตัวเลือก ก., ข., ค., ง. ที่ถอดความได้จากภาพข้างต้นให้ชัดเจน ห้ามแต่งตัวเลือกใหม่เอง\n` +
-      `3. **วิเคราะห์ตัวเลือก**: อธิบายเหตุผลของตัวเลือก ก., ข., ค., ง. แต่ละข้อว่าถูกหรือผิดอย่างแม่นยำ\n` +
-      `4. **สรุปคำตอบ**: ปิดท้ายด้วยบรรทัด **คำตอบที่ถูกต้องคือ: [ก./ข./ค./ง.]** เพียง 1 ครั้งเท่านั้น\n\n` +
-      `❌ ห้ามใช้คำแทน เช่น "ข้อความ ก. จาก OCR" ให้ดึงข้อความตัวเลือกจริงมาแสดง`,
+      solvePrompt,
       MATH_SYSTEM_PROMPT,
       3072,
       0.0
