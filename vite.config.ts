@@ -255,7 +255,91 @@ function vitePluginCollagePics(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics(), vitePluginCollageBuild()];
+import nodemailer from "nodemailer";
+
+function vitePluginOtpEmail(): Plugin {
+  return {
+    name: "otp-email-sender",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api/send-otp", async (req, res, next) => {
+        if (req.method !== "POST") return next();
+
+        let bodyStr = "";
+        req.on("data", (chunk) => { bodyStr += chunk.toString(); });
+        req.on("end", async () => {
+          try {
+            const { email, otp } = JSON.parse(bodyStr);
+            if (!email || !otp) {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: false, error: "Missing email or otp" }));
+              return;
+            }
+
+            console.log(`[OTP Mailer] Sending OTP ${otp} to ${email}`);
+
+            let transporter: nodemailer.Transporter;
+            let fromEmail = "JaiKraJok <noreply@jaikrajok.app>";
+
+            const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
+            const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASS;
+
+            if (smtpUser && smtpPass) {
+              transporter = nodemailer.createTransport({
+                service: "gmail",
+                auth: { user: smtpUser, pass: smtpPass },
+              });
+              fromEmail = smtpUser;
+            } else {
+              // Create dynamic Ethereal test account for real SMTP message delivery & link generation
+              const testAccount = await nodemailer.createTestAccount();
+              transporter = nodemailer.createTransport({
+                host: "smtp.ethereal.email",
+                port: 587,
+                secure: false,
+                auth: {
+                  user: testAccount.user,
+                  pass: testAccount.pass,
+                },
+              });
+              fromEmail = testAccount.user;
+            }
+
+            const info = await transporter.sendMail({
+              from: fromEmail,
+              to: email,
+              subject: `[JaiKraJok] รหัสยืนยันตัวตนของคุณคือ ${otp}`,
+              text: `สวัสดีครับ/ค่ะ\n\nรหัสยืนยันตัวตน 6 หลักของคุณสำหรับสมัครใช้งาน JaiKraJok คือ: ${otp}\n\nหากคุณไม่ได้ทำการสมัครกรุณาเพิกเฉยข้อความนี้\n\nขอบคุณครับ\nทีมงาน JaiKraJok`,
+              html: `
+                <div style="font-family: Arial, sans-serif; padding: 24px; background-color: #F9F9F9; border-radius: 16px; max-width: 480px; margin: 0 auto; border: 1px solid #EBE5DC;">
+                  <h2 style="color: #FF3366; margin-bottom: 8px;">JaiKraJok (กระจกสะท้อนใจ)</h2>
+                  <p style="color: #333333; font-size: 14px;">สวัสดีครับ/ค่ะ,</p>
+                  <p style="color: #555555; font-size: 14px;">รหัสยืนยัน 6 หลักสำหรับการสมัครสมาชิกของคุณคือ:</p>
+                  <div style="background-color: #FFFFFF; border: 2px solid #FF3366; border-radius: 12px; padding: 16px; text-align: center; margin: 20px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #FF3366;">${otp}</span>
+                  </div>
+                  <p style="color: #888888; font-size: 12px;">รหัสนี้มีอายุใช้งาน 10 นาที หากคุณไม่ได้ส่งคำขอ กรุณาเพิกเฉยอีเมลฉบับนี้</p>
+                </div>
+              `,
+            });
+
+            const previewUrl = nodemailer.getTestMessageUrl(info) || null;
+            console.log(`[OTP Mailer] Sent successfully to ${email}. MessageId: ${info.messageId}`);
+            if (previewUrl) console.log(`[OTP Mailer] Preview URL: ${previewUrl}`);
+
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: true, messageId: info.messageId, previewUrl }));
+          } catch (err: any) {
+            console.error("[OTP Mailer] Error sending mail:", err);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: err.message || String(err) }));
+          }
+        });
+      });
+    },
+  };
+}
+
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics(), vitePluginCollageBuild(), vitePluginOtpEmail()];
 
 export default defineConfig({
   plugins,
