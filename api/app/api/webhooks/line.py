@@ -1,4 +1,11 @@
-﻿"""LINE Messaging API webhook."""
+"""LINE Messaging API webhook.
+
+Supports all four input modes described in the proposal (p.4):
+  - Text   → Sentiment + Pathumma LLM
+  - Image  → Face Recognition (selfie) or OCR (homework photo)
+  - Audio  → Speech-to-Text → Pathumma LLM
+  - Sticker → friendly fallback reply
+"""
 
 from __future__ import annotations
 
@@ -12,14 +19,25 @@ from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
     AsyncApiClient,
     AsyncMessagingApi,
+    AsyncMessagingApiBlob,
     Configuration,
     ReplyMessageRequest,
     TextMessage,
 )
-from linebot.v3.webhooks import FollowEvent, MessageEvent, TextMessageContent
+from linebot.v3.webhooks import (
+    AudioMessageContent,
+    FollowEvent,
+    ImageMessageContent,
+    MessageEvent,
+    StickerMessageContent,
+    TextMessageContent,
+)
 
 from app.bots.conversation import WELCOME, handle_text
 from app.config import get_settings
+from app.services import face, ocr, stt
+from app.services import pathumma
+from app.services.mood import classify as classify_mood, MOOD_LABELS_TH
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["line"])
@@ -52,6 +70,137 @@ def _messaging_api() -> AsyncMessagingApi:
     return AsyncMessagingApi(api_client)
 
 
+def _blob_api() -> tuple[AsyncMessagingApiBlob, AsyncApiClient]:
+    """Return (blob_api, api_client) — caller must close api_client."""
+    settings = get_settings()
+    configuration = Configuration(access_token=settings.line_channel_access_token)
+    api_client = AsyncApiClient(configuration)
+    return AsyncMessagingApiBlob(api_client), api_client
+
+
+async def _reply(api: AsyncMessagingApi, reply_token: str, text: str) -> None:
+    """Send a plain text reply, truncated to LINE's 5 000-char limit."""
+    await api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[TextMessage(text=text[:5000])],
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Image handler — detect intent from content
+# ---------------------------------------------------------------------------
+_SELFIE_PHRASE = (
+    "กระจกเห็นใบหน้าของคุณแล้ว ตรวจพบ {count} ใบหน้า\n\n"
+    "กระจกอ่านได้แค่ว่ามีใบหน้าในภาพนะ ยังอ่านอารมณ์จากสีหน้าไม่ได้\n"
+    "ถ้าอยากให้เข้าใจความรู้สึกจริง ๆ พิมพ์หรือพูดมาได้เลย"
+)
+_NO_FACE_PHRASE = (
+    "กระจกยังไม่เห็นใบหน้าในภาพนี้ ลองถ่ายให้เห็นหน้าชัด ๆ "
+    "ในที่สว่างอีกครั้งนะ หรือส่งรูปการบ้านถ้าอยากให้ช่วยอ่าน"
+)
+_OCR_PROMPT = (
+    "นักเรียนส่งรูปการบ้านมาทาง LINE "
+    "ข้อความที่อ่านได้จากภาพคือ:\n{text}\n\n"
+    "ช่วยอธิบายหรือแนะนำวิธีทำอย่างเป็นขั้นตอน โดยไม่เฉลยคำตอบตรง ๆ ทันที"
+)
+
+async def _handle_image(
+    message_id: str,
+    blob: AsyncMessagingApiBlob,
+) -> str:
+    """Download image from LINE, try face detection first then OCR."""
+    try:
+        data: bytearray = await blob.get_message_content(message_id)
+        image_bytes = bytes(data)
+    except Exception as exc:
+        logger.warning("Failed to download LINE image %s: %s", message_id, exc)
+        return "กระจกดาวน์โหลดรูปภาพไม่ได้ ลองส่งใหม่อีกครั้งนะ"
+
+    # --- Try face detection first ---
+    face_result = await face.analyze_image(image_bytes)
+    if face_result.ok:
+        objects = face_result.raw.get("objects") or []
+        count = len(objects) if isinstance(objects, list) else 0
+        if count > 0:
+            return _SELFIE_PHRASE.format(count=count)
+        # Face API OK but no faces → likely a homework photo
+        # fall through to OCR
+
+    # --- OCR for homework/document images ---
+    ocr_result = await ocr.transcribe_image(image_bytes)
+    if ocr_result.ok and (ocr_result.text or "").strip():
+        extracted = ocr_result.text.strip()[:3000]
+        llm = await pathumma.generate_reply(_OCR_PROMPT.format(text=extracted))
+        if llm.ok and llm.text:
+            return llm.text
+        return f"อ่านข้อความจากภาพได้แล้ว:\n\n{extracted}\n\n(ระบบ AI ยังตอบไม่ได้ตอนนี้ ลองอีกครั้งนะ)"
+
+    # Nothing found
+    return _NO_FACE_PHRASE
+
+
+# ---------------------------------------------------------------------------
+# Audio handler
+# ---------------------------------------------------------------------------
+_AUDIO_FAIL = (
+    "กระจกยังฟังเสียงนี้ไม่ออก ลองอัดในที่เงียบ ๆ "
+    "หรือพิมพ์มาก็ได้นะ"
+)
+
+async def _handle_audio(
+    message_id: str,
+    blob: AsyncMessagingApiBlob,
+) -> str:
+    """Download audio from LINE, transcribe, then reply with LLM."""
+    try:
+        data: bytearray = await blob.get_message_content(message_id)
+        audio_bytes = bytes(data)
+    except Exception as exc:
+        logger.warning("Failed to download LINE audio %s: %s", message_id, exc)
+        return _AUDIO_FAIL
+
+    # LINE sends m4a audio
+    stt_result = await stt.transcribe(
+        audio_bytes,
+        filename="voice.m4a",
+        content_type="audio/mp4",
+    )
+
+    if not stt_result.ok or not (stt_result.text or "").strip():
+        logger.warning("LINE STT failed: %s", stt_result.error)
+        return _AUDIO_FAIL
+
+    transcript = stt_result.text.strip()
+
+    # Crisis check on transcript
+    from app.bots.conversation import CRISIS_KEYWORDS
+    lowered = transcript.lower()
+    stripped = lowered.replace(" ", "")
+    if any(k in lowered or k.replace(" ", "") in stripped for k in CRISIS_KEYWORDS):
+        return (
+            "เราห่วงใยคุณมาก ตอนนี้คุณไม่ได้อยู่คนเดียว "
+            "โปรดติดต่อสายด่วนสุขภาพจิต 1323 "
+            "หรือคนที่ไว้ใจใกล้ตัวด้วยนะ"
+        )
+
+    llm = await pathumma.generate_reply(transcript)
+    if llm.ok and llm.text:
+        mood = classify_mood(transcript, None, None)
+        mood_label = MOOD_LABELS_TH.get(mood, "")
+        prefix = f"[กระจกได้ยิน: \"{transcript[:80]}{'...' if len(transcript) > 80 else ''}\"]\n\n"
+        return prefix + llm.text
+
+    return (
+        f"กระจกได้ยินว่า: \"{transcript[:200]}\"\n\n"
+        "ระบบ AI ยังตอบไม่ได้ตอนนี้ ลองพิมพ์มาก็ได้นะ"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Webhook entry point
+# ---------------------------------------------------------------------------
 @router.post("/webhooks/line")
 async def line_webhook(
     request: Request,
@@ -72,34 +221,60 @@ async def line_webhook(
         logger.warning("Invalid LINE signature")
         raise HTTPException(status_code=400, detail="Invalid signature") from exc
 
-    api = _messaging_api()
-    try:
-        logger.info(f"Processing {len(events)} events")
-        for event in events:
-            logger.info(f"Event type: {type(event).__name__}")
-            if isinstance(event, FollowEvent):
-                await api.reply_message(
-                    ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[TextMessage(text=WELCOME)],
-                    )
-                )
-            elif isinstance(event, MessageEvent) and isinstance(
-                event.message, TextMessageContent
-            ):
-                user_id = event.source.user_id if event.source else "unknown"
+    messaging = _messaging_api()
+    blob, blob_client = _blob_api()
 
-                reply = await handle_text(user_id or "unknown", event.message.text)
-                await api.reply_message(
-                    ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[TextMessage(text=reply[:5000])],
-                    )
+    try:
+        logger.info("Processing %d events", len(events))
+
+        for event in events:
+            logger.info("Event: %s", type(event).__name__)
+
+            # --- Follow / add friend ---
+            if isinstance(event, FollowEvent):
+                await _reply(messaging, event.reply_token, WELCOME)
+                continue
+
+            if not isinstance(event, MessageEvent):
+                continue
+
+            user_id: str = (event.source.user_id if event.source else None) or "unknown"
+            msg = event.message
+
+            # --- Text ---
+            if isinstance(msg, TextMessageContent):
+                reply = await handle_text(user_id, msg.text)
+                await _reply(messaging, event.reply_token, reply)
+
+            # --- Image (selfie or homework photo) ---
+            elif isinstance(msg, ImageMessageContent):
+                reply = await _handle_image(msg.id, blob)
+                await _reply(messaging, event.reply_token, reply)
+
+            # --- Audio (voice message) ---
+            elif isinstance(msg, AudioMessageContent):
+                reply = await _handle_audio(msg.id, blob)
+                await _reply(messaging, event.reply_token, reply)
+
+            # --- Sticker / other ---
+            elif isinstance(msg, StickerMessageContent):
+                await _reply(
+                    messaging,
+                    event.reply_token,
+                    "สติ๊กเกอร์น่ารักมาก! ถ้าอยากให้ช่วยเรื่องเรียนหรืออยากระบาย พิมพ์มาได้เลยนะ",
                 )
+            else:
+                await _reply(
+                    messaging,
+                    event.reply_token,
+                    "กระจกรับได้เฉพาะข้อความ รูปภาพ และเสียงพูดนะ ลองพิมพ์มาได้เลย",
+                )
+
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}", exc_info=True)
+        logger.error("Error processing webhook: %s", e, exc_info=True)
         raise
     finally:
-        await api.api_client.close()
+        await messaging.api_client.close()
+        await blob_client.close()
 
     return {"ok": True}
