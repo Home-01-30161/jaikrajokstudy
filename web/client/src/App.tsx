@@ -1770,13 +1770,6 @@ function PanicButton() {
 
 /* ============ LINE INTEGRATION ============ */
 function LINEIntegration() {
-  const [qrGenerated, setQrGenerated] = useState(false);
-
-  const generateQR = () => {
-    setQrGenerated(true);
-    toast.success('QR Code สร้างแล้ว (ตัวอย่าง)');
-  };
-
   return (
     <div className="p-6 rounded-2xl" style={{ backgroundColor: '#F0FDF4', border: '2px solid #10B981' }}>
       <div className="flex items-center gap-3 mb-4">
@@ -1788,32 +1781,27 @@ function LINEIntegration() {
             เชื่อมต่อกับ LINE
           </h3>
           <p className="text-xs" style={{ fontFamily: "'IBM Plex Mono', monospace", color: '#6B7280' }}>
-            รับการแจ้งเตือนและติดตาม
+            สแกน QR เพื่อเพิ่มเป็นเพื่อน
           </p>
         </div>
       </div>
 
-      {!qrGenerated ? (
-        <button
-          onClick={generateQR}
-          className="w-full px-4 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
-          style={{ backgroundColor: '#06B876', color: '#FFFFFF' }}
+      {/* Real LINE OA QR code */}
+      <div className="text-center mb-4">
+        <div
+          className="w-48 h-48 mx-auto rounded-2xl overflow-hidden flex items-center justify-center"
+          style={{ backgroundColor: '#FFFFFF', border: '2px solid #10B981', padding: '8px' }}
         >
-          <QrCodeIcon size={18} />
-          <span className="font-bold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
-            สร้าง QR Code เชื่อมต่อ
-          </span>
-        </button>
-      ) : (
-        <div className="text-center">
-          <div className="w-48 h-48 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#FFFFFF', border: '2px solid #10B981' }}>
-            <QrCodeIcon size={80} />
-          </div>
-          <p className="text-sm mb-4" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
-            สแกนเพื่อเชื่อม LINE Official Account
-          </p>
+          <img
+            src="/collage/line_qr.jpg"
+            alt="LINE Official Account QR Code"
+            className="w-full h-full object-contain"
+          />
         </div>
-      )}
+        <p className="text-sm mt-3" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
+          สแกนเพื่อเพิ่ม JaiKrajok เป็นเพื่อนใน LINE
+        </p>
+      </div>
 
       <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: '#FFFFFF' }}>
         <p className="text-xs font-bold mb-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#1a1a1a' }}>
