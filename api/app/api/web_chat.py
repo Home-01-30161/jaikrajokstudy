@@ -77,6 +77,7 @@ class ChatResponse(BaseModel):
     mood: str = "neutral"
     confidence: float | None = None
     crisis: bool = False
+    concern_streak: int = 0  # consecutive negative mood count (proposal p.11 alert)
     service: str = "sentiment+llm"
     degraded: list[str] = Field(default_factory=list)
 
@@ -245,6 +246,7 @@ async def send_message(
     detected, reply, score, degraded = await _mood_and_reply(
         user_id, text, source="text", history=[{"role": m.role, "text": m.text} for m in req.history]
     )
+    streak = store.concern_streak(user_id)
     return ChatResponse(
         reply=reply,
         emotion="negative" if detected in ("stressed", "sad") else "positive"
@@ -252,6 +254,7 @@ async def send_message(
         else "neutral",
         mood=detected,
         confidence=score,
+        concern_streak=streak,
         degraded=degraded,
     )
 

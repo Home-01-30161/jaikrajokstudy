@@ -2263,6 +2263,13 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
         setCrisisDetected(true);
         setShowCrisisAlert(true);
       }
+      // Concern streak nudge — 3+ consecutive negative moods → gentle wellbeing reminder
+      if (!result.crisis && result.concern_streak >= 3) {
+        toast("สังเกตว่าช่วงนี้คุณดูหนักใจอยู่ ถ้าอยากคุยกับใครสักคน สายด่วน 1323 พร้อมรับฟังตลอด 24 ชม. นะ", {
+          duration: 8000,
+          style: { backgroundColor: "#FEF2F2", color: "#991B1B", border: "1px solid #FECACA" },
+        });
+      }
     } catch (error) {
       // Update last log to error
       setDetailedTransparencyLogs((prev) => {

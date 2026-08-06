@@ -23,6 +23,7 @@ export interface ChatResult {
   mood: Mood;
   confidence: number | null;
   crisis: boolean;
+  concern_streak: number;
   service: string;
   degraded: string[];
 }

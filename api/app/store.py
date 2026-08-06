@@ -221,7 +221,36 @@ def school_overview() -> dict:
         }
 
 
-def export_user(user_id: str) -> dict:
+def concern_streak(user_id: str, window: int = 3) -> int:
+    """Return the number of consecutive negative moods at the end of the user's history.
+
+    A 'concerning' mood is stressed or sad. Used to surface a wellbeing nudge
+    in the UI after several consecutive low readings — matching the proposal's
+    'concern streak alert' requirement (proposal p.9-11).
+
+    Returns 0 if the last `window` readings are not all negative, or if there
+    are fewer than `window` readings.
+    """
+    try:
+        conn = get_conn()
+        uh = _hash_user(user_id)
+        with _lock:
+            rows = conn.execute(
+                "SELECT mood FROM mood_events WHERE user_hash = ?"
+                " ORDER BY created_at DESC LIMIT ?",
+                (uh, window),
+            ).fetchall()
+        if len(rows) < window:
+            return 0
+        negative = {"stressed", "sad"}
+        streak = sum(1 for r in rows if r["mood"] in negative)
+        return streak if all(r["mood"] in negative for r in rows) else 0
+    except Exception:  # noqa: BLE001
+        logger.exception("concern_streak failed")
+        return 0
+
+
+
     """PDPA data-access for the current signed session.
 
     Only mood readings and usage counters exist to hand back. Chat text, images
