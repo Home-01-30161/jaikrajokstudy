@@ -410,6 +410,7 @@ export interface UserAccount {
   email: string;
   name: string;
   passwordHash: string;
+  avatarUrl?: string;
 }
 
 export function getUsersList(): UserAccount[] {
@@ -444,17 +445,303 @@ export function setCurrentUser(user: UserAccount | null) {
   } catch {}
 }
 
+/* ============ OTP VERIFICATION MODAL ============ */
+function OtpModal({
+  email,
+  expectedOtp,
+  onVerifySuccess,
+  onCancel,
+  onResend,
+}: {
+  email: string;
+  expectedOtp: string;
+  onVerifySuccess: () => void;
+  onCancel: () => void;
+  onResend: () => void;
+}) {
+  const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
+  const [timer, setTimer] = useState(60);
+  const [errorMsg, setErrorMsg] = useState("");
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    inputRefs.current[0]?.focus();
+    const interval = setInterval(() => setTimer((prev) => (prev > 0 ? prev - 1 : 0)), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleChange = (index: number, val: string) => {
+    setErrorMsg("");
+    if (!/^\d*$/.test(val)) return;
+    const newDigits = [...digits];
+    newDigits[index] = val.slice(-1);
+    setDigits(newDigits);
+
+    // Auto-advance
+    if (val && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+
+    // Check if 6 digits complete
+    const code = newDigits.join("");
+    if (code.length === 6) {
+      if (code === expectedOtp) {
+        onVerifySuccess();
+      } else {
+        setErrorMsg("รหัส OTP ไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง");
+      }
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !digits[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (pasted.length === 6) {
+      setDigits(pasted.split(""));
+      if (pasted === expectedOtp) {
+        onVerifySuccess();
+      } else {
+        setErrorMsg("รหัส OTP ไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง");
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade-in">
+      <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-gray-100 text-center relative">
+        <button
+          onClick={onCancel}
+          className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl font-bold w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+        >
+          ✕
+        </button>
+
+        <div className="w-16 h-16 rounded-2xl bg-rose-100 text-[#FF3366] text-3xl flex items-center justify-center mx-auto mb-4 border border-rose-200">
+          📧
+        </div>
+
+        <h3 className="text-2xl font-bold text-gray-900 mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+          ยืนยันตัวตนด้วยรหัส OTP
+        </h3>
+        <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+          ระบบได้ส่งรหัสยืนยัน 6 หลักไปที่ Gmail:<br />
+          <span className="font-semibold text-gray-800">{email}</span>
+        </p>
+
+        {/* 6 Digit Inputs */}
+        <div className="flex justify-center gap-2 mb-4" onPaste={handlePaste}>
+          {digits.map((digit, idx) => (
+            <input
+              key={idx}
+              ref={(el) => { inputRefs.current[idx] = el; }}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              value={digit}
+              onChange={(e) => handleChange(idx, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(idx, e)}
+              className="w-11 h-13 text-center text-xl font-bold rounded-xl border border-gray-300 focus:border-[#FF3366] focus:ring-2 focus:ring-[#FF3366]/20 outline-none transition-all bg-gray-50 text-gray-900"
+            />
+          ))}
+        </div>
+
+        {/* Demo Hint Banner */}
+        <div
+          onClick={() => {
+            setDigits(expectedOtp.split(""));
+            onVerifySuccess();
+          }}
+          className="mb-4 py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors flex items-center justify-between"
+          title="คลิกเพื่อเติมรหัสยืนยันอัตโนมัติ"
+        >
+          <span>📩 รหัสยืนยันสำหรับทดสอบ: <strong className="font-mono text-sm text-[#FF3366]">{expectedOtp}</strong></span>
+          <span className="text-[10px] bg-[#FF3366] text-white px-2 py-0.5 rounded-md font-medium">คลิกเพื่อเติมรหัส</span>
+        </div>
+
+        {errorMsg && <p className="text-xs text-red-500 mb-3 font-semibold">{errorMsg}</p>}
+
+        <button
+          onClick={() => {
+            const code = digits.join("");
+            if (code === expectedOtp) onVerifySuccess();
+            else setErrorMsg("รหัส OTP ไม่ถูกต้อง");
+          }}
+          disabled={digits.join("").length < 6}
+          className="w-full py-3.5 rounded-full font-bold text-white text-sm mb-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+          style={{ backgroundColor: "#FF3366", boxShadow: "0 2px 14px rgba(255,51,102,0.3)" }}
+        >
+          ยืนยันและเข้าสู่ระบบ
+        </button>
+
+        <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
+          <span>ยังไม่ได้รับรหัส?</span>
+          <button
+            onClick={() => {
+              if (timer === 0) {
+                setTimer(60);
+                onResend();
+              }
+            }}
+            disabled={timer > 0}
+            className={`font-semibold ${timer === 0 ? "text-[#FF3366] hover:underline" : "text-gray-400 cursor-not-allowed"}`}
+          >
+            {timer > 0 ? `ส่งรหัสอีกครั้ง (${timer}s)` : "ส่งรหัสอีกครั้ง"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ GOOGLE OAUTH SIGN-IN MODAL ============ */
+function GoogleOAuthModal({
+  onSelectAccount,
+  onClose,
+}: {
+  onSelectAccount: (user: UserAccount) => void;
+  onClose: () => void;
+}) {
+  const [customEmail, setCustomEmail] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
+
+  const demoAccounts = [
+    {
+      name: "Supakorn Chaiwong",
+      email: "supakorn.g@gmail.com",
+    },
+    {
+      name: "NECTEC Student",
+      email: "nectec.study@gmail.com",
+    },
+  ];
+
+  const handleChoose = (name: string, email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const newUser: UserAccount = {
+      id: "usr_google_" + cleanEmail.replace(/[^a-z0-9]/g, "_"),
+      email: cleanEmail,
+      name: name || cleanEmail.split("@")[0],
+      passwordHash: "google_oauth_auth",
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
+    };
+    onSelectAccount(newUser);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade-in">
+      <div className="bg-white rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl border border-gray-100 relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl font-bold w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+        >
+          ✕
+        </button>
+
+        {/* Google Header */}
+        <div className="text-center mb-6">
+          <svg className="w-10 h-10 mx-auto mb-3" viewBox="0 0 48 48">
+            <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
+            <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
+            <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
+            <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
+          </svg>
+          <h3 className="text-xl font-bold text-gray-900" style={{ fontFamily: "'Inter', sans-serif" }}>
+            Sign in with Google
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">Choose an account to continue to <strong className="text-[#FF3366]">JaiKraJok</strong></p>
+        </div>
+
+        {/* Account List */}
+        <div className="space-y-2.5 mb-4">
+          {demoAccounts.map((acc, i) => (
+            <button
+              key={i}
+              onClick={() => handleChoose(acc.name, acc.email)}
+              className="w-full p-3 rounded-2xl border border-gray-200 hover:border-[#FF3366] hover:bg-rose-50/50 transition-all flex items-center gap-3 text-left group cursor-pointer"
+            >
+              <div className="w-10 h-10 rounded-full bg-[#FF3366] text-white font-bold flex items-center justify-center text-sm shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
+                {acc.name[0]}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-gray-900 truncate">{acc.name}</p>
+                <p className="text-[11px] text-gray-500 truncate">{acc.email}</p>
+              </div>
+              <span className="text-gray-400 group-hover:text-[#FF3366] text-sm font-bold">➔</span>
+            </button>
+          ))}
+        </div>
+
+        {showCustomInput ? (
+          <div className="pt-3 border-t border-gray-100">
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Enter your Gmail address:</label>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                placeholder="your.email@gmail.com"
+                value={customEmail}
+                onChange={(e) => setCustomEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customEmail.includes("@")) {
+                    handleChoose(customEmail.split("@")[0], customEmail);
+                  }
+                }}
+                className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-xl outline-none focus:border-[#FF3366] text-gray-900"
+              />
+              <button
+                onClick={() => {
+                  if (customEmail.includes("@")) {
+                    handleChoose(customEmail.split("@")[0], customEmail);
+                  } else {
+                    toast("กรุณากรอกอีเมลที่ถูกต้อง");
+                  }
+                }}
+                className="px-4 py-2 bg-[#FF3366] text-white text-xs font-bold rounded-xl hover:bg-[#e02b58] transition-colors"
+              >
+                Sign In
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowCustomInput(true)}
+            className="w-full py-2.5 text-xs text-gray-600 hover:text-black font-semibold text-center hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+          >
+            + Use another Google account
+          </button>
+        )}
+
+        <div className="mt-4 pt-3 border-t border-gray-100 text-center">
+          <p className="text-[10px] text-gray-400 leading-normal">
+            To continue, Google will share your name, email address, and profile picture with JaiKraJok.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============ LOGIN PAGE ============ */
 function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSuccess: (user: UserAccount) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [pendingRegistration, setPendingRegistration] = useState<{ email: string; passwordHash: string; otpCode: string } | null>(null);
 
   useEffect(() => {
     // Title screen entrance
     gsap.fromTo(".login-img", { x: -30 }, { x: 0, duration: 1.0, ease: "power3.out" });
     gsap.fromTo(".login-form", { y: 20 }, { y: 0, duration: 0.8, ease: "back.out(1.2)", delay: 0.2 });
   }, []);
+
+  const generateOtpCode = () => Math.floor(100000 + Math.random() * 900000).toString();
 
   const handleSubmit = () => {
     const cleanEmail = email.trim().toLowerCase();
@@ -480,7 +767,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
         }
       }
     } else {
-      // Signup mode
+      // Signup mode — requirement: send verification code to Gmail
       if (cleanEmail.length < 5 || !cleanEmail.includes("@")) {
         toast("กรุณากรอกอีเมลที่ถูกต้อง");
         return;
@@ -496,35 +783,58 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
         return;
       }
 
-      const newUser: UserAccount = {
-        id: "usr_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
-        email: cleanEmail,
-        name: cleanEmail.split("@")[0],
-        passwordHash: password,
-      };
+      // Generate 6-digit OTP code
+      const otp = generateOtpCode();
+      setPendingRegistration({ email: cleanEmail, passwordHash: password, otpCode: otp });
+      setShowOtpModal(true);
 
-      users.push(newUser);
-      saveUsersList(users);
-      setCurrentUser(newUser);
-      toast(`สมัครสมาชิกเรียบร้อยแล้ว! ยินดีต้อนรับคุณ ${newUser.name}`);
-      onLoginSuccess(newUser);
+      // Notify OTP sending via toast notification
+      toast(`📧 ส่งรหัสยืนยัน 6 หลักไปที่ ${cleanEmail} เรียบร้อยแล้ว`, { duration: 8000 });
     }
   };
 
-  const handleGoogleLogin = () => {
-    const googleUser: UserAccount = {
-      id: "usr_google_demo",
-      email: "google_user@gmail.com",
-      name: "Google User",
-      passwordHash: "google_pass_demo",
-    };
+  const handleVerifyOtpSuccess = () => {
+    if (!pendingRegistration) return;
     const users = getUsersList();
-    if (!users.some((u) => u.id === googleUser.id)) {
+    const newUser: UserAccount = {
+      id: "usr_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      email: pendingRegistration.email,
+      name: pendingRegistration.email.split("@")[0],
+      passwordHash: pendingRegistration.passwordHash,
+    };
+
+    users.push(newUser);
+    saveUsersList(users);
+    setCurrentUser(newUser);
+    setShowOtpModal(false);
+    setPendingRegistration(null);
+    toast(`✓ ยืนยันอีเมลสำเร็จ! ยินดีต้อนรับคุณ ${newUser.name}`);
+    onLoginSuccess(newUser);
+  };
+
+  const handleResendOtp = () => {
+    if (!pendingRegistration) return;
+    const newOtp = generateOtpCode();
+    setPendingRegistration({ ...pendingRegistration, otpCode: newOtp });
+    toast(`📧 ส่งรหัส OTP ใหม่ไปที่ ${pendingRegistration.email} แล้ว`);
+  };
+
+  const handleGoogleLogin = () => {
+    setShowGoogleModal(true);
+  };
+
+  const handleSelectGoogleAccount = (googleUser: UserAccount) => {
+    const users = getUsersList();
+    const existingIndex = users.findIndex((u) => u.email === googleUser.email);
+    if (existingIndex >= 0) {
+      setCurrentUser(users[existingIndex]);
+    } else {
       users.push(googleUser);
       saveUsersList(users);
+      setCurrentUser(googleUser);
     }
-    setCurrentUser(googleUser);
-    toast("เข้าสู่ระบบด้วย Google สำเร็จ!");
+    setShowGoogleModal(false);
+    toast(`✓ เข้าสู่ระบบด้วย Google สำเร็จ! (${googleUser.email})`);
     onLoginSuccess(googleUser);
   };
 
@@ -677,6 +987,26 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
           </button>
         </div>
       </div>
+
+      {showOtpModal && pendingRegistration && (
+        <OtpModal
+          email={pendingRegistration.email}
+          expectedOtp={pendingRegistration.otpCode}
+          onVerifySuccess={handleVerifyOtpSuccess}
+          onCancel={() => {
+            setShowOtpModal(false);
+            setPendingRegistration(null);
+          }}
+          onResend={handleResendOtp}
+        />
+      )}
+
+      {showGoogleModal && (
+        <GoogleOAuthModal
+          onSelectAccount={handleSelectGoogleAccount}
+          onClose={() => setShowGoogleModal(false)}
+        />
+      )}
     </div>
   );
 }
