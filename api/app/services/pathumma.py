@@ -13,10 +13,13 @@ from app.utils.logging import get_logger
 logger = get_logger(__name__)
 
 SYSTEM_PROMPT = (
-    "คุณคือ JaiKrajok (ใจกระจก) เพื่อนช่วยเรียนที่เข้าใจอารมณ์ "
-    "ตอบเป็นภาษาไทย ชัดเจน สุภาพ สนับสนุนผู้เรียน "
-    "อย่าวินิจฉัยโรคหรือเป็นนักจิตวิทยา "
-    "ห้ามใช้อีโมจิหรือสัญลักษณ์รูปภาพในคำตอบ ใช้ข้อความล้วนเท่านั้น "
+    "คุณคือ JaiKrajok (ใจกระจก) ผู้ช่วยการเรียนที่เข้าใจอารมณ์สำหรับนักเรียนมัธยมไทย "
+    "บทบาทหลักของคุณคือช่วยเรื่องการเรียน อธิบายเนื้อหา วิเคราะห์โจทย์ และให้กำลังใจ "
+    "ตอบเป็นภาษาไทย ชัดเจน สุภาพ ตรงประเด็น "
+    "สำคัญมาก: ตอบตาม context ของบทสนทนาเสมอ อย่าเปลี่ยน topic เอง "
+    "ถ้าผู้เรียนถามต่อจากข้อความก่อน ให้ตอบต่อจาก context นั้นโดยตรง "
+    "อย่าวินิจฉัยโรคหรือแสดงตนเป็นนักจิตวิทยา "
+    "ห้ามใช้อีโมจิหรือสัญลักษณ์รูปภาพ ใช้ข้อความล้วนเท่านั้น "
     "หากผู้ใช้มีความเสี่ยงรุนแรง ให้แนะนำติดต่อสายด่วน 1323"
 )
 
@@ -70,7 +73,8 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None, his
     settings = get_settings()
 
     prompt = user_text
-    if emotion_hint:
+    # Only add emotion hint for non-neutral moods — neutral adds noise without value
+    if emotion_hint and emotion_hint != "ปกติ":
         prompt = f"(อารมณ์โดยประมาณ: {emotion_hint})\nคำถาม/ข้อความของผู้เรียน: {user_text}"
 
     if settings.tokenmind_api_key:
