@@ -4,6 +4,26 @@
   "outputDirectory": "dist/public",
   "rewrites": [
     {
+      "source": "/api/pathumma/:path*",
+      "destination": "https://api.aiforthai.in.th/:path*"
+    },
+    {
+      "source": "/api/thaillm/:path*",
+      "destination": "http://thaillm.or.th/:path*"
+    },
+    {
+      "source": "/api/gemini/:path*",
+      "destination": "https://generativelanguage.googleapis.com/:path*"
+    },
+    {
+      "source": "/api/typhoon/:path*",
+      "destination": "https://api.opentyphoon.ai/:path*"
+    },
+    {
+      "source": "/api/tavily/:path*",
+      "destination": "https://api.tavily.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
