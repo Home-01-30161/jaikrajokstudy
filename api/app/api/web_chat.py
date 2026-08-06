@@ -24,12 +24,41 @@ _MAX_MESSAGE_CHARS = 2000
 _MAX_OCR_CHARS = 4000
 _MAX_TTS_CHARS = 300
 
-CRISIS_KEYWORDS = ("ฆ่าตัวตาย", "อยากตาย", "ทำร้ายตัวเอง", "ไม่อยากอยู่")
+# Crisis detection is deliberately a literal phrase list, not a model call.
+# Probing showed /ssense scores "อยากตาย ไม่อยากอยู่แล้ว" as neutral (score 0,
+# polarity ""), so sentiment cannot be trusted to catch self-harm language --
+# this list is the real safety net and must stand on its own.
+# False positives here are cheap (a student sees a hotline they did not need);
+# false negatives are not. When in doubt, add the phrase.
+CRISIS_KEYWORDS = (
+    # explicit
+    "ฆ่าตัวตาย", "อยากตาย", "ทำร้ายตัวเอง", "ไม่อยากอยู่", "อยากหายไป",
+    "ไม่อยากมีชีวิต", "ไม่อยากตื่น", "จบชีวิต", "ตายไปเลยดีกว่า", "หายไปเลยดีกว่า",
+    "ไม่อยากอยู่ต่อ", "อยากจบทุกอย่าง", "ขอตาย", "อยากนอนไม่ตื่น",
+    # self-harm methods / acts
+    "กรีดแขน", "กรีดข้อมือ", "ทำร้ายร่างกายตัวเอง", "กินยาเกินขนาด",
+    # hopelessness that commonly precedes it
+    "ไม่มีใครสนใจถ้าฉันตาย", "อยู่ไปก็ไร้ค่า", "เป็นภาระของทุกคน",
+    "ไม่มีทางออก", "หมดหวังแล้ว",
+    # English, since Thai students code-switch
+    "kill myself", "want to die", "end my life", "suicide", "self harm",
+)
 CRISIS_REPLY = (
     "เราห่วงใยคุณมากนะ ตอนนี้คุณไม่ได้อยู่คนเดียว "
     "โปรดติดต่อสายด่วนสุขภาพจิต 1323 (ฟรี 24 ชั่วโมง) "
     "หรือคนที่ไว้ใจใกล้ตัวด้วยนะ"
 )
+
+
+def is_crisis(text: str) -> bool:
+    """True when the text contains self-harm language.
+
+    Matching is case-insensitive and ignores spaces so that "อยาก ตาย" or
+    "Want To Die" are not missed by a bare substring test.
+    """
+    lowered = (text or "").lower()
+    stripped = lowered.replace(" ", "")
+    return any(k in lowered or k.replace(" ", "") in stripped for k in CRISIS_KEYWORDS)
 
 
 class ChatRequest(BaseModel):
@@ -100,6 +129,54 @@ async def _read_upload(upload: UploadFile, *allowed_types: str) -> bytes:
     return b"".join(chunks)
 
 
+def _resize_image_for_ocr(image_bytes: bytes, max_pixels: int = 500_000) -> bytes:
+    """Resize image if too large for OCR API to handle.
+
+    AI for Thai OCR API fails with 'roi' error on large images (>1M pixels)
+    or images with non-white backgrounds. Resize to max 500K pixels while
+    maintaining aspect ratio and normalize background to white.
+    """
+    try:
+        from PIL import Image, ImageOps
+        import io
+
+        img = Image.open(io.BytesIO(image_bytes))
+        total_pixels = img.width * img.height
+
+        # Convert to RGB if needed
+        if img.mode not in ('RGB', 'L'):
+            img = img.convert('RGB')
+
+        # Resize if too large
+        if total_pixels > max_pixels:
+            ratio = (max_pixels / total_pixels) ** 0.5
+            new_size = (int(img.width * ratio), int(img.height * ratio))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+        # Normalize background: AI for Thai OCR expects white background
+        # Convert to grayscale to analyze
+        gray = img.convert('L')
+        import numpy as np
+        gray_arr = np.array(gray)
+
+        # If background is dark/gray (mean < 200), invert or enhance contrast
+        if gray_arr.mean() < 200:
+            # Enhance contrast and brighten
+            img = ImageOps.autocontrast(img, cutoff=2)
+            # If still too dark, increase brightness
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(1.3)
+
+        # Save as JPEG with good quality
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=90)
+        return buffer.getvalue()
+    except Exception:
+        # If resize/processing fails, return original
+        return image_bytes
+
+
 async def _mood_and_reply(user_id: str, text: str, *, source: str) -> tuple[str, str, float | None, list[str]]:
     """Sentiment -> mood -> mood-aware LLM reply. Returns (mood, reply, confidence, degraded)."""
     degraded: list[str] = []
@@ -153,7 +230,7 @@ async def send_message(
         )
 
     # Crisis language short-circuits the LLM: a generated reply is not safe here.
-    if any(k in text for k in CRISIS_KEYWORDS):
+    if is_crisis(text):
         store.record_mood(user_id, "sad", source="crisis")
         return ChatResponse(
             reply=CRISIS_REPLY, emotion="negative", mood="sad", crisis=True, service="safety"
@@ -280,7 +357,7 @@ async def transcribe_voice(
         )
 
     transcript = result.text.strip()
-    if any(k in transcript for k in CRISIS_KEYWORDS):
+    if is_crisis(transcript):
         store.record_mood(user_id, "sad", source="crisis")
         return AnalysisResponse(
             ok=True, mood="sad", reply=CRISIS_REPLY, transcript=transcript, service="safety"
@@ -299,7 +376,11 @@ async def homework_ocr(
 ) -> AnalysisResponse:
     """Homework mode: OCR the photo, then let the LLM help with what it read."""
     data = await _read_upload(file, "image/")
-    result = await ocr.extract_text(data)
+
+    # Resize image if too large for OCR API
+    data = _resize_image_for_ocr(data)
+
+    result = await ocr.transcribe_image(data)
 
     if not result.ok or not (result.text or "").strip():
         return AnalysisResponse(

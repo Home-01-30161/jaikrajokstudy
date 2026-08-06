@@ -12,19 +12,23 @@ from __future__ import annotations
 UI_MOODS = ("stressed", "sad", "tired", "neutral", "calm", "positive")
 
 # Strong cues name a feeling outright, so they outrank sentiment polarity.
-# Ordered so a message carrying several resolves to the mood needing most care.
+# Ordered so a message carrying several resolves to the mood needing most care:
+# distress (stressed/sad) outranks low energy (tired), because "เหนื่อย" beside
+# "ชีวิตพัง" is a student in trouble, not a student who needs a nap.
 _STRONG: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "stressed",
         ("เครียด", "กดดัน", "กังวล", "วิตก", "ประหม่า", "หนักมาก", "รับไม่ไหว"),
     ),
     (
-        "tired",
-        ("เหนื่อย", "ง่วง", "อ่อนเพลีย", "หมดแรง", "ไม่มีแรง", "เพลีย"),
+        "sad",
+        ("เศร้า", "ร้องไห้", "เสียใจ", "ท้อ", "หมดกำลังใจ", "เหงา", "โดดเดี่ยว", "ผิดหวัง",
+         "ชีวิตพัง", "พังหมดแล้ว", "ไม่มีใครเข้าใจ", "ไร้ค่า", "ล้มเหลว", "สิ้นหวัง",
+         "ไม่ไหวแล้ว", "แย่มาก"),
     ),
     (
-        "sad",
-        ("เศร้า", "ร้องไห้", "เสียใจ", "ท้อ", "หมดกำลังใจ", "เหงา", "โดดเดี่ยว", "ผิดหวัง"),
+        "tired",
+        ("เหนื่อย", "ง่วง", "อ่อนเพลีย", "หมดแรง", "ไม่มีแรง", "เพลีย"),
     ),
     (
         "positive",

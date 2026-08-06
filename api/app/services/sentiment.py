@@ -14,11 +14,16 @@ logger = get_logger(__name__)
 async def analyze_sentiment(text: str) -> ServiceResult:
     """Analyze Thai text sentiment for web API."""
     result = await analyze_text(text)
-    if result.ok and result.label:
+    if result.ok:
+        # /ssense answers genuinely neutral text with polarity "" and score "0".
+        # That is a successful call, not a broken service, so it must still
+        # produce a SentimentResult - otherwise callers see a missing
+        # `sentiment` and wrongly report the service as degraded.
+        label = result.label or "neutral"
         result.sentiment = SentimentResult(
-            label=result.label,
-            polarity=result.label,
-            score=result.score if result.score is not None else 0.5,
+            label=label,
+            polarity=label,
+            score=result.score if result.score is not None else 0.0,
         )
     return result
 

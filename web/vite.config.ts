@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
+  cacheDir: path.resolve(import.meta.dirname, "node_modules", ".vite_tmp"),
   build: {
     outDir: path.resolve(import.meta.dirname, "..", "api", "app", "frontend"),
     emptyOutDir: true,

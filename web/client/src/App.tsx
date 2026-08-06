@@ -224,6 +224,8 @@ interface ChatMsg {
   emotionData?: { label: string; note: string; color: string; bg: string; text: string };
   ocrText?: string;
   sourceTag?: string;
+  imageUrl?: string; // For displaying uploaded images
+  imageType?: "selfie" | "homework"; // Type of image
 }
 
 interface TrendPoint {
@@ -502,6 +504,579 @@ function CrisisAlert({ onDismiss, onCall1323 }: { onDismiss: () => void; onCall1
 }
 
 
+
+function WindIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
+    </svg>
+  );
+}
+
+function AnchorIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="5" r="3" />
+      <line x1="12" y1="22" x2="12" y2="8" />
+      <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+    </svg>
+  );
+}
+
+function ActivityIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
+function UsersIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function TrendUpIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function ShieldIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  );
+}
+
+function LockIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function EyeOffIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
+
+function TimerIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="13" r="8" />
+      <polyline points="12 9 12 13 15 15" />
+      <path d="M16.51 17.35l-.35 3.83a2 2 0 0 1-2 1.82H9.83a2 2 0 0 1-2-1.82l-.35-3.83m.01-10.7l.35-3.83A2 2 0 0 1 9.83 1h4.35a2 2 0 0 1 2 1.82l.35 3.83" />
+    </svg>
+  );
+}
+
+function LogOutIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+function ZapIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
+
+function HeartIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  );
+}
+
+function QrCodeIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="5" height="5" />
+      <rect x="16" y="3" width="5" height="5" />
+      <rect x="3" y="16" width="5" height="5" />
+      <path d="M16 16h5v5h-5z" />
+      <path d="M10 10h1v1h-1z" />
+      <path d="M13 10h1v1h-1z" />
+      <path d="M10 13h1v1h-1z" />
+      <path d="M13 13h1v1h-1z" />
+    </svg>
+  );
+}
+
+function MessageSquareIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function BellIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function TypeIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="4 7 4 4 20 4 20 7" />
+      <line x1="9" y1="20" x2="15" y2="20" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+    </svg>
+  );
+}
+
+function SunIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
+}
+
+function SettingsIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 1v6m0 6v6m5.66-17A10 10 0 0 1 22 12a10 10 0 0 1-4.34 8.66m-11.32 0A10 10 0 0 1 2 12a10 10 0 0 1 4.34-8.66" />
+    </svg>
+  );
+}
+
+/* ============ EMOTION REGULATION TOOLS ============ */
+type RegulationTool = "breathing" | "grounding" | "muscle";
+
+const REGULATION_META: Record<RegulationTool, { title: string; blurb: string; minutes: string; icon: (size: number) => React.ReactNode }> = {
+  breathing: {
+    title: "แบบฝึกหายใจ 4-4-4",
+    blurb: "หายใจเป็นจังหวะช้า ๆ ช่วยลดการเต้นของหัวใจและความตึงเครียด",
+    minutes: "ประมาณ 2 นาที",
+    icon: (s) => <WindIcon size={s} />,
+  },
+  grounding: {
+    title: "Grounding 5-4-3-2-1",
+    blurb: "พาความคิดกลับมาที่ปัจจุบันด้วยประสาทสัมผัสทั้งห้า",
+    minutes: "ประมาณ 3 นาที",
+    icon: (s) => <AnchorIcon size={s} />,
+  },
+  muscle: {
+    title: "คลายกล้ามเนื้อทีละส่วน",
+    blurb: "เกร็งแล้วคลายกล้ามเนื้อทีละจุด ช่วยให้ร่างกายรู้สึกเบาลง",
+    minutes: "ประมาณ 3 นาที",
+    icon: (s) => <ActivityIcon size={s} />,
+  },
+};
+
+const BREATH_PHASES = [
+  { key: "in", label: "หายใจเข้า", hint: "สูดลมเข้าทางจมูกช้า ๆ", seconds: 4, scale: 1 },
+  { key: "hold", label: "กลั้นไว้", hint: "ค้างไว้เบา ๆ ไม่ต้องเกร็ง", seconds: 4, scale: 1 },
+  { key: "out", label: "หายใจออก", hint: "ผ่อนลมออกทางปากยาว ๆ", seconds: 4, scale: 0.55 },
+] as const;
+
+const GROUNDING_STEPS = [
+  { count: 5, sense: "มองเห็น", prompt: "มองรอบตัวแล้วบอกชื่อสิ่งที่คุณเห็น 5 อย่าง" },
+  { count: 4, sense: "ได้ยิน", prompt: "ตั้งใจฟังเสียงรอบตัว 4 เสียง" },
+  { count: 3, sense: "สัมผัสได้", prompt: "สังเกตสิ่งที่ผิวคุณสัมผัสอยู่ 3 อย่าง" },
+  { count: 2, sense: "ได้กลิ่น", prompt: "หากลิ่นรอบตัว 2 กลิ่น หรือนึกถึงกลิ่นที่ชอบ" },
+  { count: 1, sense: "รับรส", prompt: "สังเกตรสในปาก 1 รส หรือจิบน้ำหนึ่งอึก" },
+];
+
+const MUSCLE_STEPS = [
+  { part: "มือและแขน", action: "กำหมัดแน่น 5 วินาที แล้วคลายออก" },
+  { part: "ไหล่และคอ", action: "ยกไหล่ขึ้นชิดหู 5 วินาที แล้วปล่อยลง" },
+  { part: "ใบหน้า", action: "ขมวดคิ้วและเม้มปาก 5 วินาที แล้วคลาย" },
+  { part: "ท้องและหลัง", action: "แขม่วท้อง 5 วินาที แล้วหายใจออกยาว" },
+  { part: "ขาและเท้า", action: "เกร็งขาและกระดกปลายเท้า 5 วินาที แล้วปล่อย" },
+];
+
+function BreathingRunner({ onFinish }: { onFinish: () => void }) {
+  const TARGET_CYCLES = 6;
+  const [phaseIndex, setPhaseIndex] = useState(0);
+  const [remaining, setRemaining] = useState<number>(BREATH_PHASES[0].seconds);
+  const [cycles, setCycles] = useState(0);
+  const [running, setRunning] = useState(true);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => {
+      setRemaining((prev) => {
+        if (prev > 1) return prev - 1;
+        setPhaseIndex((idx) => {
+          const next = (idx + 1) % BREATH_PHASES.length;
+          if (next === 0) setCycles((c) => c + 1);
+          return next;
+        });
+        return 0;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  useEffect(() => {
+    setRemaining(BREATH_PHASES[phaseIndex].seconds);
+  }, [phaseIndex]);
+
+  useEffect(() => {
+    if (cycles >= TARGET_CYCLES) setRunning(false);
+  }, [cycles]);
+
+  const phase = BREATH_PHASES[phaseIndex];
+  const done = cycles >= TARGET_CYCLES;
+
+  return (
+    <div className="text-center">
+      <div className="flex items-center justify-center" style={{ height: "220px" }}>
+        <div
+          className="rounded-full flex items-center justify-center"
+          style={{
+            width: "180px",
+            height: "180px",
+            background: `radial-gradient(circle at 35% 30%, #FFE1E8, ${T.salmon}22)`,
+            border: `2px solid ${T.salmon}`,
+            transform: `scale(${done ? 0.8 : phase.scale})`,
+            transition: `transform ${phase.seconds}s ease-in-out`,
+          }}
+        >
+          <div>
+            <p className="font-bold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black, fontSize: "1.1rem" }}>
+              {done ? "เสร็จแล้ว" : phase.label}
+            </p>
+            {!done && (
+              <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.salmon, fontSize: "2rem", fontWeight: 800, lineHeight: 1.1 }}>
+                {remaining || phase.seconds}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <p className="text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
+        {done ? "ลองสังเกตดูว่าร่างกายรู้สึกต่างจากเมื่อกี้ไหม" : phase.hint}
+      </p>
+      <p className="text-xs mb-5" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#9CA3AF" }}>
+        รอบที่ {Math.min(cycles + (done ? 0 : 1), TARGET_CYCLES)} / {TARGET_CYCLES}
+      </p>
+
+      <div className="flex gap-2 justify-center">
+        {!done && (
+          <button
+            onClick={() => setRunning((r) => !r)}
+            className="px-5 py-2.5 rounded-full text-sm font-bold transition-all active:scale-[0.97]"
+            style={{ border: `2px solid ${T.salmon}`, color: T.salmon, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+          >
+            {running ? "พักไว้ก่อน" : "ทำต่อ"}
+          </button>
+        )}
+        <button
+          onClick={onFinish}
+          className="px-5 py-2.5 rounded-full text-sm font-bold text-white transition-all active:scale-[0.97]"
+          style={{ backgroundColor: done ? T.salmon : T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+        >
+          {done ? "เรียบร้อย" : "หยุดตรงนี้"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StepRunner({ steps, onFinish }: {
+  steps: { title: string; body: string; badge: string }[];
+  onFinish: () => void;
+}) {
+  const [index, setIndex] = useState(0);
+  const last = index === steps.length - 1;
+  const step = steps[index];
+
+  return (
+    <div>
+      <div className="flex gap-1.5 mb-5">
+        {steps.map((_, i) => (
+          <div
+            key={i}
+            className="h-1.5 flex-1 rounded-full"
+            style={{ backgroundColor: i <= index ? T.salmon : "#E5E1D8" }}
+          />
+        ))}
+      </div>
+
+      <div className="p-5 rounded-2xl mb-5" style={{ backgroundColor: "#FFF7F3", border: "1.5px dashed #E3A48E" }}>
+        <p className="text-xs font-bold mb-2" style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.salmon, letterSpacing: "0.08em" }}>
+          {step.badge}
+        </p>
+        <p className="font-bold text-base mb-1.5" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+          {step.title}
+        </p>
+        <p className="text-sm leading-relaxed" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#4a4a4a" }}>
+          {step.body}
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => (index === 0 ? onFinish() : setIndex((i) => i - 1))}
+          className="px-5 py-2.5 rounded-full text-sm font-bold transition-all active:scale-[0.97]"
+          style={{ border: "2px solid #D8D2C6", color: "#6b6b6b", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+        >
+          {index === 0 ? "ออก" : "ย้อนกลับ"}
+        </button>
+        <button
+          onClick={() => (last ? onFinish() : setIndex((i) => i + 1))}
+          className="flex-1 py-2.5 rounded-full text-sm font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.97]"
+          style={{ backgroundColor: T.salmon, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+        >
+          {last ? "เรียบร้อย" : "ขั้นต่อไป"}
+          {!last && <ChevronRightIcon size={15} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EmotionRegulationModal({ tool, onClose }: { tool: RegulationTool; onClose: () => void }) {
+  const meta = REGULATION_META[tool];
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    panelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const groundingSteps = GROUNDING_STEPS.map((s) => ({
+    badge: `${s.count} สิ่งที่คุณ${s.sense}`,
+    title: s.prompt,
+    body: "ไม่ต้องรีบ ค่อย ๆ นึกทีละอย่าง พูดในใจหรือพูดออกมาก็ได้",
+  }));
+
+  const muscleSteps = MUSCLE_STEPS.map((s, i) => ({
+    badge: `ส่วนที่ ${i + 1} / ${MUSCLE_STEPS.length}`,
+    title: s.part,
+    body: s.action,
+  }));
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 no-ripple"
+      style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={meta.title}
+        tabIndex={-1}
+        className="w-full max-w-md rounded-3xl p-7 shadow-2xl outline-none"
+        style={{ backgroundColor: "#FFFFFF", border: `2px solid ${T.salmon}` }}
+      >
+        <div className="flex items-start justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#FFF0EB", color: T.salmon }}>
+              {meta.icon(20)}
+            </div>
+            <div>
+              <h3 className="font-bold text-base leading-tight" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+                {meta.title}
+              </h3>
+              <p className="text-[11px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#9CA3AF" }}>{meta.minutes}</p>
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="ปิด" className="p-2 rounded-xl transition-colors hover:bg-black/5" style={{ color: "#9CA3AF" }}>
+            <XIcon size={18} />
+          </button>
+        </div>
+
+        {tool === "breathing" && <BreathingRunner onFinish={onClose} />}
+        {tool === "grounding" && <StepRunner steps={groundingSteps} onFinish={onClose} />}
+        {tool === "muscle" && <StepRunner steps={muscleSteps} onFinish={onClose} />}
+
+        <p className="text-[10px] mt-5 pt-4 leading-relaxed" style={{ borderTop: "1px solid #EDE6D3", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#9CA3AF" }}>
+          แบบฝึกนี้ทำงานในเครื่องของคุณทั้งหมด ไม่มีการส่งข้อมูลไปยังบริการ AI ใด ๆ หากอาการไม่ดีขึ้นหรือรู้สึกไม่ปลอดภัย โปรดโทร 1323
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EmotionRegulationCard({ mood, onPick }: { mood: Mood; onPick: (tool: RegulationTool) => void }) {
+  const info = EMO[mood];
+  const suggested: RegulationTool = mood === "stressed" ? "breathing" : mood === "sad" ? "grounding" : "muscle";
+
+  return (
+    <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `1.5px solid ${info.concern ? "#E3A48E" : "#E2D9C2"}`, boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+      <h4 className="font-bold text-sm mb-1" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+        เครื่องมือคลายอารมณ์
+      </h4>
+      <p className="text-xs mb-3 leading-relaxed" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#666" }}>
+        {info.concern
+          ? "สภาวะล่าสุดดูหนักใจอยู่ ลองทำอะไรสั้น ๆ ให้ใจนิ่งลงก่อนไหม"
+          : "ใช้ได้ทุกเมื่อที่อยากพักใจ ไม่ต้องรอให้รู้สึกแย่ก่อน"}
+      </p>
+
+      <div className="space-y-2">
+        {(Object.keys(REGULATION_META) as RegulationTool[]).map((tool) => {
+          const meta = REGULATION_META[tool];
+          const isSuggested = info.concern && tool === suggested;
+          return (
+            <button
+              key={tool}
+              onClick={() => onPick(tool)}
+              className="w-full text-left p-3 rounded-xl flex items-center gap-3 transition-all active:scale-[0.98]"
+              style={{
+                backgroundColor: isSuggested ? "#FFF0EB" : T.cream,
+                border: isSuggested ? `1.5px solid ${T.salmon}` : "1.5px solid #E5E1D8",
+              }}
+            >
+              <span className="flex-shrink-0" style={{ color: T.salmon }}>{meta.icon(18)}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-xs font-bold truncate" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+                  {meta.title}
+                </span>
+                <span className="block text-[10px]" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#8a8a8a" }}>
+                  {meta.minutes}
+                </span>
+              </span>
+              {isSuggested && (
+                <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: T.salmon, color: "#fff", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+                  แนะนำ
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ============ MULTI-MODAL STATUS INDICATOR ============ */
+type ModalityMode = "text" | "selfie" | "voice" | "homework";
+type ModalityPhase = "recording" | "processing" | "success" | "error";
+
+interface ModalityState {
+  mode: ModalityMode;
+  status: ModalityPhase;
+  startedAt: number;
+  duration?: number;
+  detail?: string;
+}
+
+const MODALITY_META: Record<ModalityMode, { label: string; service: string; icon: (size: number) => React.ReactNode }> = {
+  text: { label: "ข้อความ", service: "Sentiment Analysis + Pathumma LLM", icon: (s) => <SendIcon size={s} /> },
+  selfie: { label: "ภาพใบหน้า", service: "Face Detection", icon: (s) => <CameraIcon size={s} /> },
+  voice: { label: "เสียงพูด", service: "Speech-to-Text", icon: (s) => <MicIcon size={s} /> },
+  homework: { label: "รูปการบ้าน", service: "OCR", icon: (s) => <ImageIcon size={s} /> },
+};
+
+const PHASE_META: Record<ModalityPhase, { label: string; fg: string; bg: string; border: string }> = {
+  recording: { label: "กำลังบันทึก", fg: "#B45309", bg: "#FFFBEB", border: "#FDE68A" },
+  processing: { label: "กำลังประมวลผล", fg: "#0369A1", bg: "#F0F9FF", border: "#BAE6FD" },
+  success: { label: "เสร็จแล้ว", fg: "#047857", bg: "#F0FDF4", border: "#BBF7D0" },
+  error: { label: "ไม่สำเร็จ", fg: "#B91C1C", bg: "#FEF2F2", border: "#FECACA" },
+};
+
+function ModalityIndicator({ state }: { state: ModalityState }) {
+  const mode = MODALITY_META[state.mode];
+  const phase = PHASE_META[state.status];
+  const busy = state.status === "recording" || state.status === "processing";
+
+  // Live elapsed counter while the request is in flight.
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    setElapsed(Date.now() - state.startedAt);
+    const timer = window.setInterval(() => setElapsed(Date.now() - state.startedAt), 200);
+    return () => window.clearInterval(timer);
+  }, [busy, state.startedAt]);
+
+  const timing = state.duration !== undefined
+    ? `${(state.duration / 1000).toFixed(1)}s`
+    : busy
+      ? `${(elapsed / 1000).toFixed(1)}s`
+      : null;
+
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 rounded-2xl"
+      style={{ backgroundColor: phase.bg, border: `1.5px solid ${phase.border}` }}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="flex-shrink-0" style={{ color: phase.fg }}>{mode.icon(16)}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-bold truncate" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: phase.fg }}>
+          {mode.label} · {state.detail || phase.label}
+        </p>
+        <div className="h-1 mt-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,0,0,0.07)" }}>
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: busy ? "45%" : "100%",
+              backgroundColor: phase.fg,
+              animation: busy ? "modality-slide 1.1s ease-in-out infinite" : undefined,
+            }}
+          />
+        </div>
+      </div>
+      <div className="flex-shrink-0 text-right">
+        <span className="block text-[10px] hidden sm:block" style={{ fontFamily: "'IBM Plex Mono', monospace", color: phase.fg, opacity: 0.75 }}>
+          {mode.service}
+        </span>
+        {timing && (
+          <span className="block text-[10px] font-bold" style={{ fontFamily: "'IBM Plex Mono', monospace", color: phase.fg }}>
+            {timing}
+          </span>
+        )}
+      </div>
+      <style>{`@keyframes modality-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(240%); } }`}</style>
+    </div>
+  );
+}
 
 /* ============ CHECKERSTRIP ============ */
 function CheckerStrip({ className = "" }: { className?: string }) {
@@ -1069,6 +1644,382 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
   );
 }
 
+/* ============ LIVE EMOTION INDICATOR ============ */
+interface EmotionHistoryPoint {
+  timestamp: number;
+  mood: Mood;
+}
+
+function LiveEmotionIndicator({ history }: { history: EmotionHistoryPoint[] }) {
+  if (history.length === 0) return null;
+
+  const latest = history[history.length - 1];
+  const latestInfo = EMO[latest.mood];
+  const trajectory = history.slice(-5);
+
+  return (
+    <div className="p-4 rounded-2xl" style={{ backgroundColor: latestInfo.bg, border: `1.5px solid ${latestInfo.edge}` }}>
+      <div className="flex items-center gap-3 mb-3">
+        <HeartIcon size={18} />
+        <h4 className="font-bold text-sm" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: latestInfo.text }}>
+          อารมณ์ของคุณตอนนี้
+        </h4>
+      </div>
+      <div className="text-center mb-4">
+        <div className="text-5xl mb-2">{latestInfo.emoji}</div>
+        <p className="text-sm font-medium" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: latestInfo.text }}>
+          {latestInfo.label}
+        </p>
+      </div>
+      {trajectory.length > 1 && (
+        <div>
+          <p className="text-xs mb-2" style={{ fontFamily: "'IBM Plex Mono', monospace", color: latestInfo.text, opacity: 0.7 }}>
+            เส้นทางอารมณ์ในการสนทนานี้
+          </p>
+          <div className="flex items-center justify-center gap-2">
+            {trajectory.map((pt, i) => (
+              <div key={i} className="flex items-center">
+                <span className="text-2xl">{EMO[pt.mood].emoji}</span>
+                {i < trajectory.length - 1 && (
+                  <ChevronRightIcon size={14} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ SAFETY INDICATORS ============ */
+function SafetyIndicators() {
+  return (
+    <div className="flex items-center gap-2 text-xs" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#6B7280" }}>
+      <span className="flex items-center gap-1" title="ข้อมูลเข้ารหัส">
+        <LockIcon size={13} />
+        <span className="hidden sm:inline">เข้ารหัส</span>
+      </span>
+      <span className="opacity-30">•</span>
+      <span className="flex items-center gap-1" title="ไม่ระบุตัวตน">
+        <EyeOffIcon size={13} />
+        <span className="hidden sm:inline">ไม่ระบุชื่อ</span>
+      </span>
+      <span className="opacity-30">•</span>
+      <span className="flex items-center gap-1" title="ลบอัตโนมัติใน 30 วัน">
+        <TimerIcon size={13} />
+        <span className="hidden sm:inline">30 วัน</span>
+      </span>
+    </div>
+  );
+}
+
+/* ============ EMERGENCY EXIT BUTTON ============ */
+function EmergencyExitButton() {
+  const handleExit = () => {
+    if (confirm('ต้องการออกจากระบบและลบข้อมูลทั้งหมดในเครื่องนี้หรือไม่?')) {
+      localStorage.clear();
+      window.location.href = '/';
+    }
+  };
+
+  return (
+    <button
+      onClick={handleExit}
+      className="flex items-center gap-2 px-3 py-2 rounded-xl transition-colors hover:bg-red-50"
+      style={{ color: '#EF4444' }}
+      title="ออกจากระบบอย่างปลอดภัย"
+    >
+      <LogOutIcon size={16} />
+      <span className="text-sm font-medium" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+        ออกฉุกเฉิน
+      </span>
+    </button>
+  );
+}
+
+/* ============ PANIC BUTTON ============ */
+function PanicButton() {
+  const handlePanic = () => {
+    if (confirm('คุณต้องการโทรหา 1323 (สายด่วนสุขภาพจิต) เลยไหม?')) {
+      window.location.href = 'tel:1323';
+    }
+  };
+
+  return (
+    <button
+      onClick={handlePanic}
+      className="fixed top-4 right-4 z-40 w-14 h-14 rounded-full shadow-lg transition-all hover:scale-110 active:scale-95 flex items-center justify-center"
+      style={{ backgroundColor: '#EF4444', color: '#FFFFFF' }}
+      title="โทร 1323 ทันที"
+      aria-label="ปุ่มฉุกเฉิน โทร 1323"
+    >
+      <ZapIcon size={24} />
+    </button>
+  );
+}
+
+/* ============ LINE INTEGRATION ============ */
+function LINEIntegration() {
+  const [qrGenerated, setQrGenerated] = useState(false);
+
+  const generateQR = () => {
+    setQrGenerated(true);
+    toast.success('QR Code สร้างแล้ว (ตัวอย่าง)');
+  };
+
+  return (
+    <div className="p-6 rounded-2xl" style={{ backgroundColor: '#F0FDF4', border: '2px solid #10B981' }}>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#06B876', color: '#FFFFFF' }}>
+          <MessageSquareIcon size={24} />
+        </div>
+        <div>
+          <h3 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#1a1a1a' }}>
+            เชื่อมต่อกับ LINE
+          </h3>
+          <p className="text-xs" style={{ fontFamily: "'IBM Plex Mono', monospace", color: '#6B7280' }}>
+            รับการแจ้งเตือนและติดตาม
+          </p>
+        </div>
+      </div>
+
+      {!qrGenerated ? (
+        <button
+          onClick={generateQR}
+          className="w-full px-4 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+          style={{ backgroundColor: '#06B876', color: '#FFFFFF' }}
+        >
+          <QrCodeIcon size={18} />
+          <span className="font-bold" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+            สร้าง QR Code เชื่อมต่อ
+          </span>
+        </button>
+      ) : (
+        <div className="text-center">
+          <div className="w-48 h-48 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#FFFFFF', border: '2px solid #10B981' }}>
+            <QrCodeIcon size={80} />
+          </div>
+          <p className="text-sm mb-4" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
+            สแกนเพื่อเชื่อม LINE Official Account
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: '#FFFFFF' }}>
+        <p className="text-xs font-bold mb-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#1a1a1a' }}>
+          คุณจะได้รับ:
+        </p>
+        <ul className="text-xs space-y-1.5" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
+          <li className="flex items-start gap-2">
+            <BellIcon size={14} />
+            <span>แจ้งเตือนตรวจสุขภาพจิตทุกวัน</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <MessageSquareIcon size={14} />
+            <span>ติดตามอารมณ์ผ่าน LINE Chat</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <ShieldIcon size={14} />
+            <span>รับทรัพยากรช่วยเหลือ</span>
+          </li>
+        </ul>
+      </div>
+
+      <p className="text-[10px] mt-3 flex items-center gap-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace", color: '#6B7280' }}>
+        <LockIcon size={12} />
+        ยังคงไม่ระบุตัวตน ไม่ต้องใช้ชื่อจริง
+      </p>
+    </div>
+  );
+}
+
+/* ============ ACCESSIBILITY SETTINGS ============ */
+type FontSize = 'normal' | 'large' | 'xlarge';
+type ContrastMode = 'normal' | 'high';
+type FontFamily = 'default' | 'dyslexic';
+
+interface AccessibilityState {
+  fontSize: FontSize;
+  contrastMode: ContrastMode;
+  fontFamily: FontFamily;
+}
+
+function AccessibilitySettings({ settings, onChange }: { settings: AccessibilityState; onChange: (s: AccessibilityState) => void }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h4 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#1a1a1a' }}>
+          <SettingsIcon size={16} />
+          การตั้งค่าการเข้าถึง
+        </h4>
+      </div>
+
+      {/* Font Size */}
+      <div className="p-4 rounded-xl" style={{ backgroundColor: '#F3F4F6' }}>
+        <label className="block text-xs font-bold mb-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
+          <TypeIcon size={14} /> ขนาดตัวอักษร
+        </label>
+        <div className="flex gap-2">
+          {[
+            { value: 'normal' as FontSize, label: 'ปกติ' },
+            { value: 'large' as FontSize, label: 'ใหญ่' },
+            { value: 'xlarge' as FontSize, label: 'ใหญ่มาก' },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => onChange({ ...settings, fontSize: opt.value })}
+              className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all"
+              style={{
+                backgroundColor: settings.fontSize === opt.value ? T.salmon : '#FFFFFF',
+                color: settings.fontSize === opt.value ? '#FFFFFF' : '#374151',
+                border: `1.5px solid ${settings.fontSize === opt.value ? T.salmon : '#D1D5DB'}`,
+                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Contrast Mode */}
+      <div className="p-4 rounded-xl" style={{ backgroundColor: '#F3F4F6' }}>
+        <label className="block text-xs font-bold mb-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
+          <SunIcon size={14} /> ความคมชัดสี
+        </label>
+        <div className="flex gap-2">
+          {[
+            { value: 'normal' as ContrastMode, label: 'ปกติ' },
+            { value: 'high' as ContrastMode, label: 'สูง' },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => onChange({ ...settings, contrastMode: opt.value })}
+              className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all"
+              style={{
+                backgroundColor: settings.contrastMode === opt.value ? T.salmon : '#FFFFFF',
+                color: settings.contrastMode === opt.value ? '#FFFFFF' : '#374151',
+                border: `1.5px solid ${settings.contrastMode === opt.value ? T.salmon : '#D1D5DB'}`,
+                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Font Family */}
+      <div className="p-4 rounded-xl" style={{ backgroundColor: '#F3F4F6' }}>
+        <label className="block text-xs font-bold mb-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
+          <TypeIcon size={14} /> รูปแบบตัวอักษร
+        </label>
+        <div className="flex gap-2">
+          {[
+            { value: 'default' as FontFamily, label: 'ปกติ' },
+            { value: 'dyslexic' as FontFamily, label: 'อ่านง่าย' },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => onChange({ ...settings, fontFamily: opt.value })}
+              className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all"
+              style={{
+                backgroundColor: settings.fontFamily === opt.value ? T.salmon : '#FFFFFF',
+                color: settings.fontFamily === opt.value ? '#FFFFFF' : '#374151',
+                border: `1.5px solid ${settings.fontFamily === opt.value ? T.salmon : '#D1D5DB'}`,
+                fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-[10px] leading-relaxed" style={{ fontFamily: "'IBM Plex Mono', monospace", color: '#6B7280' }}>
+        การตั้งค่าจะบันทึกในเครื่องของคุณ ไม่ถูกส่งไปที่เซิร์ฟเวอร์
+      </p>
+    </div>
+  );
+}
+
+/* ============ SESSION SUMMARY ============ */
+interface SessionSummary {
+  duration: number;
+  startMood: Mood;
+  endMood: Mood;
+  concernsDiscussed: number;
+  apiCallsCount: number;
+}
+
+function SessionSummaryCard({ summary }: { summary: SessionSummary }) {
+  const startInfo = EMO[summary.startMood];
+  const endInfo = EMO[summary.endMood];
+  const minutes = Math.floor(summary.duration / 60000);
+
+  return (
+    <div className="p-5 rounded-2xl" style={{ backgroundColor: '#F9FAFB', border: '2px solid #E5E7EB' }}>
+      <h4 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#1a1a1a' }}>
+        <ClockIcon size={16} />
+        สรุปการสนทนา
+      </h4>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <p className="text-[10px] mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace", color: '#6B7280' }}>
+            อารมณ์เริ่มต้น
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{startInfo.emoji}</span>
+            <span className="text-xs" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
+              {startInfo.label}
+            </span>
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace", color: '#6B7280' }}>
+            อารมณ์ตอนนี้
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{endInfo.emoji}</span>
+            <span className="text-xs" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#374151' }}>
+              {endInfo.label}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 p-3 rounded-xl" style={{ backgroundColor: '#FFFFFF' }}>
+        <div className="text-center">
+          <p className="text-lg font-bold" style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.salmon }}>
+            {minutes}
+          </p>
+          <p className="text-[10px]" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#6B7280' }}>
+            นาที
+          </p>
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold" style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.salmon }}>
+            {summary.concernsDiscussed}
+          </p>
+          <p className="text-[10px]" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#6B7280' }}>
+            ประเด็น
+          </p>
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold" style={{ fontFamily: "'IBM Plex Mono', monospace", color: T.salmon }}>
+            {summary.apiCallsCount}
+          </p>
+          <p className="text-[10px]" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#6B7280' }}>
+            AI calls
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============ MAIN APP SHELL ============ */
 function AppShell({ age, guardianConsent }: { age: string; guardianConsent: boolean }) {
   const [currentView, setCurrentView] = useState<AppView>("home");
@@ -1097,6 +2048,16 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const [crisisDetected, setCrisisDetected] = useState(false);
   const escalationShownRef = useRef(false);
   const [showSupportStrip, setShowSupportStrip] = useState(false);
+  const [activeRegulationTool, setActiveRegulationTool] = useState<RegulationTool | null>(null);
+  const [modalityState, setModalityState] = useState<ModalityState | null>(null);
+  const [emotionHistory, setEmotionHistory] = useState<EmotionHistoryPoint[]>([]);
+  const [accessibilitySettings, setAccessibilitySettings] = useState<AccessibilityState>({
+    fontSize: 'normal',
+    contrastMode: 'normal',
+    fontFamily: 'default',
+  });
+  const [sessionStartTime] = useState(Date.now());
+  const [sessionStartMood] = useState<Mood>("calm");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -1107,12 +2068,20 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
 
   useEffect(() => {
     let cancelled = false;
+    console.log('[Session] Creating session...');
     api.createSession()
       .then(() => {
-        if (!cancelled) setSessionReady(true);
+        if (!cancelled) {
+          console.log('[Session] Session created successfully');
+          setSessionReady(true);
+          toast.success('เซสชันพร้อมใช้งาน');
+        }
       })
-      .catch(() => {
-        if (!cancelled) toast.error("เริ่มเซสชันไม่สำเร็จ โปรดลองโหลดหน้าใหม่");
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('[Session] Failed to create session:', error);
+          toast.error("เริ่มเซสชันไม่สำเร็จ โปรดลองโหลดหน้าใหม่");
+        }
       });
     return () => {
       cancelled = true;
@@ -1198,6 +2167,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const pushTrend = useCallback((key: Mood, sourceLabel: string) => {
     const info = EMO[key];
     setMood(key);
+    setEmotionHistory((prev) => [...prev, { timestamp: Date.now(), mood: key }]);
     setTrendData((prev) => {
       const nextId = prev.length > 0 ? prev[prev.length - 1].id + 1 : 1;
       return [...prev, { id: nextId, valence: info.valence, color: info.color, key, label: info.label }].slice(-9);
@@ -1249,11 +2219,13 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
     noteMultimodal(sourceLabel);
     setIsAnalyzing(true);
+    setModalityState({ mode: "text", status: "processing", startedAt: Date.now() });
 
     const startTime = Date.now();
     try {
       const result = await api.sendMessage(textToSend.trim());
       const duration = Date.now() - startTime;
+      setModalityState({ mode: "text", status: "success", startedAt: startTime, duration });
 
       // Update last log to success
       setDetailedTransparencyLogs((prev) => {
@@ -1283,6 +2255,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
         return updated;
       });
 
+      setModalityState({ mode: "text", status: "error", startedAt: startTime, detail: error instanceof Error ? error.message : undefined });
       toast.error(error instanceof Error ? error.message : "ส่งข้อความไม่สำเร็จ");
     } finally {
       setIsAnalyzing(false);
@@ -1290,12 +2263,25 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   }, [inputText, isAnalyzing, noteMultimodal, pushTrend, sessionReady]);
 
   const analyzeSelfie = async (image: Blob, filename: string) => {
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "ส่งภาพเพื่อตรวจว่ามีใบหน้าในภาพหรือไม่", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
+    const imageUrl = URL.createObjectURL(image);
+
+    setMessages((prev) => [...prev, {
+      id: Math.random().toString(),
+      role: "user",
+      text: "ส่งภาพเพื่อตรวจว่ามีใบหน้าในภาพหรือไม่",
+      timestamp: Date.now(),
+      sourceTag: "เซลฟี่",
+      imageUrl,
+      imageType: "selfie"
+    }]);
     noteMultimodal("เซลฟี่");
     setIsAnalyzing(true);
+    const selfieStart = Date.now();
+    setModalityState({ mode: "selfie", status: "processing", startedAt: selfieStart });
 
     try {
       const result = await api.analyzeSelfie(image, filename);
+      setModalityState({ mode: "selfie", status: "success", startedAt: selfieStart, duration: Date.now() - selfieStart });
       setMessages((prev) => [...prev, {
         id: Math.random().toString(),
         role: "bot",
@@ -1312,6 +2298,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
       }]);
       if (!result.ok) toast.error(result.error || "วิเคราะห์ภาพไม่สำเร็จ");
     } catch (error) {
+      setModalityState({ mode: "selfie", status: "error", startedAt: selfieStart, detail: error instanceof Error ? error.message : undefined });
       toast.error(error instanceof Error ? error.message : "วิเคราะห์ภาพไม่สำเร็จ");
     } finally {
       setIsAnalyzing(false);
@@ -1340,6 +2327,8 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     let stream: MediaStream | null = null;
     setIsAnalyzing(true);
     noteMultimodal("เสียงพูด");
+    const voiceStart = Date.now();
+    setModalityState({ mode: "voice", status: "recording", startedAt: voiceStart });
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredMime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]
@@ -1356,10 +2345,12 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
       });
       if (!audio.size) throw new Error("ไม่พบเสียงที่บันทึก");
 
+      setModalityState({ mode: "voice", status: "processing", startedAt: voiceStart });
       const extension = audio.type.includes("mp4") ? "m4a" : "webm";
       const result = await api.transcribeVoice(audio, `voice.${extension}`);
+      setModalityState({ mode: "voice", status: "success", startedAt: voiceStart, duration: Date.now() - voiceStart });
       if (result.transcript) {
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: `(เสียงพูด) “${result.transcript}”`, timestamp: Date.now(), sourceTag: "เสียงพูด" }]);
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: `(เสียงพูด) "${result.transcript}"`, timestamp: Date.now(), sourceTag: "เสียงพูด" }]);
       }
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
       if (result.ok) {
@@ -1369,6 +2360,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
         toast.error(result.error || "แปลงเสียงไม่สำเร็จ");
       }
     } catch (error) {
+      setModalityState({ mode: "voice", status: "error", startedAt: voiceStart, detail: error instanceof Error ? error.message : undefined });
       toast.error(error instanceof Error ? error.message : "แปลงเสียงไม่สำเร็จ");
     } finally {
       stream?.getTracks().forEach((track) => track.stop());
@@ -1377,14 +2369,27 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   };
 
   const analyzeHomework = async (image: Blob, filename: string) => {
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "ส่งรูปการบ้านให้ใจกระจกอ่านข้อความ", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
+    const imageUrl = URL.createObjectURL(image);
+
+    setMessages((prev) => [...prev, {
+      id: Math.random().toString(),
+      role: "user",
+      text: "ส่งรูปการบ้านให้ใจกระจกอ่านข้อความ",
+      timestamp: Date.now(),
+      sourceTag: "รูปการบ้าน",
+      imageUrl,
+      imageType: "homework"
+    }]);
     noteMultimodal("รูปการบ้าน");
     setIsAnalyzing(true);
+    const ocrStart = Date.now();
+    setModalityState({ mode: "homework", status: "processing", startedAt: ocrStart });
 
     try {
       const result = await api.readHomework(image, filename);
+      setModalityState({ mode: "homework", status: "success", startedAt: ocrStart, duration: Date.now() - ocrStart });
       if (result.detail) {
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: "อ่านข้อความจากภาพแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `“${result.detail}”` }]);
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: "อ่านข้อความจากภาพแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${result.detail}"` }]);
       }
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: result.reply, timestamp: Date.now() }]);
       if (result.ok) {
@@ -1394,6 +2399,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
         toast.error(result.error || "อ่านการบ้านไม่สำเร็จ");
       }
     } catch (error) {
+      setModalityState({ mode: "homework", status: "error", startedAt: ocrStart, detail: error instanceof Error ? error.message : undefined });
       toast.error(error instanceof Error ? error.message : "อ่านการบ้านไม่สำเร็จ");
     } finally {
       setIsAnalyzing(false);
@@ -1416,6 +2422,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     if (!window.confirm("ยืนยันเริ่มการสนทนาใหม่? ประวัติที่จัดเก็บบนเซิร์ฟเวอร์จะยังอยู่จนกว่าคุณจะลบจากเมนูข้อมูล")) return;
     setMessages([{ id: "init_" + Date.now(), role: "bot", text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ", timestamp: Date.now() }]);
     setTrendData([]); setLogEntries([]); setConcernStreak(0); setTransparencyLogs([]); setDetailedTransparencyLogs([]); setMood("calm"); setShowSupportStrip(false);
+    setModalityState(null); setActiveRegulationTool(null); setEmotionHistory([]);
     escalationShownRef.current = false;
     toast("เริ่มการสนทนาใหม่แล้ว");
   };
@@ -1480,8 +2487,43 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     safety: "ความปลอดภัย & ข้อมูล",
   };
 
+  const getFontSizeMultiplier = () => {
+    switch (accessibilitySettings.fontSize) {
+      case 'large': return 1.2;
+      case 'xlarge': return 1.5;
+      default: return 1.0;
+    }
+  };
+
+  const getContrastStyle = () => {
+    if (accessibilitySettings.contrastMode === 'high') {
+      return {
+        filter: 'contrast(1.2) saturate(1.3)',
+      };
+    }
+    return {};
+  };
+
+  const getFontFamily = () => {
+    if (accessibilitySettings.fontFamily === 'dyslexic') {
+      return "'Comic Sans MS', 'Verdana', 'Noto Sans Thai', sans-serif";
+    }
+    return "'Inter', 'Noto Sans Thai', sans-serif";
+  };
+
   return (
-    <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: T.cream }}>
+    <div
+      className="relative min-h-screen flex flex-col"
+      style={{
+        backgroundColor: T.cream,
+        fontSize: `${getFontSizeMultiplier()}rem`,
+        fontFamily: getFontFamily(),
+        ...getContrastStyle(),
+      }}
+    >
+      {/* Panic Button - Always visible except on home page */}
+      {currentView !== "home" && <PanicButton />}
+
       <input
         ref={selfieInputRef}
         type="file"
@@ -1762,6 +2804,11 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                   onDismissCrisis={() => setShowCrisisAlert(false)}
                   crisisDetected={crisisDetected}
                   detailedTransparencyLogs={detailedTransparencyLogs}
+                  modalityState={modalityState}
+                  onPickRegulationTool={(tool) => setActiveRegulationTool(tool)}
+                  emotionHistory={emotionHistory}
+                  accessibilitySettings={accessibilitySettings}
+                  onAccessibilityChange={setAccessibilitySettings}
                 />
               </PageWrapper>
             )}
@@ -1817,6 +2864,14 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
           <PhoneIcon size={18} />
           <span>1323</span>
         </a>
+      )}
+
+      {/* EMOTION REGULATION MODAL */}
+      {activeRegulationTool && (
+        <EmotionRegulationModal
+          tool={activeRegulationTool}
+          onClose={() => setActiveRegulationTool(null)}
+        />
       )}
 
       {/* ESCALATION MODAL */}
@@ -2269,6 +3324,7 @@ function ChatView({
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, concernStreak, transparencyLogs, supportStrip, onDismissSupport, onNotifyCounselor,
   showCrisisAlert, onDismissCrisis, crisisDetected, detailedTransparencyLogs,
+  modalityState, onPickRegulationTool, emotionHistory, accessibilitySettings, onAccessibilityChange,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -2290,6 +3346,11 @@ function ChatView({
   onDismissCrisis: () => void;
   crisisDetected: boolean;
   detailedTransparencyLogs: TransparencyLog[];
+  modalityState: ModalityState | null;
+  onPickRegulationTool: (tool: RegulationTool) => void;
+  emotionHistory: EmotionHistoryPoint[];
+  accessibilitySettings: AccessibilityState;
+  onAccessibilityChange: (s: AccessibilityState) => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -2367,26 +3428,46 @@ function ChatView({
                 </div>
               ) : (
                 <div
-                  className="max-w-[80%] px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm"
+                  className="max-w-[80%] rounded-2xl shadow-sm overflow-hidden"
                   style={{
                     backgroundColor: msg.role === "user" ? T.teal : T.white,
-                    color: msg.role === "user" ? T.white : T.black,
                     border: msg.role === "user" ? "none" : "1.5px solid #EDE6D3",
-                    borderBottomRightRadius: msg.role === "user" ? "6px" : "20px",
-                    borderBottomLeftRadius: msg.role === "bot" ? "6px" : "20px",
-                    fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
                   }}
                 >
-                  {msg.role === "bot" ? (
-                    <div dangerouslySetInnerHTML={{ __html: renderMessageWithLatex(msg.text) }} />
-                  ) : (
-                    msg.text
+                  {/* Display image if available */}
+                  {msg.imageUrl && (
+                    <div className="relative">
+                      <img
+                        src={msg.imageUrl}
+                        alt={msg.imageType === "selfie" ? "เซลฟี่" : "รูปการบ้าน"}
+                        className="w-full h-auto max-h-[300px] object-cover"
+                        style={{ display: "block" }}
+                      />
+                      <div className="absolute top-2 left-2 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1" style={{ backgroundColor: "rgba(0,0,0,0.6)", color: "#FFFFFF" }}>
+                        {msg.imageType === "selfie" ? <CameraIcon size={12} /> : <ImageIcon size={12} />}
+                        {msg.imageType === "selfie" ? "เซลฟี่" : "รูปการบ้าน"}
+                      </div>
+                    </div>
                   )}
-                  {msg.role === "bot" && (
-                    <button onClick={() => speakText(msg.text)} className="ml-2 text-xs opacity-50 hover:opacity-100 transition-opacity">
-                      <SpeakerIcon size={14} />
-                    </button>
-                  )}
+                  {/* Text content */}
+                  <div
+                    className="px-5 py-3 text-sm leading-relaxed"
+                    style={{
+                      color: msg.role === "user" ? T.white : T.black,
+                      fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
+                    }}
+                  >
+                    {msg.role === "bot" ? (
+                      <div dangerouslySetInnerHTML={{ __html: renderMessageWithLatex(msg.text) }} />
+                    ) : (
+                      msg.text
+                    )}
+                    {msg.role === "bot" && (
+                      <button onClick={() => speakText(msg.text)} className="ml-2 text-xs opacity-50 hover:opacity-100 transition-opacity">
+                        <SpeakerIcon size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -2440,27 +3521,47 @@ function ChatView({
           </div>
         )}
 
+        {/* Modality indicator — shows which input mode is active and its live status */}
+        {modalityState && (
+          <div className="px-4 pt-3">
+            <ModalityIndicator state={modalityState} />
+          </div>
+        )}
+
         {/* Input toolbar */}
         <div className="p-4 space-y-3" style={{ borderTop: `2px solid ${T.teal}`, backgroundColor: T.white }}>
           <div className="flex items-center gap-2">
             {[
-              { handler: handleSelfie, icon: <CameraIcon size={18} />, title: "ตรวจใบหน้าในภาพ" },
-              { handler: handleVoice, icon: <MicIcon size={18} />, title: "พูดระบาย" },
-              { handler: handleHomeworkPhoto, icon: <ImageIcon size={18} />, title: "แนบรูปการบ้าน" },
-            ].map(({ handler, icon, title }) => (
-              <button
-                key={title}
-                onClick={handler}
-                disabled={isAnalyzing}
-                title={title}
-                className="p-2.5 rounded-full text-sm font-bold transition-all hover:text-white"
-                style={{ border: `2px solid ${T.teal}`, backgroundColor: "#E3EAE0", color: T.teal }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = T.teal; e.currentTarget.style.color = T.white; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#E3EAE0"; e.currentTarget.style.color = T.teal; }}
-              >
-                {icon}
-              </button>
-            ))}
+              { handler: handleSelfie, icon: <CameraIcon size={18} />, title: "ตรวจใบหน้าในภาพ", mode: "selfie" as ModalityMode },
+              { handler: handleVoice, icon: <MicIcon size={18} />, title: "พูดระบาย", mode: "voice" as ModalityMode },
+              { handler: handleHomeworkPhoto, icon: <ImageIcon size={18} />, title: "แนบรูปการบ้าน", mode: "homework" as ModalityMode },
+            ].map(({ handler, icon, title, mode }) => {
+              const isActive =
+                modalityState?.mode === mode &&
+                (modalityState.status === "processing" || modalityState.status === "recording");
+              return (
+                <button
+                  key={title}
+                  onClick={handler}
+                  disabled={isAnalyzing}
+                  title={title}
+                  aria-label={title}
+                  aria-pressed={isActive}
+                  className="p-2.5 rounded-full text-sm font-bold transition-all"
+                  style={{
+                    border: `2px solid ${T.teal}`,
+                    backgroundColor: isActive ? T.teal : "#E3EAE0",
+                    color: isActive ? T.white : T.teal,
+                    minWidth: "44px",
+                    minHeight: "44px",
+                  }}
+                  onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = T.teal; e.currentTarget.style.color = T.white; } }}
+                  onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = "#E3EAE0"; e.currentTarget.style.color = T.teal; } }}
+                >
+                  {icon}
+                </button>
+              );
+            })}
           </div>
           <div className="flex gap-2">
             <input
@@ -2526,6 +3627,19 @@ function ChatView({
               หากพบข้อความที่น่าเป็นห่วง ระบบจะแสดงช่องทางขอความช่วยเหลือ แต่จะไม่แจ้งครูหรือผู้ปกครองอัตโนมัติ
             </p>
           )}
+        </div>
+
+        {/* Emotion regulation tools */}
+        <EmotionRegulationCard mood={mood} onPick={onPickRegulationTool} />
+
+        {/* Live Emotion Indicator */}
+        {emotionHistory.length > 0 && (
+          <LiveEmotionIndicator history={emotionHistory} />
+        )}
+
+        {/* Accessibility Settings */}
+        <div className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+          <AccessibilitySettings settings={accessibilitySettings} onChange={onAccessibilityChange} />
         </div>
 
         {/* Transparency logs */}
@@ -2672,6 +3786,19 @@ function TrendView({ trendData, logEntries, sessionReady, refreshKey, onClearAll
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {/* Session Summary - if there's current session data */}
+      {trendData.length > 0 && logEntries.length > 0 && (
+        <SessionSummaryCard
+          summary={{
+            duration: Date.now() - (logEntries[logEntries.length - 1]?.time ? new Date().getTime() : Date.now()),
+            startMood: trendData[0]?.key || "calm",
+            endMood: trendData[trendData.length - 1]?.key || "calm",
+            concernsDiscussed: logEntries.filter((e) => EMO[e.key]?.concern).length,
+            apiCallsCount: logEntries.length,
+          }}
+        />
+      )}
+
       {loading && <div className="text-center py-6 text-gray-500">กำลังโหลดข้อมูล...</div>}
       {!loading && serverTrend && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2757,16 +3884,69 @@ function TrendView({ trendData, logEntries, sessionReady, refreshKey, onClearAll
 }
 
 /* ============ SCHOOL VIEW ============ */
+const MOOD_ORDER: Mood[] = ["stressed", "sad", "tired", "neutral", "calm", "positive"];
+
+const MOOD_GROUPS: { key: string; label: string; moods: Mood[]; color: string; hint: string }[] = [
+  { key: "heavy", label: "หนักใจ", moods: ["stressed", "sad"], color: "#A85F73", hint: "เครียด กังวล หรือเศร้า" },
+  { key: "flat", label: "เหนื่อย / ปกติ", moods: ["tired", "neutral"], color: "#887F9E", hint: "เหนื่อยล้าหรือรู้สึกเฉย ๆ" },
+  { key: "bright", label: "สดใส", moods: ["calm", "positive"], color: "#6C8C64", hint: "ผ่อนคลายหรือมีความสุข" },
+];
+
+/** Semicircular gauge for the aggregated wellbeing index (0..1). */
+function WellbeingGauge({ value }: { value: number }) {
+  const clamped = Math.min(1, Math.max(0, value));
+  const radius = 70;
+  const arcLength = Math.PI * radius;
+  const band = clamped < 0.4 ? { label: "ต้องการการดูแล", color: "#A85F73" }
+    : clamped < 0.6 ? { label: "ทรง ๆ", color: "#B78A3F" }
+    : { label: "อยู่ในเกณฑ์ดี", color: "#4E7A46" };
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg width="180" height="104" viewBox="0 0 180 104" role="img" aria-label={`ดัชนีความรู้สึกรวม ${Math.round(clamped * 100)} จาก 100`}>
+        <path d="M20 90 A70 70 0 0 1 160 90" fill="none" stroke="#EDE6D3" strokeWidth="14" strokeLinecap="round" />
+        <path
+          d="M20 90 A70 70 0 0 1 160 90"
+          fill="none"
+          stroke={band.color}
+          strokeWidth="14"
+          strokeLinecap="round"
+          strokeDasharray={arcLength}
+          strokeDashoffset={arcLength * (1 - clamped)}
+          style={{ transition: "stroke-dashoffset 0.9s cubic-bezier(0.25,1,0.25,1)" }}
+        />
+        <text x="90" y="78" textAnchor="middle" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", fontSize: "30px", fontWeight: 800, fill: T.black }}>
+          {Math.round(clamped * 100)}
+        </text>
+        <text x="90" y="94" textAnchor="middle" style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", fill: "#9CA3AF" }}>
+          / 100
+        </text>
+      </svg>
+      <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: `${band.color}1A`, color: band.color, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>
+        {band.label}
+      </span>
+    </div>
+  );
+}
+
 function SchoolView({ sessionReady, refreshKey }: { sessionReady: boolean; refreshKey: number }) {
   const [schoolData, setSchoolData] = useState<SchoolResult | null>(null);
+  const [myTrend, setMyTrend] = useState<TrendResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!sessionReady) return;
     let cancelled = false;
     setLoading(true);
-    api.school()
-      .then((result) => { if (!cancelled) setSchoolData(result); })
+    Promise.all([
+      api.school(),
+      api.trend().catch(() => null),
+    ])
+      .then(([school, trend]) => {
+        if (cancelled) return;
+        setSchoolData(school);
+        setMyTrend(trend);
+      })
       .catch(() => { if (!cancelled) toast.error("โหลดข้อมูลโรงเรียนไม่สำเร็จ"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -2791,15 +3971,39 @@ function SchoolView({ sessionReady, refreshKey }: { sessionReady: boolean; refre
 
   const stressRatio = schoolData.stress_ratio ?? 0;
   const regularRatio = schoolData.regular_ratio ?? 0;
+  const readings = schoolData.readings;
+  const countOf = (mood: Mood) => schoolData.distribution[mood] ?? 0;
+
+  // Wellbeing index: readings weighted by each mood's valence.
+  const wellbeing = readings > 0
+    ? MOOD_ORDER.reduce((sum, mood) => sum + countOf(mood) * EMO[mood].valence, 0) / readings
+    : 0;
+
+  const groups = MOOD_GROUPS.map((group) => {
+    const count = group.moods.reduce((sum, mood) => sum + countOf(mood), 0);
+    return { ...group, count, ratio: readings > 0 ? count / readings : 0 };
+  });
+
+  const rankedMoods = [...MOOD_ORDER]
+    .map((mood) => ({ mood, count: countOf(mood), ratio: readings > 0 ? countOf(mood) / readings : 0 }))
+    .sort((a, b) => b.count - a.count);
+  const topMoods = rankedMoods.filter((row) => row.count > 0).slice(0, 3);
+
+  // "You are not alone": compare the visitor's own concern ratio against the school average.
+  const myDays = myTrend?.days ?? [];
+  const myConcernDays = myDays.filter((day) => EMO[day.mood]?.concern).length;
+  const myConcernRatio = myDays.length > 0 ? myConcernDays / myDays.length : null;
+  const peerDelta = myConcernRatio !== null ? myConcernRatio - stressRatio : null;
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="inline-block px-4 py-1.5 rounded-full text-xs font-mono font-bold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
         ภาพรวมแบบไม่ระบุตัวตน
       </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { num: schoolData.readings.toString(), label: "รายการอารมณ์ทั้งหมด" },
+          { num: readings.toString(), label: "รายการอารมณ์ทั้งหมด" },
           { num: `${Math.round(stressRatio * 100)}%`, label: "รายการเครียดหรือเศร้า" },
           { num: `${Math.round(regularRatio * 100)}%`, label: "ผู้ใช้งานประจำ" },
           { num: schoolData.users.toString(), label: "เซสชันที่มีข้อมูล" },
@@ -2810,26 +4014,135 @@ function SchoolView({ sessionReady, refreshKey }: { sessionReady: boolean; refre
           </div>
         ))}
       </div>
+
+      {/* Wellbeing index + mood group split */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="md:col-span-2 p-6 rounded-2xl flex flex-col items-center justify-center" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+          <h4 className="font-bold text-sm mb-1 flex items-center gap-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+            <TrendUpIcon size={15} />
+            ดัชนีความรู้สึกรวม
+          </h4>
+          <p className="text-[11px] text-center mb-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#8a8a8a" }}>
+            ถ่วงน้ำหนักจากทุกรายการอารมณ์ในโรงเรียน
+          </p>
+          <WellbeingGauge value={wellbeing} />
+        </div>
+
+        <div className="md:col-span-3 p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
+          <h4 className="font-bold text-sm mb-4" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+            สัดส่วนตามกลุ่มอารมณ์
+          </h4>
+
+          {/* Single stacked bar */}
+          <div className="flex h-7 rounded-full overflow-hidden mb-4" style={{ backgroundColor: "#F0F0F0" }}>
+            {groups.map((group) => (
+              group.ratio > 0 ? (
+                <div
+                  key={group.key}
+                  title={`${group.label} ${Math.round(group.ratio * 100)}%`}
+                  style={{ width: `${group.ratio * 100}%`, backgroundColor: group.color, transition: "width 0.8s ease" }}
+                />
+              ) : null
+            ))}
+          </div>
+
+          <div className="space-y-2.5">
+            {groups.map((group) => (
+              <div key={group.key} className="flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: group.color }} />
+                <span className="text-xs font-bold flex-shrink-0" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black, width: "92px" }}>
+                  {group.label}
+                </span>
+                <span className="text-[11px] flex-1 truncate" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#8a8a8a" }}>
+                  {group.hint}
+                </span>
+                <span className="text-xs font-bold flex-shrink-0" style={{ fontFamily: "'IBM Plex Mono', monospace", color: group.color }}>
+                  {Math.round(group.ratio * 100)}%
+                </span>
+                <span className="text-[10px] flex-shrink-0 text-right" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#9CA3AF", width: "56px" }}>
+                  {group.count} ครั้ง
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* "You are not alone" peer comparison */}
+      <div className="p-6 rounded-2xl" style={{ backgroundColor: "#FFF7F3", border: "1.5px solid #E3A48E" }}>
+        <h4 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6E3826" }}>
+          <UsersIcon size={15} />
+          คุณไม่ได้อยู่คนเดียว
+        </h4>
+
+        {myConcernRatio === null ? (
+          <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6E3826" }}>
+            เมื่อคุณบันทึกอารมณ์สักสองสามวัน ระบบจะเทียบให้เห็นว่าวันที่หนักใจของคุณอยู่ในระดับใกล้เคียงกับเพื่อน ๆ แค่ไหน โดยไม่เปิดเผยข้อมูลของใครเลย
+          </p>
+        ) : (
+          <>
+            <div className="space-y-3 mb-3">
+              {[
+                { label: "วันที่หนักใจของคุณ", ratio: myConcernRatio, color: "#A85F73" },
+                { label: "ค่าเฉลี่ยของโรงเรียน", ratio: stressRatio, color: "#887F9E" },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center gap-3">
+                  <span className="text-xs font-semibold flex-shrink-0" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6E3826", width: "130px" }}>
+                    {row.label}
+                  </span>
+                  <div className="flex-1 h-5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,0,0,0.06)" }}>
+                    <div className="h-full rounded-full" style={{ width: `${Math.round(row.ratio * 100)}%`, backgroundColor: row.color, transition: "width 0.8s ease" }} />
+                  </div>
+                  <span className="text-xs font-bold flex-shrink-0 w-10 text-right" style={{ fontFamily: "'IBM Plex Mono', monospace", color: row.color }}>
+                    {Math.round(row.ratio * 100)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs leading-relaxed" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6E3826" }}>
+              {peerDelta !== null && peerDelta > 0.15
+                ? "ช่วงนี้คุณมีวันที่หนักใจมากกว่าค่าเฉลี่ยอยู่บ้าง ลองใช้เครื่องมือคลายอารมณ์ในหน้าคุยกับกระจก หรือชวนผู้ใหญ่ที่ไว้ใจคุยดูนะ หากรู้สึกไม่ปลอดภัย โทร 1323 ได้ทุกเวลา"
+                : "สัดส่วนวันที่หนักใจของคุณอยู่ในระดับใกล้เคียงกับเพื่อนคนอื่น ๆ ในโรงเรียน ความรู้สึกแบบนี้เกิดขึ้นกับหลายคน และไม่ใช่เรื่องผิดเลย"}
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Full mood distribution, ordered from heavy to bright */}
       <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-        <h4 className="font-bold text-base mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การกระจายอารมณ์</h4>
+        <div className="flex items-baseline justify-between mb-4 gap-3 flex-wrap">
+          <h4 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การกระจายอารมณ์</h4>
+          {topMoods.length > 0 && (
+            <p className="text-[11px]" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#8a8a8a" }}>
+              พบมากสุด: {topMoods.map((row) => `${EMO[row.mood].label} ${Math.round(row.ratio * 100)}%`).join(" · ")}
+            </p>
+          )}
+        </div>
         <div className="space-y-3">
-          {Object.entries(schoolData.distribution).map(([moodKey, count]) => {
-            const typedMood = (moodKey in EMO ? moodKey : "neutral") as Mood;
-            const info = EMO[typedMood];
-            const percentage = schoolData.readings > 0 ? Math.round((count / schoolData.readings) * 100) : 0;
+          {MOOD_ORDER.map((mood) => {
+            const info = EMO[mood];
+            const count = countOf(mood);
+            const percentage = readings > 0 ? Math.round((count / readings) * 100) : 0;
             return (
-              <div key={moodKey} className="flex items-center gap-3">
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: info.color }} />
-                <span className="text-sm font-semibold w-32">{info.label}</span>
+              <div key={mood} className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: info.color }} />
+                <span className="text-sm font-semibold flex-shrink-0" style={{ width: "128px" }}>{info.label}</span>
                 <div className="flex-1 h-6 rounded-full overflow-hidden" style={{ backgroundColor: "#F0F0F0" }}>
-                  <div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: info.color }} />
+                  <div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: info.color, transition: "width 0.8s ease" }} />
                 </div>
                 <span className="text-sm font-bold w-12 text-right">{percentage}%</span>
+                <span className="text-[10px] w-16 text-right" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#9CA3AF" }}>
+                  {count} ครั้ง
+                </span>
               </div>
             );
           })}
         </div>
+        <p className="text-[10px] mt-4 pt-3 leading-relaxed" style={{ borderTop: "1px solid #EDE6D3", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#9CA3AF" }}>
+          กราฟแนวโน้มรายสัปดาห์ของทั้งโรงเรียนยังไม่แสดง เพราะ API ภาพรวมส่งคืนเฉพาะยอดรวมสะสม ไม่มีข้อมูลแยกตามวัน
+        </p>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { title: "เกณฑ์ขั้นต่ำ", desc: "ไม่แสดงข้อมูลรวมจนกว่าจะมีผู้ใช้อย่างน้อย 5 เซสชัน" },
@@ -2879,6 +4192,21 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
 
       {subTab === "privacy" && (
         <div className="space-y-4">
+          {/* Safety Indicators */}
+          <div className="p-4 rounded-2xl flex items-center justify-between" style={{ backgroundColor: '#F0FDF4', border: '1.5px solid #10B981' }}>
+            <div>
+              <h4 className="font-bold text-sm mb-1 flex items-center gap-2" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: '#1a1a1a' }}>
+                <ShieldIcon size={16} />
+                พื้นที่ปลอดภัย
+              </h4>
+              <SafetyIndicators />
+            </div>
+            <EmergencyExitButton />
+          </div>
+
+          {/* LINE Integration */}
+          <LINEIntegration />
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               { label: "อายุที่ยืนยัน", value: age ? `${age} ปี` : "ไม่ได้ระบุ" },
