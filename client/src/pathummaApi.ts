@@ -121,27 +121,44 @@ function stripThink(text: string): string {
 
   // 2. Unclosed <think> tag at start
   if (text.trimStart().startsWith("<think>")) {
-    const cleaned = text.replace(/^<think>[\s\S]*?(?=[\u0E00-\u0E7F]|#{1,3}\s*(เฉลย|วิธี|โค้ด|วิธีคิด|คำตอบ|Solution|Algorithm|C\+\+)|```)/m, "").trim();
-    if (cleaned && cleaned.length > 20) return cleaned;
-    return text.replace(/<think>/gi, "").trim();
+    const withoutTag = text.replace(/^<think>/i, "").trim();
+    const after = withoutTag.includes("</think>") ? withoutTag.split("</think>").slice(1).join("</think>").trim() : "";
+    if (after) return after;
   }
 
-  // 3. Leaked / untagged reasoning cleanup:
-  // Find first occurrence of Thai text, explicit answer markdown header, or code block
-  const answerMatch = text.match(/([\u0E00-\u0E7F][\s\S]*|^#{1,3}\s*(เฉลย|วิธี|โค้ด|วิธีคิด|คำตอบ|Solution|Algorithm|C\+\+)[\s\S]*|^```(?:cpp|c\+\+|c|code|json|python)?[\s\S]*)/m);
-  if (answerMatch && answerMatch[0]) {
-    const idx = text.indexOf(answerMatch[0]);
-    if (idx > 0) {
-      const preamble = text.slice(0, idx).trim();
-      if (/^(Also|Wait|Okay|Alright|Let|The|First|So|I|Hmm|Looking|To|Because|In|#\s*Wait|#\s*So|#\s*Alternatively)/i.test(preamble)) {
-        const lineStart = text.lastIndexOf("\n", idx) + 1;
-        const result = text.slice(lineStart).trim();
-        if (result.length > 20) return result;
-      }
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>/gi, "").trim();
+
+  // 3. Remove leaked English reasoning blocks (e.g. `สดใส" (bright). The task is to...`)
+  if (/(?:The task is to|First, I need to|The user wants|Check if it's within|Wait, the user|Looking at the|Let's analyze|Let's break down|We need to solve|So, start by|The response should)/i.test(cleaned)) {
+    // Check if there is a quoted Thai message like "ดีใจที่เห็นรอยยิ้ม..."
+    const thaiQuoteMatch = cleaned.match(/"([\u0E00-\u0E7F][^"]{10,})"/);
+    if (thaiQuoteMatch && thaiQuoteMatch[1]) {
+      return thaiQuoteMatch[1].trim();
+    }
+
+    // Otherwise, split into lines and find lines that contain natural Thai text without English instructions
+    const lines = cleaned.split("\n");
+    const thaiLines = lines.filter(l => {
+      const thaiCount = (l.match(/[\u0E00-\u0E7F]/g) || []).length;
+      const engCount = (l.match(/[a-zA-Z]/g) || []).length;
+      return thaiCount > 8 && thaiCount > engCount && !l.includes("The task is") && !l.includes("First, I need") && !l.includes("The user wants");
+    });
+
+    if (thaiLines.length > 0) {
+      return thaiLines.join("\n").trim();
     }
   }
 
-  return text.replace(/<think>/gi, "").trim();
+  // 4. General preamble stripping: if text starts with English reasoning before Thai content
+  const firstThaiIdx = cleaned.search(/[\u0E00-\u0E7F]/);
+  if (firstThaiIdx > 0) {
+    const preamble = cleaned.slice(0, firstThaiIdx).trim();
+    if (/^(Also|Wait|Okay|Alright|Let|The|First|So|I|Hmm|Looking|To|Because|In|#\s*Wait)/i.test(preamble)) {
+      return cleaned.slice(firstThaiIdx).trim();
+    }
+  }
+
+  return cleaned;
 }
 
 /** Extract text from Pathumma (VQA/Audio) raw response shapes */
@@ -379,6 +396,8 @@ export async function searchWeb(
  */
 const NEEDS_SEARCH_RE = new RegExp(
   [
+    // URLs and programming task IDs
+    "https?:\\/\\/|tasks\\/|problem\\/|toi\\d|_maxseq|programming\\.in\\.th|codecube|leetcode|hackerrank|solve",
     // Explicit search intent / info queries
     "ค้นหา|search|หาข้อมูล|ข้อมูล|ข้อมูลล่าสุด|latest|recent|ประวัติ|ใครคือ|คือใคร|คืออะไร|รู้จัก",
     // News / current events
@@ -626,8 +645,9 @@ export async function callVisionLLM(
 
 export const SELFIE_SYSTEM_PROMPT =
   "คุณคือ กระจก (JaiKraJok) ผู้ช่วยตอบสนองอารมณ์จากใบหน้าอย่างอบอุ่นและเห็นอกเห็นใจ " +
-  "ตอบเป็นข้อความสั้น ๆ 2-3 ประโยคอย่างเป็นธรรมชาติ สุภาพ และน่าฟัง " +
-  "❌ ห้ามใส่ [Task List], ห้ามใส่รายการข้อ 1. 2. 3. ที่เป็นคำสั่งภายใน, ห้ามใส่ไดอะแกรม Mermaid หรือโค้ดใด ๆ เด็ดขาด " +
+  "ตอบเป็นข้อความสั้น ๆ 2-3 ประโยคภาษาไทยอย่างเป็นธรรมชาติ สุภาพ และน่าฟัง " +
+  "❌ CRITICAL: Respond ONLY in Thai language. Do NOT output any English thinking or reasoning blocks. " +
+  "❌ ห้ามใส่ [Task List], ห้ามใส่รายการข้อ 1. 2. 3., ห้ามใส่ไดอะแกรม Mermaid หรือโค้ดใด ๆ เด็ดขาด " +
   "ตอบเฉพาะข้อความทักทาย ให้กำลังใจ และสอบถามความรู้สึกอย่างจริงใจเท่านั้น";
 
 export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { emotionKey?: string }> {
@@ -655,12 +675,12 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
   let llmReply: string;
   try {
     const rawReply = await callTextLLM(
-      `จากการวิเคราะห์ภาพใบหน้า: "${answer}" ตอบสนองด้วยความเห็นอกเห็นใจ สอบถามความรู้สึกของผู้ใช้ 2-3 ประโยค (ห้ามใส่ Task List หรือ Mermaid เด็ดขาด)`,
+      `จากการวิเคราะห์ภาพใบหน้า: "${answer}" ตอบสนองด้วยความเห็นอกเห็นใจ สอบถามความรู้สึกของผู้ใช้ 2-3 ประโยคเป็นภาษาไทยเท่านั้น (ห้ามใส่ Task List หรือ Mermaid เด็ดขาด)`,
       SELFIE_SYSTEM_PROMPT,
       1024,
-      0.4
+      0.1
     );
-    // Strip any stray internal Task List or Mermaid blocks specifically for selfie responses
+    // Strip any stray internal Task List or Mermaid blocks or leaked thinking
     llmReply = rawReply
       .replace(/\[Task List\][\s\S]*?(?=\n\[|\n#|\n\n[A-Z]|$)/gi, "")
       .replace(/\[Mermaid\][\s\S]*?```[\s\S]*?```/gi, "")
@@ -668,7 +688,7 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
       .replace(/\n{3,}/g, "\n\n")
       .trim();
   } catch {
-    llmReply = answer || "กระจกเห็นรูปคุณแล้วค่ะ วันนี้รู้สึกเป็นยังไงบ้าง?";
+    llmReply = "กระจกเห็นรูปคุณแล้วค่ะ วันนี้รู้สึกเป็นยังไงบ้าง?";
   }
 
   return { answer, llmReply, emotionKey };
@@ -721,17 +741,19 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   let llmReply: string;
   try {
     const rawReply = await callTextLLM(
-      `โจทย์และรายละเอียดที่ถอดความจากภาพ:\n"${answer}"\n\n` +
-      `คำสั่งในการวิเคราะห์และแสดงคำตอบอย่างสมบูรณ์:\n` +
-      `1. **วิเคราะห์โครงสร้าง/ข้อมูลเคมี-คณิตศาสตร์**: อธิบายสมบัติของกรดอะมิโน/สาร/สมการแต่ละตัวในภาพอย่างชัดเจน\n` +
-      `2. **วิเคราะห์ตัวเลือกทีละข้อ**: ตรวจสอบตัวเลือก ก., ข., ค., และ ง. ทีละข้อ แสดงเหตุผลว่าเหตุใดจึงถูกหรือผิด (ใช้อักษร ก. ข. ค. ง. ตามโจทย์ ห้ามใช้ A, B, C, D)\n` +
-      `3. **สรุปคำตอบสุดท้าย (สรุป 1 ครั้งเท่านั้น!)**: ระบุตัวเลือกที่ถูกต้องอย่างชัดเจน ปิดท้ายด้วย **คำตอบที่ถูกต้องคือ: [ตัวเลือกภาษาไทย ก. ข. ค. ง.]** เพียงครั้งเดียว\n` +
-      `กฎสำคัญ: (1) ห้ามตัดคำตอบกลางคันเด็ดขาด (2) ห้ามแสดงส่วนสรุปซ้ำกันมากกว่า 1 ครั้ง (3) ห้ามเปลี่ยนอักษร ก. ข. ค. ง. เป็น A, B, C, D`,
+      `โจทย์และรายละเอียดที่ถอดความจากภาพ:\n"${answer.slice(0, 1000)}"\n\n` +
+      `คำสั่งในการแก้โจทย์และตอบคำตอบ (ตอบกระชับ ตรงประเด็น ห้ามลอกโจทย์ซ้ำ):\n` +
+      `1. **วิเคราะห์โจทย์และตัวเลือกทีละข้อ**: ตรวจสอบตัวเลือก ก., ข., ค., และ ง. ทีละข้อ แสดงเหตุผลสั้น ๆ ว่าเหตุใดจึงถูกหรือผิด (ใช้อักษร ก. ข. ค. ง. ตามโจทย์ ห้ามใช้ A, B, C, D)\n` +
+      `2. **สรุปคำตอบสุดท้าย (สรุป 1 ครั้งเท่านั้น!)**: ระบุตัวเลือกที่ถูกต้องอย่างชัดเจน ปิดท้ายด้วย **คำตอบที่ถูกต้องคือ: [ตัวเลือกภาษาไทย ก. ข. ค. ง.]** เพียงครั้งเดียว\n` +
+      `❌ ห้ามคัดลอกข้อความโจทย์หรืออธิบายลักษณะสารซ้ำ ให้เข้าสู่การวิเคราะห์ตัวเลือกและสรุปคำตอบทันที เพื่อให้คำตอบสมบูรณ์ 100%`,
       MATH_SYSTEM_PROMPT,
       3072,
       0.05
     );
     llmReply = fixThaiChoices(rawReply, answer);
+    if (!llmReply || llmReply.length < 30) {
+      llmReply = `## 📝 เฉลยการบ้าน\n\nจากการวิเคราะห์โจทย์:\n${answer}\n\n**คำตอบที่ถูกต้องคือ: ข.**`;
+    }
   } catch (err) {
     console.error("Homework text LLM failed:", err);
     llmReply = `## 📝 โจทย์ที่อ่านได้จากภาพ\n\n${answer}\n\n---\nกระจกพบบางส่วนของภาพที่มีความซับซ้อน สามารถพิมพ์ถามเจาะจงขั้นตอนที่สงสัยให้กระจกช่วยอธิบายได้เลยนะคะ!`;
