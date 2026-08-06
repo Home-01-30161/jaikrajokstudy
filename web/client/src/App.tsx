@@ -1276,13 +1276,18 @@ function SalmonBtn({ children, onClick, fullWidth = false }: {
 
 /* ============ LOGIN PAGE ============ */
 function LoginPage({ onNext }: { onNext: () => void }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    gsap.fromTo(".login-img", { x: -30 }, { x: 0, duration: 1.0, ease: "power3.out" });
-    gsap.fromTo(".login-form", { y: 20 }, { y: 0, duration: 0.8, ease: "back.out(1.2)", delay: 0.2 });
+    const ctx = gsap.context(() => {
+      gsap.fromTo(".login-img", { x: -30 }, { x: 0, duration: 1.0, ease: "power3.out" });
+      gsap.fromTo(".login-form", { y: 20 }, { y: 0, duration: 0.8, ease: "back.out(1.2)", delay: 0.2 });
+    }, rootRef);
+    return () => ctx.revert();
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-hidden" style={{ backgroundColor: T.black }}>
+    <div ref={rootRef} className="relative min-h-screen overflow-hidden" style={{ backgroundColor: T.black }}>
       <CheckerStrip className="fixed top-0 left-0 right-0 z-50" />
       
       {/* LEFT: collage only (no grid) */}
@@ -2964,15 +2969,20 @@ function HomeView({
   onMoodTap: (key: Mood) => void;
 }) {
   const [hoveredMode, setHoveredMode] = useState<string | null>(null);
+  const hvRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Hero entrance animation
-    gsap.fromTo("#hv-kicker", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out" });
-    gsap.fromTo("#hv-headline", { y: 30 }, { y: 0, duration: 0.9, ease: "power3.out", delay: 0.1 });
-    gsap.fromTo("#hv-body", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.2 });
-    gsap.fromTo("#hv-ctas", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.3 });
-    gsap.fromTo("#hv-img", { scale: 0.95 }, { scale: 1, duration: 1.0, ease: "power2.out", delay: 0.2 });
-    gsap.fromTo(".hv-strip", { y: 30 }, { y: 0, duration: 0.8, stagger: 0.1, ease: "power3.out", delay: 0.4 });
+    // Use gsap.context() so selectors are scoped to the mounted DOM subtree,
+    // preventing "target not found" warnings when IDs haven't rendered yet.
+    const ctx = gsap.context(() => {
+      gsap.fromTo("#hv-kicker",  { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out" });
+      gsap.fromTo("#hv-headline",{ y: 30 }, { y: 0, duration: 0.9, ease: "power3.out", delay: 0.1 });
+      gsap.fromTo("#hv-body",    { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.2 });
+      gsap.fromTo("#hv-ctas",    { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.3 });
+      gsap.fromTo("#hv-img",     { scale: 0.95 }, { scale: 1, duration: 1.0, ease: "power2.out", delay: 0.2 });
+      gsap.fromTo(".hv-strip",   { y: 30 }, { y: 0, duration: 0.8, stagger: 0.1, ease: "power3.out", delay: 0.4 });
+    }, hvRootRef);
+    return () => ctx.revert();
   }, []);
 
   const hour = new Date().getHours();
@@ -2997,7 +3007,7 @@ function HomeView({
   const SERIF = "'Playfair Display', 'Noto Serif Thai', Georgia, serif";
 
   return (
-    <div style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem", backgroundColor: CREAM }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
+    <div ref={hvRootRef} style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem", backgroundColor: CREAM }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
 
       {/* HERO: Aardvark editorial cream warmth + Pieter typography scale */}
       <section
