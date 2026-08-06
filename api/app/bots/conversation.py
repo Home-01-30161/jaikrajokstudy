@@ -1,4 +1,4 @@
-﻿"""Phase 1 conversation flow (in-memory)."""
+﻿"""Conversation flow for JaiKrajok LINE Official Account."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import threading
 import time
 
 from app.services import pathumma, sentiment
+from app.services.mood import classify as classify_mood, MOOD_LABELS_TH
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -48,22 +49,51 @@ def _set_mode(user_id: str, mode: str) -> None:
 
         _sessions[user_id] = (mode, now)
 
+
+# ---------------------------------------------------------------------------
+# Message templates
+# ---------------------------------------------------------------------------
+
 WELCOME = (
-    "สวัสดี เราคือ JaiKrajok (ใจกระจก) เพื่อนช่วยเรียนที่ใส่ใจอารมณ์\n\n"
-    "พิมพ์เลขเมนู:\n"
-    "1) คุยเรื่องเรียน\n"
-    "2) เช็คอารมณ์จากข้อความ\n"
-    "3) วิธีใช้ / ช่วยเหลือ\n\n"
-    "หรือพิมพ์คำถามเรียนมาได้เลย"
+    "สวัสดี! ฉันคือ ใจกระจก (JaiKrajok)\n"
+    "เพื่อนช่วยเรียนที่ใส่ใจอารมณ์ของคุณ\n\n"
+    "━━━━━━━━━━━━━━━\n"
+    "เลือกสิ่งที่อยากทำ:\n\n"
+    "1️⃣  คุยเรื่องเรียน\n"
+    "2️⃣  เช็คอารมณ์จากข้อความ\n"
+    "3️⃣  วิธีใช้งาน\n\n"
+    "หรือส่งมาได้เลย:\n"
+    "📷 รูปภาพ → วิเคราะห์ใบหน้า / อ่านการบ้าน\n"
+    "🎤 เสียงพูด → แปลงเป็นข้อความแล้วตอบ\n"
+    "━━━━━━━━━━━━━━━\n"
+    "พิมพ์คำถามเรียนมาได้เลยนะ"
 )
 
 HELP = (
-    "วิธีใช้:\n"
-    "- เมนู 1: ถามเรื่องเรียน เราจะช่วยอธิบาย\n"
-    "- เมนู 2: ส่งข้อความ เราจะประมาณอารมณ์จากข้อความ\n\n"
-    "หมายเหตุ: เราไม่ใช่บริการฉุกเฉินหรือแพทย์ "
-    "หากทุกข์ใจมาก ติดต่อสายด่วนสุขภาพจิต 1323"
+    "━━━━━━━━━━━━━━━\n"
+    "วิธีใช้งาน JaiKrajok\n"
+    "━━━━━━━━━━━━━━━\n\n"
+    "💬 พิมพ์ข้อความ\n"
+    "   → AI ตอบและวิเคราะห์อารมณ์\n\n"
+    "📷 ส่งรูปภาพ\n"
+    "   → เซลฟี่: วิเคราะห์ใบหน้า\n"
+    "   → การบ้าน: OCR + อธิบายขั้นตอน\n\n"
+    "🎤 ส่งเสียงพูด\n"
+    "   → Speech-to-Text แล้ว AI ตอบ\n\n"
+    "━━━━━━━━━━━━━━━\n"
+    "⚠️  ระบบนี้ไม่ใช่บริการทางการแพทย์\n"
+    "หากทุกข์ใจมาก โทร 1323 (24 ชม.)"
 )
+
+# Mood → emoji map for LINE replies
+_MOOD_EMOJI: dict[str, str] = {
+    "stressed": "😣",
+    "sad":      "😢",
+    "tired":    "😴",
+    "neutral":  "😐",
+    "calm":     "😌",
+    "positive": "😊",
+}
 
 CRISIS_KEYWORDS = (
     # explicit
@@ -80,50 +110,97 @@ CRISIS_KEYWORDS = (
     "kill myself", "want to die", "end my life", "suicide", "self harm",
 )
 
+CRISIS_REPLY = (
+    "━━━━━━━━━━━━━━━\n"
+    "เราห่วงใยคุณมากนะ\n"
+    "ตอนนี้คุณไม่ได้อยู่คนเดียว\n"
+    "━━━━━━━━━━━━━━━\n\n"
+    "📞 สายด่วนสุขภาพจิต 1323\n"
+    "   (ฟรี ตลอด 24 ชั่วโมง)\n\n"
+    "โปรดติดต่อสายด่วนหรือคนที่ไว้ใจ\n"
+    "ใกล้ตัวด้วยนะ เราอยู่ตรงนี้เสมอ"
+)
+
+
+def _is_crisis(text: str) -> bool:
+    lowered = (text or "").lower()
+    stripped = lowered.replace(" ", "")
+    return any(k in lowered or k.replace(" ", "") in stripped for k in CRISIS_KEYWORDS)
+
 
 async def handle_text(user_id: str, text: str) -> str:
     text = (text or "").strip()
     if not text:
         return "พิมพ์ข้อความมาได้เลยนะ"
 
-    if any(k in text for k in CRISIS_KEYWORDS):
+    # Crisis check first — always takes priority
+    if _is_crisis(text):
         _set_mode(user_id, "start")
-        return (
-            "เราห่วงใยคุณมาก ตอนนี้คุณไม่ได้อยู่คนเดียว "
-            "โปรดติดต่อสายด่วนสุขภาพจิต 1323 "
-            "หรือคนที่ไว้ใจใกล้ตัวด้วยนะ"
-        )
+        return CRISIS_REPLY
 
     mode = _get_mode(user_id)
 
-    if text in {"1", "เรียน", "study"}:
+    # Menu shortcuts
+    if text in {"1", "เรียน", "study", "การบ้าน", "homework"}:
         _set_mode(user_id, "study")
-        return "โหมดเรียนแล้ว ส่งคำถามมาได้เลย"
-    if text in {"2", "อารมณ์", "emotion"}:
+        return (
+            "━━━━━━━━━━━━━━━\n"
+            "โหมดช่วยเรียน\n"
+            "━━━━━━━━━━━━━━━\n"
+            "ส่งคำถาม โจทย์ หรือเนื้อหาที่ไม่เข้าใจมาได้เลย\n"
+            "หรือถ่ายรูปการบ้านส่งมาก็ได้นะ"
+        )
+    if text in {"2", "อารมณ์", "emotion", "ความรู้สึก", "feeling"}:
         _set_mode(user_id, "emotion")
-        return "โหมดเช็คอารมณ์ ส่งข้อความที่อยากให้เราอ่านได้เลย"
-    if text in {"3", "help", "ช่วยเหลือ", "เมนู", "menu"}:
+        return (
+            "━━━━━━━━━━━━━━━\n"
+            "โหมดเช็คอารมณ์\n"
+            "━━━━━━━━━━━━━━━\n"
+            "ส่งข้อความที่อยากระบาย หรือบอกว่าวันนี้รู้สึกยังไง\n"
+            "กระจกจะอ่านอารมณ์จากข้อความให้นะ"
+        )
+    if text in {"3", "help", "ช่วยเหลือ", "เมนู", "menu", "วิธีใช้"}:
         _set_mode(user_id, "start")
-        return HELP + "\n\n" + WELCOME
+        return HELP
 
+    # Emotion mode — sentiment analysis
     if mode == "emotion":
         result = await sentiment.analyze_text(text)
         _set_mode(user_id, "start")
         if not result.ok:
-            return f"เช็คอารมณ์ไม่สำเร็จตอนนี้ ({result.error}). ลองใหม่หรือพิมพ์ เมนู"
-        label = result.label or "unknown"
-        score = f"{result.score:.2f}" if result.score is not None else "-"
+            return (
+                "โหมดเช็คอารมณ์ขัดข้องชั่วคราว ลองใหม่อีกครั้งนะ\n"
+                "หรือพิมพ์ เมนู เพื่อกลับหน้าหลัก"
+            )
+        label = result.label or "ไม่ทราบ"
+        score = f"{result.score:.0%}" if result.score is not None else "-"
+        # Map to Thai mood label + emoji
+        mood = classify_mood(text, result.polarity if hasattr(result, "polarity") else None, result.score)
+        emoji = _MOOD_EMOJI.get(mood, "💭")
+        mood_th = MOOD_LABELS_TH.get(mood, label)
         return (
-            f"จากการอ่านข้อความ โดยประมาณรู้สึก: {label} (ความมั่นใจ {score})\n"
-            "พักหายใจลึก ๆ สักครั้งแล้วค่อยเรียนต่อก็ได้นะ\n"
-            "พิมพ์ เมนู เพื่อกลับเมนูหลัก"
+            f"━━━━━━━━━━━━━━━\n"
+            f"ผลการวิเคราะห์อารมณ์\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"{emoji} รู้สึก: {mood_th}\n"
+            f"ความมั่นใจ: {score}\n\n"
+            f"ลองหายใจลึก ๆ สักครั้ง\n"
+            f"แล้วค่อยเรียนต่อก็ได้นะ\n\n"
+            f"พิมพ์ เมนู เพื่อกลับหน้าหลัก"
         )
 
+    # Default — LLM reply (study mode or free chat)
     result = await pathumma.generate_reply(text)
     if not result.ok:
         logger.warning("Pathumma failed for %s: %s", user_id, result.error)
         return (
-            "ตอนนี้สมอง AI ตอบช้าหรือยังตั้งค่า API ไม่ครบ "
-            f"({result.error}). ตรวจ .env แล้วลองใหม่ หรือพิมพ์ เมนู"
+            "ขณะนี้ AI ยังตอบไม่ได้ชั่วคราว\n"
+            "ลองส่งใหม่อีกสักครู่นะ\n\n"
+            "พิมพ์ เมนู เพื่อดูตัวเลือกอื่น"
         )
-    return result.text or "..."
+
+    reply = result.text or "..."
+    # Append subtle footer for study mode to remind about other features
+    if mode == "study" and len(reply) < 4500:
+        reply += "\n\n─────────────────\nพิมพ์ เมนู เพื่อดูตัวเลือกอื่น"
+    return reply

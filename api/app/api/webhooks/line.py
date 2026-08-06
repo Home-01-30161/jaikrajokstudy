@@ -33,7 +33,7 @@ from linebot.v3.webhooks import (
     TextMessageContent,
 )
 
-from app.bots.conversation import WELCOME, handle_text
+from app.bots.conversation import WELCOME, handle_text, _is_crisis, CRISIS_REPLY
 from app.config import get_settings
 from app.services import face, ocr, stt
 from app.services import pathumma
