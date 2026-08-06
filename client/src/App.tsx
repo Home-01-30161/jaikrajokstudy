@@ -858,7 +858,12 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
     // Official Google Identity Services integration (from developers.google.com/identity)
     if (typeof window !== "undefined" && (window as any).google?.accounts?.id) {
       try {
-        const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || "10839218204-democlient.apps.googleusercontent.com";
+        const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
+        if (!googleClientId) {
+          console.error("VITE_GOOGLE_CLIENT_ID is not set in .env");
+          setShowGoogleModal(true);
+          return;
+        }
         (window as any).google.accounts.id.initialize({
           client_id: googleClientId,
           callback: (response: any) => {
