@@ -1367,7 +1367,7 @@ function AppShell() {
               <div className="mb-4">
                 <h1
                   className="font-black leading-tight"
-                  style={{ fontFamily: "'Taviraj', Georgia, serif", color: T.salmon, fontSize: "1.7rem" }}
+                  style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', sans-serif", color: T.salmon, fontSize: "1.7rem" }}
                 >
                   JaiKraJok
                 </h1>
@@ -1758,7 +1758,7 @@ function HomeView({
   const INK = "#1A140A";            // Deep warm ink for text on cream
   const INK_MUTED = "rgba(26,20,10,0.45)";
   const GRID = "rgba(26,20,10,0.07)";
-  const SERIF = "'Playfair Display', 'Noto Serif Thai', Georgia, serif";
+  const SERIF = "'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', sans-serif";
 
   return (
     <div style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem", backgroundColor: CREAM }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
@@ -2159,7 +2159,7 @@ function ChatView({
           {/* Greeting Header */}
           <div className="flex items-center justify-center gap-3 mb-6 animate-fade-in">
             <span className="text-3xl" style={{ color: T.salmon }}>✴️</span>
-            <h2 className="text-3xl md:text-4xl font-black" style={{ fontFamily: "'Taviraj', Georgia, serif", color: T.black }}>
+            <h2 className="text-3xl md:text-4xl font-black" style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
               สวัสดีครับ, กระจกพร้อมช่วยดูแลนะ
             </h2>
           </div>
@@ -2206,10 +2206,10 @@ function ChatView({
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => toast("โมเดลหลัก: Pathumma ThaiLLM 3.0 + Gemini Vision OCR")}
-                  className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-600 font-medium border border-gray-200 hover:bg-gray-200 transition-colors"
+                  onClick={() => toast("โมเดลหลัก: Pathumma-ThaiLLM-qwen3-8b-think-3.0.0")}
+                  className="text-xs px-3 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors shadow-xs"
                 >
-                  ThaiLLM 3.0 · Vision ▾
+                  Pathumma-ThaiLLM-qwen3-8b-think-3.0.0 ▾
                 </button>
                 <button
                   onClick={handleVoice}
@@ -2239,15 +2239,27 @@ function ChatView({
           </div>
 
           {/* Quick Action Suggestion Chips */}
-          <div className="flex flex-wrap items-center justify-center gap-2 mt-6 max-w-xl">
-            <button onClick={handleSelfie} className="px-3.5 py-1.5 rounded-full bg-white border border-[#E2D9C2] text-xs font-semibold hover:border-[#FF3366] hover:text-[#FF3366] transition-colors shadow-2xs">
-              📷 ถ่ายเซลฟี่ประเมินอารมณ์
+          <div className="flex flex-wrap items-center justify-center gap-2.5 mt-6 max-w-2xl px-2">
+            <button
+              onClick={handleSelfie}
+              className="px-4 py-2 rounded-full bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#FF3366] hover:bg-amber-50/60 cursor-pointer flex items-center gap-1.5"
+              style={{ color: "#1A1A1A" }}
+            >
+              <span>📷</span> <span>ถ่ายเซลฟี่ประเมินอารมณ์</span>
             </button>
-            <button onClick={handleHomeworkPhoto} className="px-3.5 py-1.5 rounded-full bg-white border border-[#E2D9C2] text-xs font-semibold hover:border-[#FF3366] hover:text-[#FF3366] transition-colors shadow-2xs">
-              🖼️ เฉลยรูปการบ้าน (Bio, Math, Coding)
+            <button
+              onClick={handleHomeworkPhoto}
+              className="px-4 py-2 rounded-full bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#FF3366] hover:bg-amber-50/60 cursor-pointer flex items-center gap-1.5"
+              style={{ color: "#1A1A1A" }}
+            >
+              <span>🖼️</span> <span>เฉลยรูปการบ้าน (Bio, Math, Coding)</span>
             </button>
-            <button onClick={handleVoice} className="px-3.5 py-1.5 rounded-full bg-white border border-[#E2D9C2] text-xs font-semibold hover:border-[#FF3366] hover:text-[#FF3366] transition-colors shadow-2xs">
-              🎤 พูดระบายสภาวะจิตใจ
+            <button
+              onClick={handleVoice}
+              className="px-4 py-2 rounded-full bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#FF3366] hover:bg-amber-50/60 cursor-pointer flex items-center gap-1.5"
+              style={{ color: "#1A1A1A" }}
+            >
+              <span>🎤</span> <span>พูดระบายสภาวะจิตใจ</span>
             </button>
           </div>
         </div>
@@ -2395,9 +2407,12 @@ function ChatView({
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium border border-gray-200">
-                    ThaiLLM 3.0
-                  </span>
+                  <button
+                    onClick={() => toast("โมเดลหลัก: Pathumma-ThaiLLM-qwen3-8b-think-3.0.0")}
+                    className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer"
+                  >
+                    Pathumma-ThaiLLM-qwen3-8b-think-3.0.0 ▾
+                  </button>
                   <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="พูดระบาย">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
