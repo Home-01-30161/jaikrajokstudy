@@ -35,9 +35,8 @@ _OCR_MAX_BYTES = 900_000
 async def transcribe_image(image_bytes: bytes) -> ServiceResult:
     """Transcribe an image, trying each OCR backend until one returns text.
 
-    Order: Pathumma VQA (whole-image, best for messy photos) -> T-OCR/DeepOCR
-    (printed documents) -> /handwritten (per-character glyph detector, only
-    really suitable for short handwritten digits).
+    Order: T-OCR/DeepOCR (printed documents) -> /handwritten (per-character
+    glyph detector) -> Pathumma VQA (whole-image fallback).
 
     Applies automatic image preprocessing (shadow removal, CLAHE, denoising,
     deskewing, adaptive binarization) before sending to OCR APIs.
@@ -51,22 +50,22 @@ async def transcribe_image(image_bytes: bytes) -> ServiceResult:
         logger.warning("Image preprocessing failed: %s", e)
         # Continue with original image if preprocessing fails
 
-    vqa = await extract_text_vqa(image_bytes)
-    if vqa.ok and (vqa.text or "").strip():
-        return vqa
-    errors.append(f"vqa: {vqa.error}")
-    logger.warning("VQA OCR failed (%s); trying document OCR", vqa.error)
-
     doc = await extract_text_document(image_bytes)
     if doc.ok and (doc.text or "").strip():
         return doc
     errors.append(f"doc: {doc.error}")
-    logger.warning("Document OCR failed (%s); falling back to /handwritten", doc.error)
+    logger.warning("Document OCR failed (%s); trying /handwritten", doc.error)
 
     hand = await extract_text(image_bytes)
     if hand.ok and (hand.text or "").strip():
         return hand
     errors.append(f"handwritten: {hand.error}")
+    logger.warning("/handwritten failed (%s); falling back to VQA", hand.error)
+
+    vqa = await extract_text_vqa(image_bytes)
+    if vqa.ok and (vqa.text or "").strip():
+        return vqa
+    errors.append(f"vqa: {vqa.error}")
 
     return ServiceResult(
         service="ocr", ok=False, error="all OCR backends failed -> " + "; ".join(errors)
