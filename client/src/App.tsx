@@ -1834,8 +1834,8 @@ function HomeView({
               color: INK_MUTED,
               margin: "0 0 2.5rem",
               maxWidth: "36ch",
-              borderLeft: `3px solid ${PINK}`,
-              paddingLeft: "1rem",
+              borderLeft: `1px solid ${PINK}88`,
+              paddingLeft: "1.25rem",
             }}>
               พื้นที่ส่วนตัวเพื่อบันทึกความรู้สึก — พิมพ์ พูด หรือถ่ายภาพ กระจกรับฟังทุกอย่าง
             </p>
@@ -2124,7 +2124,7 @@ function HomeView({
 
 
 
-/* ============ CHAT VIEW (Claude Redesign) ============ */
+/* ============ CHAT VIEW (Claude Redesign & Craft Polish) ============ */
 function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
@@ -2154,7 +2154,7 @@ function ChatView({
   return (
     <div className="w-full flex flex-col" style={{ height: "calc(100vh - 70px)" }}>
       {!hasUserMsg ? (
-        /* ── HERO VIEW (Claude Style Empty State — Picture 2!) ── */
+        /* ── HERO VIEW (Claude Style Empty State) ── */
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           {/* Greeting Header */}
           <div className="flex items-center justify-center gap-3 mb-6 animate-fade-in">
@@ -2184,29 +2184,44 @@ function ChatView({
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={handleSelfie}
-                  className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-base"
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
                   title="ถ่ายเซลฟี่ประเมินอารมณ์"
                 >
-                  📷
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                    <circle cx="12" cy="13" r="3"/>
+                  </svg>
                 </button>
                 <button
                   onClick={handleHomeworkPhoto}
-                  className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-base"
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
                   title="แนบรูปการบ้าน"
                 >
-                  🖼️
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-600 font-medium border border-gray-200">
+                <button
+                  onClick={() => toast("โมเดลหลัก: Pathumma ThaiLLM 3.0 + Gemini Vision OCR")}
+                  className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-600 font-medium border border-gray-200 hover:bg-gray-200 transition-colors"
+                >
                   ThaiLLM 3.0 · Vision ▾
-                </span>
+                </button>
                 <button
                   onClick={handleVoice}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors text-base"
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
                   title="พูดระบายสภาวะจิตใจ"
                 >
-                  🎙️
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                  </svg>
                 </button>
                 <button
                   onClick={() => sendMessage()}
@@ -2214,7 +2229,10 @@ function ChatView({
                   className="w-9 h-9 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm"
                   style={{ backgroundColor: T.salmon }}
                 >
-                  ⬆️
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"/>
+                    <polyline points="5 12 12 5 19 12"/>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -2309,10 +2327,11 @@ function ChatView({
             ))}
             {isAnalyzing && (
               <div className="flex justify-start">
-                <div className="px-5 py-3 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.salmon}` }}>
-                  <div className="flex gap-1.5">
-                    {[0, 150, 300].map((d) => (
-                      <div key={d} className="w-2.5 h-2.5 rounded-full animate-bounce" style={{ backgroundColor: T.salmon, animationDelay: `${d}ms` }} />
+                <div className="px-5 py-3 rounded-2xl shadow-xs" style={{ backgroundColor: T.white, border: `1.5px solid ${T.salmon}` }}>
+                  <div className="flex gap-2 items-center">
+                    <span className="text-xs text-gray-500 font-medium">กำลังคิด...</span>
+                    {[0, 200, 400].map((d) => (
+                      <div key={d} className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: T.salmon, animationDelay: `${d}ms` }} />
                     ))}
                   </div>
                 </div>
@@ -2342,7 +2361,7 @@ function ChatView({
             </div>
           )}
 
-          {/* Bottom Floating Prompt Card (Claude Style!) */}
+          {/* Bottom Floating Prompt Card */}
           <div className="p-4 bg-transparent max-w-3xl mx-auto w-full">
             <div className="bg-white rounded-3xl p-3 shadow-sm border border-[#E2D9C2] transition-all focus-within:shadow-md focus-within:border-[#FF3366]">
               <textarea
@@ -2361,19 +2380,31 @@ function ChatView({
               />
               <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-1">
                 <div className="flex items-center gap-1.5">
-                  <button onClick={handleSelfie} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-base" title="ถ่ายเซลฟี่">
-                    📷
+                  <button onClick={handleSelfie} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="ถ่ายเซลฟี่">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                      <circle cx="12" cy="13" r="3"/>
+                    </svg>
                   </button>
-                  <button onClick={handleHomeworkPhoto} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-base" title="แนบรูปการบ้าน">
-                    🖼️
+                  <button onClick={handleHomeworkPhoto} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="แนบรูปการบ้าน">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium border border-gray-200">
                     ThaiLLM 3.0
                   </span>
-                  <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors text-base" title="พูดระบาย">
-                    🎙️
+                  <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="พูดระบาย">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="23"/>
+                      <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
                   </button>
                   <button
                     onClick={() => sendMessage()}
@@ -2381,7 +2412,10 @@ function ChatView({
                     className="w-8 h-8 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm"
                     style={{ backgroundColor: T.salmon }}
                   >
-                    ⬆️
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="19" x2="12" y2="5"/>
+                      <polyline points="5 12 12 5 19 12"/>
+                    </svg>
                   </button>
                 </div>
               </div>
