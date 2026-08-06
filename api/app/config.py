@@ -1,14 +1,19 @@
-﻿"""Application settings loaded from environment / .env."""
+"""Application settings loaded from environment / .env."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Resolve .env relative to this file (api/app/config.py → ../../.env = project root)
+# so the env file is found regardless of the working directory uvicorn starts in.
+_ENV_FILE = str(Path(__file__).resolve().parent.parent.parent / ".env")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file="../.env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )

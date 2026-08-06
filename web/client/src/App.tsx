@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { gsap } from "gsap";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import { marked } from "marked";
 import {
   api,
   type ExportResult,
@@ -40,70 +41,55 @@ const IMG = {
 };
 
 /* ============ KATEX RENDERER ============ */
+// Configure marked for safe, clean output
+marked.setOptions({ breaks: true, gfm: true });
+
 function renderMessageWithLatex(text: string): string {
-  // Match LaTeX patterns: $...$ for inline, $$...$$ for display
-  const parts: string[] = [];
-  let lastIndex = 0;
+  // 1. Protect LaTeX blocks from markdown parser by replacing with placeholders
+  const latexBlocks: string[] = [];
+  let protected_text = text;
 
-  // First handle display math ($$...$$)
-  const displayMathRegex = /\$\$([^\$]+)\$\$/g;
-  let match;
-  let tempText = text;
-
-  while ((match = displayMathRegex.exec(text)) !== null) {
-    // Add text before the match
-    if (match.index > lastIndex) {
-      parts.push(escapeHtml(text.slice(lastIndex, match.index)));
-    }
-
-    // Render the LaTeX
+  // Protect display math $$...$$
+  protected_text = protected_text.replace(/\$\$([^$]+)\$\$/g, (_match, latex) => {
+    const idx = latexBlocks.length;
     try {
-      const latex = match[1].trim();
-      const rendered = katex.renderToString(latex, {
-        displayMode: true,
-        throwOnError: false,
-      });
-      parts.push(rendered);
-    } catch (e) {
-      parts.push(`<span style="color: #EF4444;">[LaTeX Error: ${match[1]}]</span>`);
+      latexBlocks.push(katex.renderToString(latex.trim(), { displayMode: true, throwOnError: false }));
+    } catch {
+      latexBlocks.push(`<span style="color:#EF4444">[LaTeX Error: ${escapeHtml(latex)}]</span>`);
     }
+    return `%%LATEX_BLOCK_${idx}%%`;
+  });
 
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Add remaining text
-  if (lastIndex < text.length) {
-    let remaining = text.slice(lastIndex);
-
-    // Now handle inline math ($...$) in the remaining text
-    const inlineMathRegex = /\$([^\$]+)\$/g;
-    let inlineLastIndex = 0;
-
-    while ((match = inlineMathRegex.exec(remaining)) !== null) {
-      if (match.index > inlineLastIndex) {
-        parts.push(escapeHtml(remaining.slice(inlineLastIndex, match.index)));
-      }
-
-      try {
-        const latex = match[1].trim();
-        const rendered = katex.renderToString(latex, {
-          displayMode: false,
-          throwOnError: false,
-        });
-        parts.push(rendered);
-      } catch (e) {
-        parts.push(`<span style="color: #EF4444;">[LaTeX Error: ${match[1]}]</span>`);
-      }
-
-      inlineLastIndex = match.index + match[0].length;
+  // Protect inline math $...$
+  protected_text = protected_text.replace(/\$([^$\n]+)\$/g, (_match, latex) => {
+    const idx = latexBlocks.length;
+    try {
+      latexBlocks.push(katex.renderToString(latex.trim(), { displayMode: false, throwOnError: false }));
+    } catch {
+      latexBlocks.push(`<span style="color:#EF4444">[LaTeX Error: ${escapeHtml(latex)}]</span>`);
     }
+    return `%%LATEX_BLOCK_${idx}%%`;
+  });
 
-    if (inlineLastIndex < remaining.length) {
-      parts.push(escapeHtml(remaining.slice(inlineLastIndex)));
-    }
-  }
+  // 2. Parse markdown
+  let html = marked.parse(protected_text) as string;
 
-  return parts.join('');
+  // 3. Restore LaTeX blocks
+  html = html.replace(/%%LATEX_BLOCK_(\d+)%%/g, (_match, idx) => latexBlocks[parseInt(idx)] ?? "");
+
+  // 4. Add Tailwind-friendly inline styles for markdown elements
+  html = html
+    .replace(/<h1>/g, '<h1 style="font-size:1.2em;font-weight:700;margin:0.75em 0 0.25em">')
+    .replace(/<h2>/g, '<h2 style="font-size:1.1em;font-weight:700;margin:0.6em 0 0.2em">')
+    .replace(/<h3>/g, '<h3 style="font-size:1em;font-weight:700;margin:0.5em 0 0.15em">')
+    .replace(/<ul>/g, '<ul style="list-style:disc;padding-left:1.2em;margin:0.4em 0">')
+    .replace(/<ol>/g, '<ol style="list-style:decimal;padding-left:1.2em;margin:0.4em 0">')
+    .replace(/<li>/g, '<li style="margin:0.2em 0">')
+    .replace(/<strong>/g, '<strong style="font-weight:700">')
+    .replace(/<hr>/g, '<hr style="border:none;border-top:1px solid rgba(0,0,0,0.15);margin:0.5em 0">')
+    .replace(/<p>/g, '<p style="margin:0.3em 0">');
+
+  return html;
 }
 
 function escapeHtml(text: string): string {

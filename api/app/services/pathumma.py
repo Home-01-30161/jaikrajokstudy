@@ -1,4 +1,4 @@
-﻿"""Pathumma LLM client via AI for Thai API (/textqa/completion)."""
+"""Pathumma LLM client via AI for Thai API (/textqa/completion)."""
 
 from __future__ import annotations
 
