@@ -147,9 +147,13 @@ async def _synthesize_vaja9(text: str, speaker: int, settings) -> ServiceResult:
                     service="tts", ok=False, error="Audio URL is not an approved HTTPS URL"
                 )
 
-            # The audio URL is already returned by the provider; do not forward
-            # the API key to it, and do not follow redirects to another host.
-            audio_resp = await client.get(str(wav_url), follow_redirects=False)
+            # The audio URL requires the same Apikey header as the initial request.
+            # Do not follow redirects to another host.
+            audio_resp = await client.get(
+                str(wav_url),
+                headers={"Apikey": settings.aiforthai_api_key},
+                follow_redirects=False
+            )
             if audio_resp.status_code >= 400:
                 logger.warning("TTS download HTTP %s", audio_resp.status_code)
                 return ServiceResult(
