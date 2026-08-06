@@ -18,6 +18,7 @@ const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
 const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
 const PATHUMMA_PROXY = "/api/pathumma";
 const GEMINI_KEY: string = (import.meta.env.VITE_GEMINI_API_KEY as string) ?? "";
+const GEMINI_MODEL: string = (import.meta.env.VITE_GEMINI_MODEL as string) ?? "gemini-2.5-flash";
 const GEMINI_PROXY = "/api/gemini";
 const TYPHOON_ASR_KEY: string = (import.meta.env.VITE_TYPHOON_ASR_KEY as string) ?? (import.meta.env.VITE_TYPHOON_API_KEY as string) ?? "";
 const TYPHOON_PROXY = "/api/typhoon";
@@ -645,26 +646,36 @@ export async function callVisionLLM(
         },
       };
 
-      const res = await fetch(
-        `${GEMINI_PROXY}/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
+      const modelCandidates = Array.from(new Set([
+        GEMINI_MODEL,
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-flash-latest"
+      ]));
 
-      if (res.ok) {
-        const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
-        const text = candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text && text.trim().length > 0) {
-          console.debug("[Gemini Vision] Response received:", text.slice(0, 100));
-          return text.trim();
+      for (const modelName of modelCandidates) {
+        const res = await fetch(
+          `${GEMINI_PROXY}/v1beta/models/${modelName}:generateContent?key=${GEMINI_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        if (res.ok) {
+          const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
+          const text = candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text && text.trim().length > 0) {
+            console.debug(`[Gemini Vision] (${modelName}) Response received:`, text.slice(0, 100));
+            return text.trim();
+          }
+        } else {
+          const errText = await res.text().catch(() => "");
+          console.warn(`[Gemini Vision] (${modelName}) HTTP Error:`, res.status, errText.slice(0, 200));
         }
-      } else {
-        const errText = await res.text().catch(() => "");
-        console.warn("[Gemini Vision] HTTP Error:", res.status, errText.slice(0, 200));
       }
     } catch (e) {
       console.warn("[Gemini Vision] Error, falling back to Pathumma VQA:", e);
