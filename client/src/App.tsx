@@ -183,7 +183,7 @@ const SELFIE_NOTES: Record<string, string> = {
 };
 
 type Page = "login" | "onb1" | "onb2" | "guardian" | "privacy" | "app";
-type AppView = "home" | "chat" | "trend" | "school" | "safety";
+type AppView = "home" | "chat" | "trend" | "safety";
 
 interface ChatMsg {
   id: string;
@@ -1135,7 +1135,6 @@ function AppShell() {
     { id: "home", label: "หน้าหลัก", iconSrc: IMG.redstar },
     { id: "chat", label: "แชท", iconSrc: IMG.chatBubblesNoBg },
     { id: "trend", label: "แนวโน้มของฉัน", iconSrc: IMG.chartGraphNoBg },
-    { id: "school", label: "ภาพรวมโรงเรียน", iconSrc: IMG.schoolBuildingNoBg },
     { id: "safety", label: "ความปลอดภัย & ข้อมูล", iconSrc: IMG.shieldLockNoBg },
   ];
 
@@ -1143,7 +1142,6 @@ function AppShell() {
     home: "หน้าหลัก",
     chat: "คุยกับกระจก",
     trend: "แนวโน้มของฉัน",
-    school: "ภาพรวมโรงเรียน",
     safety: "ความปลอดภัย & ข้อมูล",
   };
 
@@ -1403,7 +1401,6 @@ function AppShell() {
                 />
               </PageWrapper>
             )}
-            {currentView === "school" && <PageWrapper pageKey="school"><SchoolView /></PageWrapper>}
             {currentView === "safety" && (
               <PageWrapper pageKey="safety">
                 <SafetyView
