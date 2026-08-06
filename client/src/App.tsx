@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+﻿import { useState, useRef, useCallback, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
@@ -2008,7 +2008,7 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
           />
         )}
 
-        {/* LEFT SIDEBAR — pure black, curved right edge; drawer on mobile */}
+        {/* LEFT SIDEBAR — cassette insert panel: newsprint ground, ruled lines, track-listing nav */}
         <div
           ref={drawerRef}
           id="app-sidebar"
@@ -2018,132 +2018,106 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
           className={`fixed left-0 z-40 flex flex-col overflow-hidden transition-transform duration-300 ease-in-out ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
           style={{ top: "36px", bottom: 0, width: "230px" }}
         >
-          {/* Black body */}
+          {/* Newsprint insert card body */}
           <div
             className="relative flex flex-col h-full"
-            style={{ backgroundColor: T.black }}
+            style={{
+              backgroundColor: T.paper,
+              borderRight: `1px solid ${T.khaki}`,
+              backgroundImage: `repeating-linear-gradient(transparent, transparent 27px, ${T.khaki}44 27px, ${T.khaki}44 28px)`,
+            }}
           >
-            {/* Curved right edge mask */}
-            <div
-              className="absolute right-0 top-0 bottom-0 pointer-events-none"
-              style={{ width: "32px", zIndex: 1 }}
-            >
-              <svg viewBox="0 0 32 100" preserveAspectRatio="none" className="w-full h-full block">
-                <path d="M32,0 L32,100 C20,80 0,60 0,35 C0,20 12,8 32,0 Z" fill="#F5F0E8" />
-              </svg>
-            </div>
+            <div className="relative z-10 flex flex-col h-full px-4 py-4" style={{ paddingRight: "16px" }}>
 
-            {/* Content */}
-            <div className="relative z-10 flex flex-col h-full px-5 py-6" style={{ paddingRight: "28px" }}>
-              {/* Brand */}
-              <div className="mb-4">
-                <h1
-                  className="font-black leading-tight"
-                  style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', sans-serif", color: T.salmon, fontSize: "1.7rem" }}
-                >
+              {/* Catalog number header */}
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ fontFamily: "monospace", fontSize: 9, letterSpacing: "0.12em", color: T.khaki, textTransform: "uppercase" }}>
+                  CAT. NO. JKJ-001-A
+                </p>
+                <h1 style={{ fontFamily: "'Noto Sans Thai', 'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "1.25rem", color: T.ink, lineHeight: 1.1, marginTop: 2 }}>
                   JaiKraJok
                 </h1>
-                <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: "rgba(255,181,167,0.6)", fontSize: "10px", letterSpacing: "0.08em" }}>
-                  กระจกสะท้อนใจ
-                </p>
+                <div style={{ width: 28, height: 2, background: T.red, marginTop: 3 }} />
               </div>
 
-              {/* + New Chat Button (Claude Style!) */}
+              {/* New chat — ink block button */}
               <button
                 onClick={handleNewChat}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl transition-all duration-150 flex items-center gap-3 mb-5 font-bold text-xs shadow-sm hover:scale-[1.02] active:scale-[0.98]"
                 style={{
-                  backgroundColor: T.salmon,
-                  color: T.black,
-                  fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                  width: "100%", textAlign: "left", padding: "7px 12px",
+                  background: T.ink, color: T.paper,
+                  border: "none", borderRadius: 0, cursor: "pointer",
+                  fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: 700, fontSize: 11,
+                  letterSpacing: "0.04em",
+                  marginBottom: 12,
+                  transition: "background 0.12s",
+                  display: "flex", alignItems: "center", gap: 6,
                 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.red; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = T.ink; }}
               >
-                <span className="text-base font-bold">+</span>
-                เปิดการสนทนาใหม่
+                <span style={{ fontSize: 14, fontWeight: 900 }}>+</span> เปิดการสนทนาใหม่
               </button>
 
-              {/* Nav (Kept original items) */}
-              <nav className="flex flex-col gap-1 mb-5">
-                {navItems.map((item) => {
+              {/* Track-listing nav — A-SIDE */}
+              <nav style={{ marginBottom: 10 }}>
+                <p style={{ fontFamily: "monospace", fontSize: 9, letterSpacing: "0.1em", color: T.khaki, textTransform: "uppercase", marginBottom: 4 }}>A-SIDE</p>
+                {navItems.map((item, idx) => {
                   const active = currentView === item.id;
+                  const trackNum = ["A1", "A2", "A3", "A4"][idx] || `A${idx + 1}`;
                   return (
                     <button
                       key={item.id}
-                      onClick={() => {
-                        setCurrentView(item.id);
-                        closeDrawer();
-                        // GSAP pop animation on click
-                        const el = document.getElementById(`nav-icon-${item.id}`);
-                        if (el) gsap.fromTo(el, { scale: 0.7, rotate: -15 }, { scale: 1, rotate: 0, duration: 0.5, ease: "elastic.out(1.2, 0.5)" });
-                      }}
-                      onMouseEnter={(e) => {
-                        const el = e.currentTarget.querySelector(`#nav-icon-${item.id}`);
-                        if (el && !active) gsap.to(el, { scale: 1.2, rotate: 8, duration: 0.3, ease: "back.out(2)" });
-                      }}
-                      onMouseLeave={(e) => {
-                        const el = e.currentTarget.querySelector(`#nav-icon-${item.id}`);
-                        if (el && !active) gsap.to(el, { scale: 1, rotate: 0, duration: 0.25, ease: "power2.out" });
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-xl transition-colors duration-150 flex items-center gap-3"
+                      onClick={() => { setCurrentView(item.id); closeDrawer(); }}
                       style={{
-                        backgroundColor: active ? "rgba(255,181,167,0.18)" : "transparent",
-                        color: active ? T.salmon : "rgba(255,181,167,0.6)",
-                        fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
-                        fontWeight: active ? 700 : 500,
-                        fontSize: "13px",
-                        border: active ? `1px solid rgba(255,181,167,0.3)` : "1px solid transparent",
+                        width: "100%", textAlign: "left", padding: "6px 0",
+                        background: "none", border: "none", borderBottom: `1px solid ${T.khaki}44`,
+                        cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+                        fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 12,
+                        fontWeight: active ? 700 : 400,
+                        color: active ? T.ink : `${T.ink}99`,
                       }}
                     >
-                      <img
-                        id={`nav-icon-${item.id}`}
-                        src={item.iconSrc}
-                        alt=""
-                        style={{
-                          width: "20px",
-                          height: "20px",
-                          objectFit: "contain",
-                          flexShrink: 0,
-                          filter: active ? "none" : "brightness(0) invert(0.8) sepia(1) hue-rotate(300deg) saturate(0.5)",
-                          transition: "filter 0.2s",
-                        }}
-                      />
+                      <span style={{ fontFamily: "monospace", fontSize: 9, color: active ? T.red : T.khaki, minWidth: 18 }}>{trackNum}</span>
                       {item.label}
+                      {active && <span style={{ width: 5, height: 5, borderRadius: "50%", background: T.red, marginLeft: "auto", flexShrink: 0 }} />}
                     </button>
                   );
                 })}
               </nav>
 
-              {/* Recents — Separated Chat Sessions (Claude Style!) */}
+              {/* Session list */}
               <div className="flex-1 flex flex-col min-h-0 overflow-hidden mb-3">
-                <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: "rgba(255,181,167,0.45)", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "6px", paddingLeft: "4px" }}>
-                  Recents · รายการสนทนา
+                <p style={{ fontFamily: "monospace", fontSize: 9, letterSpacing: "0.1em", color: T.khaki, textTransform: "uppercase", marginBottom: 4 }}>
+                  รายการสนทนา
                 </p>
-                <div className="flex-1 overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: "none" }}>
+                <div className="flex-1 overflow-y-auto space-y-0.5 pr-1" style={{ scrollbarWidth: "none" }}>
                   {sessions.map((sess) => {
                     const isSelected = sess.id === activeSessionId && currentView === "chat";
                     return (
                       <div
                         key={sess.id}
-                        onClick={() => {
-                          setActiveSessionId(sess.id);
-                          setCurrentView("chat");
-                          closeDrawer();
-                        }}
-                        className="group relative w-full text-left px-2.5 py-1.5 rounded-lg transition-all flex items-center justify-between cursor-pointer"
+                        onClick={() => { setActiveSessionId(sess.id); setCurrentView("chat"); closeDrawer(); }}
+                        className="group relative w-full text-left flex items-center justify-between cursor-pointer"
                         style={{
-                          backgroundColor: isSelected ? "rgba(255,255,255,0.12)" : "transparent",
-                          color: isSelected ? T.white : "rgba(255,181,167,0.7)",
-                          fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
-                          fontSize: "12px",
+                          padding: "5px 4px",
+                          borderBottom: `1px solid ${T.khaki}33`,
+                          background: isSelected ? `${T.ink}0D` : "none",
+                          color: isSelected ? T.ink : `${T.ink}88`,
+                          fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 11,
                         }}
                       >
-                        <span className="truncate flex-1 pr-1">💬 {sess.title}</span>
+                        <span className="truncate flex-1 pr-1">{sess.title}</span>
                         <button
                           onClick={(e) => handleDeleteSession(sess.id, e)}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 transition-opacity text-xs"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
                           title="ลบแชทนี้"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "0 2px", color: T.khaki, fontSize: 10 }}
                         >
-                          ✕
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                            <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                            <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          </svg>
                         </button>
                       </div>
                     );
@@ -2151,29 +2125,46 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
                 </div>
               </div>
 
-              {/* User Profile & Logout */}
-              <div className="mt-auto pt-3 border-t border-white/10 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <div className="w-7 h-7 rounded-full bg-[#FF3366] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
-                      {currentUser ? currentUser.name[0].toUpperCase() : "👤"}
+              {/* Bottom catalog strip — initials, mood label, logout */}
+              <div style={{ borderTop: `1px solid ${T.khaki}`, paddingTop: 10, flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{
+                      width: 22, height: 22,
+                      border: `1.5px solid ${T.ink}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontFamily: "monospace", fontSize: 9, fontWeight: 700, color: T.ink, flexShrink: 0,
+                    }}>
+                      {currentUser ? currentUser.name[0].toUpperCase() : "?"}
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-white/90 truncate">{currentUser ? currentUser.name : "ผู้เรียน"}</p>
-                      <p className="text-[10px] text-white/40 font-mono truncate">{currentUser ? currentUser.email : "Free plan · ThaiLLM"}</p>
-                    </div>
+                    <span style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 11, fontWeight: 600, color: T.ink }}>
+                      {currentUser ? currentUser.name : "ผู้เรียน"}
+                    </span>
                   </div>
-                  <span className="text-sm flex-shrink-0" title={EMO[mood]?.label || "ปกติ"}>{EMO[mood]?.emoji}</span>
+                  {mood && EMO[mood] && (
+                    <span style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 9, color: T.khaki, letterSpacing: "0.05em" }}>
+                      {EMO[mood].label}
+                    </span>
+                  )}
                 </div>
                 {onLogout && (
                   <button
                     onClick={onLogout}
-                    className="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold text-red-300 hover:text-red-100 hover:bg-white/10 transition-colors flex items-center gap-2"
+                    style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      fontFamily: "'Noto Sans Thai', sans-serif",
+                      fontSize: 10, color: T.khaki,
+                      textDecoration: "underline", textUnderlineOffset: 2,
+                      padding: 0, transition: "color 0.12s",
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = T.red; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T.khaki; }}
                   >
-                    <span>🚪</span> ออกจากระบบ
+                    ออกจากระบบ
                   </button>
                 )}
               </div>
+
             </div>
           </div>
         </div>
@@ -2373,23 +2364,6 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
         </div>
       )}
 
-      {/* ── Pathumma API status badge ── */}
-      <div
-        style={{
-          position: "fixed", bottom: "12px", right: "12px", zIndex: 500,
-          display: "flex", alignItems: "center", gap: "6px",
-          background: hasApiKey() ? "rgba(10,10,10,0.85)" : "rgba(180,40,40,0.9)",
-          backdropFilter: "blur(8px)",
-          borderRadius: "999px", padding: "5px 12px",
-          fontFamily: "'Inter', monospace", fontSize: "11px",
-          color: "#fff", letterSpacing: "0.04em",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
-          pointerEvents: "none",
-        }}
-      >
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: hasApiKey() ? "#39FF14" : "#FF4444", flexShrink: 0 }} />
-        {hasApiKey() ? "Pathumma LLM — เชื่อมต่อแล้ว" : "Pathumma LLM — ยังไม่ได้ตั้งค่า API Key"}
-      </div>
     </div>
   );
 }
@@ -2407,404 +2381,236 @@ function HomeView({
   trendData: TrendPoint[];
   onMoodTap: (key: string) => void;
 }) {
-  const [hoveredMode, setHoveredMode] = useState<string | null>(null);
-
   useEffect(() => {
-    // Hero entrance animation
-    gsap.fromTo("#hv-kicker", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out" });
-    gsap.fromTo("#hv-headline", { y: 30 }, { y: 0, duration: 0.9, ease: "power3.out", delay: 0.1 });
-    gsap.fromTo("#hv-body", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.2 });
-    gsap.fromTo("#hv-ctas", { y: 20 }, { y: 0, duration: 0.7, ease: "power3.out", delay: 0.3 });
-    gsap.fromTo("#hv-img", { scale: 0.95 }, { scale: 1, duration: 1.0, ease: "power2.out", delay: 0.2 });
-    gsap.fromTo(".hv-strip", { y: 30 }, { y: 0, duration: 0.8, stagger: 0.1, ease: "power3.out", delay: 0.4 });
+    gsap.fromTo("#hv-dateline", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" });
+    gsap.fromTo("#hv-question", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out", delay: 0.1 });
+    gsap.fromTo("#hv-cta-block", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", delay: 0.25 });
+    gsap.fromTo("#hv-img", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 1.0, ease: "power2.out", delay: 0.15 });
+    gsap.fromTo(".hv-strip", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, stagger: 0.08, ease: "power3.out", delay: 0.3 });
   }, []);
 
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "อรุณสวัสดิ์" : hour < 18 ? "สวัสดีตอนบ่าย" : "สวัสดีตอนเย็น";
   const todayThai = new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" });
 
-  const SF = "'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', sans-serif";
-
   const modes = [
-    { id: "camera" as const, th: "ถ่ายเซลฟี่", sub: "บอกเราผ่านรูป", img: IMG.origamiStars },
-    { id: "keyboard" as const, th: "พิมพ์ความรู้สึก", sub: "ระบายความในใจ", img: IMG.handPen },
-    { id: "mic" as const, th: "พูดระบาย", sub: "ให้เราฟัง", img: IMG.megaphone },
-    { id: "photo" as const, th: "ถ่ายรูปการบ้าน", sub: "ให้เราช่วยดู", img: IMG.booksStack }
+    { id: "camera" as const, track: "B1", th: "ถ่ายเซลฟี่", sub: "วิเคราะห์อารมณ์จากใบหน้า" },
+    { id: "keyboard" as const, track: "B2", th: "พิมพ์ความรู้สึก", sub: "ระบายความในใจเป็นตัวอักษร" },
+    { id: "mic" as const, track: "B3", th: "พูดระบาย", sub: "บันทึกเสียงพูดของคุณ" },
+    { id: "photo" as const, track: "B4", th: "ถ่ายรูปการบ้าน", sub: "ให้กระจกช่วยดูการบ้าน" },
   ];
 
-  const PINK = "#FF3366";
-  const BLACK = "#08090A";
-  const CREAM = "#F5F0E8";
-  const INK = "#1A140A";            // Deep warm ink for text on cream
-  const INK_MUTED = "rgba(26,20,10,0.45)";
-  const GRID = "rgba(26,20,10,0.07)";
-  const SERIF = "'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', sans-serif";
+  const moodOrder = ["stressed", "sad", "tired", "neutral", "calm", "positive"];
 
   return (
-    <div style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem", backgroundColor: CREAM }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
-
-      {/* HERO: Aardvark editorial cream warmth + Pieter typography scale */}
-      <section
-        id="hv-hero"
+    <div style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem", backgroundColor: T.paper }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
+      {/* Ruled-line texture overlay */}
+      <div
+        className="fixed pointer-events-none"
         style={{
-          position: "relative",
-          overflow: "hidden",
-          backgroundColor: CREAM,
-          backgroundImage: `linear-gradient(${GRID} 1px, transparent 1px), linear-gradient(90deg, ${GRID} 1px, transparent 1px)`,
-          backgroundSize: "32px 32px",
+          inset: 0, zIndex: 0,
+          backgroundImage: `repeating-linear-gradient(transparent, transparent 27px, ${T.khaki}33 27px, ${T.khaki}33 28px)`,
         }}
-      >
-        {/* Top metadata strip */}
-        <div
-          id="hv-kicker"
-          style={{
-            position: "relative", zIndex: 2,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "1.5rem clamp(1.5rem, 5vw, 4rem)",
-            borderBottom: `1px solid rgba(26,20,10,0.1)`,
-          }}
-        >
-          <span style={{ fontFamily: SF, fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: INK_MUTED }}>{todayThai}</span>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: PINK, boxShadow: `0 0 8px ${PINK}` }} />
-            <span style={{ fontFamily: SF, fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: INK_MUTED }}>กำลังทำงาน</span>
-          </div>
-        </div>
+      />
 
-        {/* Main hero: big type left, collage right */}
-        <div style={{ display: "flex", flexWrap: "wrap", minHeight: "clamp(460px, 68vh, 740px)", position: "relative", zIndex: 2 }}>
+      <div className="relative z-10 flex flex-col" style={{ minHeight: "calc(100vh - 36px)" }}>
 
-          {/* LEFT column: display typography */}
-          <div style={{
-            flex: "1 1 420px",
-            display: "flex", flexDirection: "column", justifyContent: "center",
-            padding: "3rem clamp(1.5rem, 5vw, 4rem) 4rem",
-          }}>
-            <p style={{
-              fontFamily: SF, fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.2em",
-              textTransform: "uppercase", color: PINK, margin: "0 0 1.5rem",
-              display: "flex", alignItems: "center", gap: "0.5rem"
-            }}>
-              <span style={{ display: "inline-block", width: "28px", height: "2px", background: PINK, borderRadius: "2px" }} />
-              {greeting}
-            </p>
+        {/* HERO — emotional question first */}
+        <div className="flex flex-col md:flex-row" style={{ minHeight: "60vh", borderBottom: `1px solid ${T.khaki}` }}>
 
-            <h1
-              id="hv-headline"
-              style={{
-                fontFamily: SF,
-                fontSize: "clamp(4rem, 9vw, 9.5rem)",
-                fontWeight: 900,
-                lineHeight: 0.9,
-                letterSpacing: "-0.04em",
-                color: INK,
-                margin: "0 0 1.75rem",
-                maxWidth: "12ch",
-              }}
-            >
-              กระจก
-              <br />
-              <span style={{ color: PINK }}>สะท้อนใจ</span>
-            </h1>
+          {/* Left: question + CTA */}
+          <div className="flex flex-col justify-between px-6 pt-8 pb-6 md:px-10 md:py-10" style={{ flex: "0 0 55%" }}>
 
-            <p style={{
-              fontFamily: SF,
-              fontSize: "clamp(0.9rem, 1.6vw, 1.05rem)",
-              lineHeight: 1.7,
-              color: INK_MUTED,
-              margin: "0 0 2.5rem",
-              maxWidth: "36ch",
-              borderLeft: `1px solid ${PINK}88`,
-              paddingLeft: "1.25rem",
-            }}>
-              พื้นที่ส่วนตัวเพื่อบันทึกความรู้สึก — พิมพ์ พูด หรือถ่ายภาพ กระจกรับฟังทุกอย่าง
-            </p>
+            {/* Dateline anchor */}
+            <div id="hv-dateline" style={{ opacity: 0 }}>
+              <p style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: "0.1em", color: T.khaki, textTransform: "uppercase", marginBottom: 4 }}>
+                {todayThai}
+              </p>
+              <div style={{ width: 32, height: 1, background: T.khaki }} />
+            </div>
 
-            <div id="hv-ctas" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-              <button
-                onClick={onGoChat}
+            {/* h1 — emotional question, display scale */}
+            <div id="hv-question" style={{ opacity: 0, flex: 1, display: "flex", alignItems: "center", paddingTop: 24, paddingBottom: 24 }}>
+              <h1
                 style={{
-                  fontFamily: SF, fontWeight: 800, fontSize: "0.9rem",
-                  background: INK, color: CREAM,
-                  border: "none", borderRadius: "9999px",
-                  padding: "0.9rem 2rem", cursor: "pointer",
-                  letterSpacing: "-0.01em",
-                  display: "inline-flex", alignItems: "center", gap: "0.5rem",
-                  transition: "background 0.2s, transform 0.2s",
-                  boxShadow: "0 4px 20px rgba(26,20,10,0.15)",
+                  fontFamily: "'Noto Sans Thai', 'Plus Jakarta Sans', sans-serif",
+                  fontWeight: 800,
+                  fontSize: "clamp(2.8rem,8vw,7rem)",
+                  lineHeight: 1.05,
+                  color: T.ink,
+                  letterSpacing: "-0.02em",
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = PINK; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.03)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = INK; (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
               >
-                เริ่มคุยกับกระจก
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-              </button>
-              <button
-                onClick={onGoTrend}
-                style={{
-                  fontFamily: SF, fontWeight: 700, fontSize: "0.9rem",
-                  background: "transparent", color: INK,
-                  border: `2px solid rgba(26,20,10,0.22)`, borderRadius: "9999px",
-                  padding: "0.88rem 2rem", cursor: "pointer",
-                  letterSpacing: "-0.01em",
-                  transition: "border-color 0.2s, color 0.2s",
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = PINK; (e.currentTarget as HTMLButtonElement).style.color = PINK; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(26,20,10,0.22)"; (e.currentTarget as HTMLButtonElement).style.color = INK; }}
-              >
-                ดูแนวโน้มของฉัน
-              </button>
+                วันนี้{" "}
+                <span style={{ color: T.red }}>เป็นยัง</span>
+                <br />
+                <span style={{ color: T.red }}>ไงบ้าง?</span>
+              </h1>
+            </div>
+
+            {/* CTA block */}
+            <div id="hv-cta-block" style={{ opacity: 0 }}>
+              <div style={{ width: "100%", height: 2, background: T.ink, marginBottom: 12 }} />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  onClick={onGoChat}
+                  style={{
+                    padding: "10px 20px", background: T.ink, color: T.paper,
+                    border: "none", borderRadius: 0, cursor: "pointer",
+                    fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: 700, fontSize: 13,
+                    letterSpacing: "0.02em", transition: "background 0.12s",
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.red; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = T.ink; }}
+                >
+                  เขียนความรู้สึกวันนี้
+                </button>
+                <button
+                  onClick={onGoTrend}
+                  style={{
+                    padding: "10px 20px", background: "none", color: T.ink,
+                    border: `1.5px solid ${T.ink}`, borderRadius: 0, cursor: "pointer",
+                    fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: 500, fontSize: 13,
+                    transition: "border-color 0.12s, color 0.12s",
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.red; (e.currentTarget as HTMLButtonElement).style.color = T.red; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.ink; (e.currentTarget as HTMLButtonElement).style.color = T.ink; }}
+                >
+                  ดูแนวโน้มอารมณ์
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* RIGHT column: collage editorial */}
-          <div
-            id="hv-img"
-            style={{
-              flex: "0 1 400px",
-              position: "relative",
-              display: "flex",
-              alignItems: "flex-end",
-              justifyContent: "center",
-              overflow: "hidden",
-              minHeight: "320px",
-            }}
-          >
-            <div style={{
-              position: "absolute",
-              bottom: "-80px", right: "-80px",
-              width: "420px", height: "420px",
-              borderRadius: "50%",
-              background: `radial-gradient(circle, ${PINK}12 0%, transparent 65%)`,
-              zIndex: 0,
-            }} />
-            <div style={{
-              position: "absolute", top: "2rem", left: "2.5rem",
-              fontFamily: SERIF, fontSize: "6rem", fontWeight: 900,
-              color: PINK, opacity: 0.1, lineHeight: 1, zIndex: 0, userSelect: "none",
-            }}>✦</div>
+          {/* Right: collage photo */}
+          <div id="hv-img" style={{ opacity: 0, flex: "0 0 45%", position: "relative", minHeight: 240, overflow: "hidden" }}>
             <img
               src={IMG.glasses}
               alt=""
               aria-hidden="true"
               style={{
-                width: "clamp(200px, 30vw, 400px)",
-                objectFit: "contain",
-                zIndex: 1,
-                position: "relative",
-                filter: "drop-shadow(0 24px 48px rgba(26,20,10,0.16))",
-                mixBlendMode: "multiply",
-                opacity: 0.9,
+                width: "100%", height: "100%", objectFit: "cover",
+                mixBlendMode: "multiply", filter: "grayscale(20%) contrast(1.05)",
+                position: "absolute", inset: 0,
               }}
             />
             <div style={{
-              position: "absolute", bottom: "2.5rem", right: "1.5rem",
-              fontFamily: `'Mali', 'Noto Sans Thai', cursive`,
-              fontSize: "0.78rem", color: INK_MUTED,
-              transform: "rotate(-8deg)", zIndex: 2,
-              opacity: 0.6,
-            }}>กระจกของฉัน ↗</div>
+              position: "absolute", inset: 0,
+              background: `linear-gradient(to right, ${T.paper} 0%, transparent 25%)`,
+            }} />
           </div>
         </div>
 
-        <div style={{ height: "1px", background: `rgba(26,20,10,0.1)` }} />
-      </section>
-
-      {/* MODE GALLERY HEADER — cream editorial strip */}
-      <div className="hv-strip" style={{
-        background: CREAM,
-        backgroundImage: `linear-gradient(${GRID} 1px, transparent 1px), linear-gradient(90deg, ${GRID} 1px, transparent 1px)`,
-        backgroundSize: "32px 32px",
-        borderBottom: `1px solid rgba(26,20,10,0.1)`,
-        padding: "1.5rem clamp(1.5rem, 5vw, 4rem)",
-        display: "flex", alignItems: "center", justifyContent: "space-between"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-          <span style={{ fontFamily: SF, fontSize: "1.35rem", fontWeight: 800, color: INK, letterSpacing: "-0.03em" }}>เลือกวิธีบอกเรา</span>
-          <span style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.16em", color: INK_MUTED, textTransform: "uppercase" }}>04 โหมด</span>
+        {/* MOOD SELECTOR — B-SIDE track listing */}
+        <div style={{ borderBottom: `1px solid ${T.khaki}`, padding: "20px 24px 20px 24px" }}>
+          <p style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: "0.1em", color: T.khaki, textTransform: "uppercase", marginBottom: 10 }}>
+            B-SIDE · วันนี้รู้สึกอย่างไร?
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {moodOrder.map((key) => {
+              const info = EMO[key];
+              if (!info) return null;
+              const active = mood === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => onMoodTap(key)}
+                  className="hv-strip"
+                  style={{
+                    opacity: 0,
+                    padding: "6px 14px",
+                    background: active ? T.ink : "none",
+                    color: active ? T.paper : T.ink,
+                    border: `1.5px solid ${active ? T.ink : T.khaki}`,
+                    borderRadius: 0, cursor: "pointer",
+                    fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: active ? 700 : 400, fontSize: 12,
+                    transition: "all 0.12s",
+                  }}
+                  onMouseEnter={e => {
+                    if (!active) {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = T.ink;
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!active) {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = T.khaki;
+                    }
+                  }}
+                >
+                  {info.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <svg width="60" height="12" viewBox="0 0 60 12" fill="none" style={{ opacity: 0.4 }}>
-          <path d="M0 6 Q7.5 0 15 6 Q22.5 12 30 6 Q37.5 0 45 6 Q52.5 12 60 6" stroke={PINK} strokeWidth="2.5" fill="none" strokeLinecap="round" />
-        </svg>
-      </div>
 
-      {/* MODE GALLERY: Accordion in black — dramatic cream-to-black contrast */}
-      <div
-        className="hv-strip"
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          height: "clamp(500px, 68vh, 740px)",
-          background: BLACK,
-          overflow: "hidden"
-        }}
-      >
-        {modes.map((item, idx) => {
-          const isHovered = hoveredMode === item.id;
-          const isAnyHovered = hoveredMode !== null;
-          const flexGrow = isHovered ? 3.5 : isAnyHovered ? 0.4 : 1;
-
-          return (
-            <button
-              key={item.id}
-              onClick={() => tryMode(item.id)}
-              onMouseEnter={() => setHoveredMode(item.id)}
-              onMouseLeave={() => setHoveredMode(null)}
-              onFocus={() => setHoveredMode(item.id)}
-              onBlur={() => setHoveredMode(null)}
-              aria-label={`${item.th} \u2014 ${item.sub}`}
-              style={{
-                flex: flexGrow,
-                transition: "flex 0.65s cubic-bezier(0.25, 1, 0.25, 1)",
-                background: "transparent",
-                position: "relative",
-                cursor: "pointer",
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
-                minWidth: 0,
-                border: "none",
-                outline: "none",
-                borderRight: idx < 3 ? "1px solid rgba(240,239,233,0.06)" : "none",
-              }}
-            >
-              <div style={{
-                position: "absolute", inset: 0,
-                background: `radial-gradient(ellipse at 50% 70%, ${PINK}15 0%, transparent 65%)`,
-                opacity: isHovered ? 1 : 0,
-                transition: "opacity 0.5s ease",
-                zIndex: 0
-              }} />
-              <div style={{
-                position: "absolute", inset: 0,
-                background: "rgba(8,9,10,0.62)",
-                opacity: isAnyHovered && !isHovered ? 1 : 0,
-                transition: "opacity 0.55s ease",
-                zIndex: 1
-              }} />
-              <div style={{
-                position: "absolute", top: "1.25rem", left: "1.5rem",
-                fontFamily: SF, fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.16em",
-                color: isHovered ? PINK : "rgba(245,240,232,0.9)",
-                opacity: isAnyHovered && !isHovered ? 0.15 : isHovered ? 1 : 0.4,
-                transition: "all 0.45s ease",
-                zIndex: 5
-              }}>{String(idx + 1).padStart(2, "0")}</div>
-
-              <img
-                src={item.img}
-                alt={item.th}
+        {/* INPUT MODES — B-SIDE track grid */}
+        <div style={{ padding: "20px 24px" }}>
+          <p style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: "0.1em", color: T.khaki, textTransform: "uppercase", marginBottom: 10 }}>
+            เลือกวิธีระบาย
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: T.khaki }}>
+            {modes.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => tryMode(m.id)}
+                className="hv-strip"
                 style={{
-                  width: "clamp(120px, 18vw, 240px)",
-                  height: "clamp(120px, 18vw, 240px)",
-                  objectFit: "contain",
-                  transition: "all 0.65s cubic-bezier(0.25, 1, 0.25, 1)",
-                  transform: isHovered ? "scale(1.14) translateY(-8px)" : "scale(1)",
-                  filter: isHovered
-                    ? `drop-shadow(0 28px 44px rgba(0,0,0,0.8)) drop-shadow(0 0 30px ${PINK}44) brightness(1.08)`
-                    : "drop-shadow(0 10px 22px rgba(0,0,0,0.55)) brightness(0.92) grayscale(0.12)",
-                  zIndex: 2,
-                  position: "relative",
-                  flexShrink: 0
+                  opacity: 0,
+                  padding: "14px 16px",
+                  background: T.paper,
+                  border: "none", cursor: "pointer",
+                  textAlign: "left",
+                  transition: "background 0.12s",
                 }}
-              />
-
-              <div style={{
-                position: "absolute", bottom: 0, left: 0, right: 0,
-                padding: "2.5rem 1.5rem 1.5rem",
-                background: "linear-gradient(to top, rgba(8,9,10,0.95) 0%, transparent 100%)",
-                transition: "all 0.45s ease",
-                opacity: isHovered ? 0 : 1,
-                transform: isHovered ? "translateY(8px)" : "translateY(0)",
-                zIndex: 3,
-                textAlign: "center"
-              }}>
-                <p style={{ fontFamily: SF, fontSize: "clamp(0.65rem, 1.4vw, 0.82rem)", fontWeight: 700, color: "rgba(245,240,232,0.95)", textTransform: "uppercase", letterSpacing: "0.15em", margin: 0 }}>
-                  {item.th}
-                </p>
-              </div>
-
-              <div style={{
-                position: "absolute", bottom: 0, left: 0, right: 0,
-                padding: "3rem 2rem 2rem",
-                background: "linear-gradient(to top, rgba(8,9,10,0.98) 0%, rgba(8,9,10,0.6) 55%, transparent 100%)",
-                transition: "all 0.6s cubic-bezier(0.25, 1, 0.25, 1)",
-                opacity: isHovered ? 1 : 0,
-                transform: isHovered ? "translateY(0)" : "translateY(20px)",
-                pointerEvents: "none",
-                zIndex: 4,
-                textAlign: "left"
-              }}>
-                <p style={{ fontFamily: SF, fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: PINK, margin: "0 0 0.5rem" }}>
-                  {item.sub}
-                </p>
-                <h2 style={{ fontFamily: SF, fontSize: "clamp(1.5rem, 3.5vw, 3rem)", fontWeight: 900, lineHeight: 1, letterSpacing: "-0.035em", color: CREAM, margin: "0 0 1rem" }}>
-                  {item.th}
-                </h2>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: PINK, color: BLACK, borderRadius: "9999px", padding: "0.4rem 1.1rem", fontSize: "0.78rem", fontWeight: 800, fontFamily: SF }}>
-                  เริ่มเลย
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-                </div>
-              </div>
-
-              {idx < 3 && (
-                <div style={{
-                  position: "absolute", right: 0, top: "10%", height: "80%", width: "1px",
-                  background: "rgba(240,239,233,0.06)",
-                  zIndex: 5
-                }} />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* FOOTER: LINE Notify — cream editorial strip */}
-      <div className="hv-strip" style={{
-        background: CREAM,
-        backgroundImage: `linear-gradient(${GRID} 1px, transparent 1px), linear-gradient(90deg, ${GRID} 1px, transparent 1px)`,
-        backgroundSize: "32px 32px",
-        borderTop: `1px solid rgba(26,20,10,0.1)`,
-        padding: "1.75rem clamp(1.5rem, 5vw, 4rem)",
-        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1.5rem", flexWrap: "wrap"
-      }}>
-        <div>
-          <p style={{ fontFamily: SF, fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: INK_MUTED, margin: "0 0 0.3rem" }}>การแจ้งเตือน</p>
-          <p style={{ fontFamily: SF, fontSize: "1rem", fontWeight: 700, color: INK, margin: 0 }}>รับการแจ้งเตือนผ่าน LINE</p>
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.smoke; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = T.paper; }}
+              >
+                <p style={{ fontFamily: "monospace", fontSize: 9, color: T.red, letterSpacing: "0.08em", marginBottom: 4 }}>{m.track}</p>
+                <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: 700, fontSize: 13, color: T.ink, marginBottom: 2 }}>{m.th}</p>
+                <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 10, color: `${T.ink}88` }}>{m.sub}</p>
+              </button>
+            ))}
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span style={{ fontFamily: SF, fontSize: "0.82rem", fontWeight: 700, color: lineNotify ? PINK : INK_MUTED }}>
-            {lineNotify ? "เปิดอยู่" : "ปิดอยู่"}
-          </span>
+
+        {/* LINE Notify toggle */}
+        <div style={{ padding: "12px 24px", borderTop: `1px solid ${T.khaki}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontWeight: 600, fontSize: 12, color: T.ink }}>แจ้งเตือนรายวัน (LINE Notify)</p>
+            <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 10, color: `${T.ink}77` }}>รับการเตือนใจบันทึกความรู้สึกทุกวัน</p>
+          </div>
           <button
-            onClick={() => { setLineNotify(!lineNotify); toast(lineNotify ? "ปิดการแจ้งเตือน LINE แล้ว" : "เปิดการแจ้งเตือน LINE แล้ว"); }}
-            aria-label="สลับการแจ้งเตือน LINE"
+            onClick={() => setLineNotify(!lineNotify)}
             style={{
-              width: "52px", height: "28px", borderRadius: "9999px", border: "none",
-              background: lineNotify ? PINK : "rgba(26,20,10,0.12)",
-              cursor: "pointer", position: "relative", transition: "background 0.3s ease",
+              width: 44, height: 22,
+              background: lineNotify ? T.ink : T.khaki,
+              border: "none", borderRadius: 0, cursor: "pointer",
+              position: "relative", transition: "background 0.15s",
             }}
+            aria-pressed={lineNotify}
+            aria-label="สลับการแจ้งเตือน LINE"
           >
-            <div style={{
-              width: "20px", height: "20px", borderRadius: "50%", background: lineNotify ? BLACK : "rgba(26,20,10,0.35)",
-              position: "absolute", top: "4px", transition: "left 0.3s ease",
-              left: lineNotify ? "28px" : "4px",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
+            <span style={{
+              position: "absolute", top: 3, left: lineNotify ? 24 : 4,
+              width: 16, height: 16,
+              background: T.paper,
+              transition: "left 0.15s",
             }} />
           </button>
         </div>
+
+        {/* Catalog footer */}
+        <div style={{ padding: "8px 24px 16px", borderTop: `1px solid ${T.khaki}44`, marginTop: "auto" }}>
+          <p style={{ fontFamily: "monospace", fontSize: 9, letterSpacing: "0.1em", color: T.khaki, textTransform: "uppercase" }}>
+            JKJ-001 · กระจกสะท้อนใจ · {new Date().getFullYear()}
+          </p>
+        </div>
+
       </div>
     </div>
   );
 }
 
-
-
-
-/* ============ CHAT VIEW (Claude Redesign & Craft Polish) ============ */
 function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
