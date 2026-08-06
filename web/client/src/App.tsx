@@ -2154,14 +2154,26 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const speakText = (text: string) => {
-    if (!("speechSynthesis" in window)) { toast("เบราว์เซอร์นี้ไม่รองรับ Text-to-Speech"); return; }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "th-TH";
-    u.rate = 0.98;
-    window.speechSynthesis.speak(u);
+  const speakText = async (text: string) => {
+    if (!text.trim()) return;
+
     toast("กำลังอ่านข้อความเสียง...");
+
+    try {
+      // Use backend TTS API (AI for Thai Vaja9)
+      const audioBlob = await api.speak(text.slice(0, 300)); // API limit: 300 chars
+
+      // Play the audio
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audio.play();
+
+      // Cleanup after playing
+      audio.onended = () => URL.revokeObjectURL(audioUrl);
+    } catch (err) {
+      console.error("TTS error:", err);
+      toast("ไม่สามารถอ่านข้อความได้ในขณะนี้");
+    }
   };
 
   const pushTrend = useCallback((key: Mood, sourceLabel: string) => {
