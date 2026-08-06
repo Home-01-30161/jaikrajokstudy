@@ -855,46 +855,51 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
   };
 
   const handleGoogleLogin = () => {
-    // Official Google Identity Services integration (from developers.google.com/identity)
-    if (typeof window !== "undefined" && (window as any).google?.accounts?.id) {
-      try {
-        const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
-        if (!googleClientId) {
-          console.error("VITE_GOOGLE_CLIENT_ID is not set in .env");
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
+    if (!googleClientId) {
+      console.error("VITE_GOOGLE_CLIENT_ID is not set in .env");
+      setShowGoogleModal(true);
+      return;
+    }
+
+    const google = (window as any).google;
+    if (!google?.accounts?.oauth2) {
+      setShowGoogleModal(true);
+      return;
+    }
+
+    // Implicit token flow — always opens the real Google account picker popup
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: googleClientId,
+      scope: "openid email profile",
+      callback: async (tokenResponse: any) => {
+        if (tokenResponse.error) {
+          console.error("Google OAuth error:", tokenResponse.error);
           setShowGoogleModal(true);
           return;
         }
-        (window as any).google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: (response: any) => {
-            try {
-              const payload = JSON.parse(atob(response.credential.split(".")[1]));
-              const googleUser: UserAccount = {
-                id: "usr_google_" + payload.sub,
-                email: payload.email,
-                name: payload.name || payload.given_name || payload.email.split("@")[0],
-                passwordHash: "google_oauth_auth",
-                avatarUrl: payload.picture,
-              };
-              handleSelectGoogleAccount(googleUser);
-            } catch (err) {
-              console.error("Google token decode failed", err);
-              setShowGoogleModal(true);
-            }
-          },
-        });
-        (window as any).google.accounts.id.prompt((notification: any) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            setShowGoogleModal(true);
-          }
-        });
-        return;
-      } catch {
-        setShowGoogleModal(true);
-      }
-    } else {
-      setShowGoogleModal(true);
-    }
+        try {
+          // Fetch real user profile from Google with the access token
+          const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+          });
+          const profile = await res.json();
+          const googleUser: UserAccount = {
+            id: "usr_google_" + profile.sub,
+            email: profile.email,
+            name: profile.name || profile.given_name || profile.email.split("@")[0],
+            passwordHash: "google_oauth_auth",
+            avatarUrl: profile.picture,
+          };
+          handleSelectGoogleAccount(googleUser);
+        } catch (err) {
+          console.error("Google userinfo fetch failed", err);
+          setShowGoogleModal(true);
+        }
+      },
+    });
+
+    tokenClient.requestAccessToken({ prompt: "select_account" });
   };
 
   const handleSelectGoogleAccount = (googleUser: UserAccount) => {
