@@ -693,24 +693,95 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
   );
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  timestamp: number;
+  messages: ChatMsg[];
+  mood: string;
+}
+
 /* ============ MAIN APP SHELL ============ */
 function AppShell() {
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [age] = useState("16");
   const [guardianConsent] = useState(true);
-  const [mood, setMood] = useState<string>("calm");
   const [lineNotify, setLineNotify] = useState(false);
 
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    {
-      id: "init",
-      role: "bot",
-      text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ",
-      timestamp: Date.now(),
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("jaikrajok:sessions") || "null");
+      if (Array.isArray(saved) && saved.length > 0) return saved;
+    } catch {}
+    return [
+      {
+        id: "session_1",
+        title: "สนทนาใหม่",
+        timestamp: Date.now(),
+        messages: [
+          {
+            id: "init",
+            role: "bot",
+            text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ",
+            timestamp: Date.now(),
+          },
+        ],
+        mood: "calm",
+      },
+    ];
+  });
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => sessions[0]?.id || "session_1");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("jaikrajok:sessions", JSON.stringify(sessions));
+    } catch {}
+  }, [sessions]);
+
+  // Derived current active session state
+  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
+  const messages = activeSession ? activeSession.messages : [];
+  const mood = activeSession ? activeSession.mood : "calm";
+
+  const setMessages = useCallback(
+    (updater: ChatMsg[] | ((prev: ChatMsg[]) => ChatMsg[])) => {
+      setSessions((prevSessions) =>
+        prevSessions.map((session) => {
+          if (session.id === activeSessionId) {
+            const newMsgs = typeof updater === "function" ? updater(session.messages) : updater;
+            let newTitle = session.title;
+            if (newTitle === "สนทนาใหม่" || newTitle === "New chat") {
+              const firstUserMsg = newMsgs.find((m) => m.role === "user");
+              if (firstUserMsg && firstUserMsg.text) {
+                const cleanText = firstUserMsg.text.replace(/^[^\w\u0E00-\u0E7F]+/, "").trim();
+                newTitle = cleanText.slice(0, 24) || "สนทนาใหม่";
+              }
+            }
+            return { ...session, messages: newMsgs, title: newTitle };
+          }
+          return session;
+        })
+      );
     },
-  ]);
+    [activeSessionId]
+  );
+
+  const setMood = useCallback(
+    (newMood: string | ((prev: string) => string)) => {
+      setSessions((prevSessions) =>
+        prevSessions.map((session) => {
+          if (session.id === activeSessionId) {
+            const updatedMood = typeof newMood === "function" ? newMood(session.mood) : newMood;
+            return { ...session, mood: updatedMood };
+          }
+          return session;
+        })
+      );
+    },
+    [activeSessionId]
+  );
+
   // Keep a ref that always reflects the latest messages — used to read history
-  // synchronously inside async sendMessage without relying on stale closure.
   const messagesRef = useRef<ChatMsg[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   const [inputText, setInputText] = useState("");
@@ -1114,12 +1185,73 @@ function AppShell() {
     }
   };
 
+  const handleNewChat = useCallback(() => {
+    const newId = "session_" + Date.now();
+    const newSession: ChatSession = {
+      id: newId,
+      title: "สนทนาใหม่",
+      timestamp: Date.now(),
+      messages: [
+        {
+          id: "init_" + Date.now(),
+          role: "bot",
+          text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ",
+          timestamp: Date.now(),
+        },
+      ],
+      mood: "calm",
+    };
+    setSessions((prev) => [newSession, ...prev]);
+    setActiveSessionId(newId);
+    setCurrentView("chat");
+    closeDrawer();
+    toast("เปิดการสนทนาใหม่เรียบร้อยแล้ว");
+  }, [closeDrawer]);
+
+  const handleDeleteSession = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSessions((prev) => {
+      if (prev.length <= 1) {
+        const freshId = "session_" + Date.now();
+        setActiveSessionId(freshId);
+        return [
+          {
+            id: freshId,
+            title: "สนทนาใหม่",
+            timestamp: Date.now(),
+            messages: [
+              {
+                id: "init_" + Date.now(),
+                role: "bot",
+                text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ",
+                timestamp: Date.now(),
+              },
+            ],
+            mood: "calm",
+          },
+        ];
+      }
+      const remaining = prev.filter((s) => s.id !== id);
+      if (activeSessionId === id) {
+        setActiveSessionId(remaining[0].id);
+      }
+      return remaining;
+    });
+    toast("ลบการสนทนาแล้ว");
+  }, [activeSessionId]);
+
   const resetChat = () => {
-    if (!window.confirm("ยืนยันเริ่มการสนทนาใหม่? บันทึกแนวโน้มอารมณ์และรายการของคุณจะถูกลบออกจากอุปกรณ์นี้")) return;
-    setMessages([{ id: "init_" + Date.now(), role: "bot", text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ", timestamp: Date.now() }]);
-    setTrendData([]); setLogEntries([]); setConcernStreak(0); setModesUsed(new Set()); setTransparencyLogs([]); setMood("calm"); setShowSupportStrip(false);
-    escalationShownRef.current = false;
-    toast("เริ่มการสนทนาใหม่แล้ว");
+    if (!window.confirm("ยืนยันเริ่มการสนทนาใหม่ในเซสชันนี้?")) return;
+    setMessages([
+      {
+        id: "init_" + Date.now(),
+        role: "bot",
+        text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ",
+        timestamp: Date.now(),
+      },
+    ]);
+    setMood("calm");
+    toast("ล้างข้อความในเซสชันนี้เรียบร้อยแล้ว");
   };
 
   const tryMode = (mode: "camera" | "keyboard" | "mic" | "photo") => {
@@ -1232,7 +1364,7 @@ function AppShell() {
             {/* Content */}
             <div className="relative z-10 flex flex-col h-full px-5 py-6" style={{ paddingRight: "28px" }}>
               {/* Brand */}
-              <div className="mb-8">
+              <div className="mb-4">
                 <h1
                   className="font-black leading-tight"
                   style={{ fontFamily: "'Taviraj', Georgia, serif", color: T.salmon, fontSize: "1.7rem" }}
@@ -1244,8 +1376,22 @@ function AppShell() {
                 </p>
               </div>
 
-              {/* Nav */}
-              <nav className="flex-1 flex flex-col gap-1">
+              {/* + New Chat Button (Claude Style!) */}
+              <button
+                onClick={handleNewChat}
+                className="w-full text-left px-3.5 py-2.5 rounded-xl transition-all duration-150 flex items-center gap-3 mb-5 font-bold text-xs shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  backgroundColor: T.salmon,
+                  color: T.black,
+                  fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                }}
+              >
+                <span className="text-base font-bold">+</span>
+                เปิดการสนทนาใหม่
+              </button>
+
+              {/* Nav (Kept original items) */}
+              <nav className="flex flex-col gap-1 mb-5">
                 {navItems.map((item) => {
                   const active = currentView === item.id;
                   return (
@@ -1266,7 +1412,7 @@ function AppShell() {
                         const el = e.currentTarget.querySelector(`#nav-icon-${item.id}`);
                         if (el && !active) gsap.to(el, { scale: 1, rotate: 0, duration: 0.25, ease: "power2.out" });
                       }}
-                      className="w-full text-left px-3 py-2.5 rounded-xl transition-colors duration-150 flex items-center gap-3"
+                      className="w-full text-left px-3 py-2 rounded-xl transition-colors duration-150 flex items-center gap-3"
                       style={{
                         backgroundColor: active ? "rgba(255,181,167,0.18)" : "transparent",
                         color: active ? T.salmon : "rgba(255,181,167,0.6)",
@@ -1281,8 +1427,8 @@ function AppShell() {
                         src={item.iconSrc}
                         alt=""
                         style={{
-                          width: "22px",
-                          height: "22px",
+                          width: "20px",
+                          height: "20px",
                           objectFit: "contain",
                           flexShrink: 0,
                           filter: active ? "none" : "brightness(0) invert(0.8) sepia(1) hue-rotate(300deg) saturate(0.5)",
@@ -1295,15 +1441,58 @@ function AppShell() {
                 })}
               </nav>
 
-              {/* Status */}
-              <div className="mt-auto pt-4" style={{ borderTop: "1px solid rgba(255,181,167,0.15)" }}>
-                <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: "rgba(255,181,167,0.5)", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>
-                  สภาวะล่าสุด
+              {/* Recents — Separated Chat Sessions (Claude Style!) */}
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden mb-3">
+                <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: "rgba(255,181,167,0.45)", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "6px", paddingLeft: "4px" }}>
+                  Recents · รายการสนทนา
                 </p>
-                <p className="flex items-center gap-2" style={{ color: T.salmon, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", fontSize: "13px", fontWeight: 600 }}>
-                  <span>{EMO[mood]?.emoji}</span>
-                  {EMO[mood]?.label || "ปกติ"}
-                </p>
+                <div className="flex-1 overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: "none" }}>
+                  {sessions.map((sess) => {
+                    const isSelected = sess.id === activeSessionId && currentView === "chat";
+                    return (
+                      <div
+                        key={sess.id}
+                        onClick={() => {
+                          setActiveSessionId(sess.id);
+                          setCurrentView("chat");
+                          closeDrawer();
+                        }}
+                        className="group relative w-full text-left px-2.5 py-1.5 rounded-lg transition-all flex items-center justify-between cursor-pointer"
+                        style={{
+                          backgroundColor: isSelected ? "rgba(255,255,255,0.12)" : "transparent",
+                          color: isSelected ? T.white : "rgba(255,181,167,0.7)",
+                          fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                          fontSize: "12px",
+                        }}
+                      >
+                        <span className="truncate flex-1 pr-1">💬 {sess.title}</span>
+                        <button
+                          onClick={(e) => handleDeleteSession(sess.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 transition-opacity text-xs"
+                          title="ลบแชทนี้"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* User Profile & Status */}
+              <div className="mt-auto pt-3 border-t border-white/10 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs border border-amber-300">
+                      👤
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-white/90">ผู้เรียน</p>
+                      <p className="text-[10px] text-white/40 font-mono">Free plan · ThaiLLM</p>
+                    </div>
+                  </div>
+                  <span className="text-sm" title={EMO[mood]?.label || "ปกติ"}>{EMO[mood]?.emoji}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1369,14 +1558,8 @@ function AppShell() {
                   resetChat={resetChat}
                   speakText={speakText}
                   mood={mood}
-                  concernStreak={concernStreak}
-                  transparencyLogs={transparencyLogs}
                   supportStrip={showSupportStrip}
                   onDismissSupport={() => setShowSupportStrip(false)}
-                  onNotifyCounselor={() => {
-                    toast("ส่งการแจ้งเตือนถึงครูที่ปรึกษาแล้ว (โหมดสาธิต)");
-                    setShowEscalationModal(false);
-                  }}
                 />
               </PageWrapper>
             )}
@@ -1941,11 +2124,11 @@ function HomeView({
 
 
 
-/* ============ CHAT VIEW ============ */
+/* ============ CHAT VIEW (Claude Redesign) ============ */
 function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
-  mood, concernStreak, transparencyLogs, supportStrip, onDismissSupport, onNotifyCounselor,
+  mood, supportStrip, onDismissSupport,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -1958,187 +2141,254 @@ function ChatView({
   resetChat: () => void;
   speakText: (t: string) => void;
   mood: string;
-  concernStreak: number;
-  transparencyLogs: string[];
   supportStrip: boolean;
   onDismissSupport: () => void;
-  onNotifyCounselor: () => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
+  const hasUserMsg = messages.some((m) => m.role === "user");
+
   useEffect(() => {
     if (chatBodyRef.current) chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
   }, [messages, isAnalyzing]);
 
   return (
-    <div className="w-full" style={{ height: "calc(100vh - 100px)" }}>
-      {/* LEFT CHAT PANEL */}
-      <div
-        className="w-full h-full flex flex-col overflow-hidden"
-        style={{ backgroundColor: T.white, borderRadius: "20px", border: "1.5px solid #E2D9C2", boxShadow: "0 2px 18px rgba(26,26,26,0.07)" }}
-      >
-        {/* Header */}
-        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1.5px solid #EDE6D3" }}>
-          <div className="flex items-center gap-3">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
-              style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `2px solid ${T.teal}` }}
-            >
-              {EMO[mood]?.emoji || "😌"}
-            </div>
-            <div>
-              <p className="font-bold text-sm" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
-                กระจกสะท้อนใจ
-              </p>
-              <p className="text-xs flex items-center gap-1 font-semibold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>
-                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: T.teal }} />
-                สภาวะล่าสุด: {EMO[mood]?.label || "ปกติ"}
-              </p>
-            </div>
+    <div className="w-full flex flex-col" style={{ height: "calc(100vh - 70px)" }}>
+      {!hasUserMsg ? (
+        /* ── HERO VIEW (Claude Style Empty State — Picture 2!) ── */
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          {/* Greeting Header */}
+          <div className="flex items-center justify-center gap-3 mb-6 animate-fade-in">
+            <span className="text-3xl" style={{ color: T.salmon }}>✴️</span>
+            <h2 className="text-3xl md:text-4xl font-black" style={{ fontFamily: "'Taviraj', Georgia, serif", color: T.black }}>
+              สวัสดีครับ, กระจกพร้อมช่วยดูแลนะ
+            </h2>
           </div>
-          <button
-            onClick={resetChat}
-            className="p-2 rounded-xl hover:bg-gray-100 transition-all text-gray-500"
-            title="เริ่มการสนทนาใหม่"
-          >
-            🔄
-          </button>
-        </div>
 
-        {/* Messages */}
-        <div ref={chatBodyRef} className="flex-1 overflow-y-auto p-5 space-y-4" style={{ scrollbarWidth: "thin" }}>
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              {msg.role === "system" ? (
-                <div className="w-full px-4 py-2 rounded-2xl text-xs font-mono text-center" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
-                  💡 {msg.text}
-                </div>
-              ) : msg.cardType === "emotion" && msg.emotionData ? (
-                <div
-                  className="max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed"
-                  style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text, fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}
-                >
-                  <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                    ผลการประเมินเบื้องต้นจากใบหน้า · {msg.emotionData.label}
-                  </p>
-                  <p>{msg.emotionData.note}</p>
-                </div>
-              ) : msg.cardType === "ocr" ? (
-                <div className="max-w-[85%] p-4 rounded-2xl text-sm" style={{ backgroundColor: T.cream, border: "1.5px dashed #aaa" }}>
-                  <p className="font-bold text-xs text-gray-500 mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>📷 ผลจาก OCR API</p>
-                  <p className="text-xs text-gray-500 italic border-l-2 pl-3 py-1 my-1" style={{ borderColor: T.teal }}>{msg.ocrText}</p>
-                </div>
-              ) : (
-                <div
-                  className="max-w-[80%] px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm"
-                  style={{
-                    backgroundColor: msg.role === "user" ? T.teal : T.white,
-                    color: msg.role === "user" ? T.white : T.black,
-                    border: msg.role === "user" ? "none" : "1.5px solid #EDE6D3",
-                    borderBottomRightRadius: msg.role === "user" ? "6px" : "20px",
-                    borderBottomLeftRadius: msg.role === "bot" ? "6px" : "20px",
-                    fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif",
-                  }}
-                >
-                  <MathText text={msg.text} />
-                  {msg.role === "bot" && (
-                    <button onClick={() => speakText(msg.text)} className="mt-1 text-xs opacity-50 hover:opacity-100 transition-opacity">🔊 ฟังเสียง</button>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-          {isAnalyzing && (
-            <div className="flex justify-start">
-              <div className="px-5 py-3 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}` }}>
-                <div className="flex gap-1.5">
-                  {[0, 150, 300].map((d) => (
-                    <div key={d} className="w-2.5 h-2.5 rounded-full " style={{ backgroundColor: T.teal, animationDelay: `${d}ms` }} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Support strip — appears after the first concern log, stays quiet */}
-        {supportStrip && (
-          <div className="px-4 pt-3">
-            <div
-              className="flex items-center justify-between gap-3 p-3.5 rounded-2xl text-xs leading-relaxed"
-              style={{ backgroundColor: "#FFF3EE", border: "1.5px dashed #E3A48E" }}
-            >
-              <p style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6E3826" }}>
-                รู้สึกหนักใจอยู่ใช่ไหม? กระจกอยู่ตรงนี้เสมอ — มีคนที่พร้อมฟังคุณตลอด 24 ชม. ด้วยนะ
-              </p>
-              <a
-                href="tel:1323"
-                className="flex-shrink-0 px-3 py-2 rounded-full font-bold text-[11px] flex items-center gap-1.5 transition-all active:scale-[0.97]"
-                style={{ backgroundColor: T.red, color: T.white, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                </svg>
-                โทร 1323
-              </a>
-              <button
-                onClick={onDismissSupport}
-                aria-label="ปิดข้อความนี้"
-                className="flex-shrink-0 p-1.5 rounded-lg transition-colors hover:bg-black/5"
-                style={{ color: "#A85F73" }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Input toolbar */}
-        <div className="p-4 space-y-3" style={{ borderTop: `2px solid ${T.teal}`, backgroundColor: T.white }}>
-          <div className="flex items-center gap-2">
-            {[
-              { handler: handleSelfie, icon: "📷", title: "ถ่ายเซลฟี่" },
-              { handler: handleVoice, icon: "🎤", title: "พูดระบาย" },
-              { handler: handleHomeworkPhoto, icon: "🖼️", title: "แนบรูปการบ้าน" },
-            ].map(({ handler, icon, title }) => (
-              <button
-                key={title}
-                onClick={handler}
-                title={title}
-                className="p-2.5 rounded-full text-sm font-bold transition-all hover:text-white"
-                style={{ border: `2px solid ${T.teal}`, backgroundColor: "#E3EAE0", color: T.teal }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = T.teal; e.currentTarget.style.color = T.white; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#E3EAE0"; e.currentTarget.style.color = T.teal; }}
-              >
-                {icon}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input
-              id="chat-input"
-              type="text"
-              placeholder="พิมพ์ความรู้สึกของคุณ..."
+          {/* Claude Prompt Box Card */}
+          <div className="w-full max-w-2xl bg-white rounded-3xl p-4 shadow-md border border-[#E2D9C2] transition-all focus-within:shadow-lg focus-within:border-[#FF3366]">
+            <textarea
+              placeholder="พิมพ์ความรู้สึกของคุณ หรือถามโจทย์การบ้าน (Bio, Math, Coding)..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-              className="flex-1 px-5 py-3 rounded-full outline-none text-sm"
-              style={{ backgroundColor: T.cream, border: "1.5px solid transparent", fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}
-              onFocus={(e) => (e.target.style.borderColor = T.teal)}
-              onBlur={(e) => (e.target.style.borderColor = "transparent")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+              rows={3}
+              className="w-full bg-transparent outline-none text-sm resize-none"
+              style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}
             />
-            <button
-              onClick={sendMessage}
-              className="w-11 h-11 rounded-full text-white font-bold flex items-center justify-center transition-all active:scale-[0.95]"
-              style={{ backgroundColor: T.teal }}
-            >
-              ⬆️
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleSelfie}
+                  className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-base"
+                  title="ถ่ายเซลฟี่ประเมินอารมณ์"
+                >
+                  📷
+                </button>
+                <button
+                  onClick={handleHomeworkPhoto}
+                  className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-base"
+                  title="แนบรูปการบ้าน"
+                >
+                  🖼️
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-600 font-medium border border-gray-200">
+                  ThaiLLM 3.0 · Vision ▾
+                </span>
+                <button
+                  onClick={handleVoice}
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors text-base"
+                  title="พูดระบายสภาวะจิตใจ"
+                >
+                  🎙️
+                </button>
+                <button
+                  onClick={() => sendMessage()}
+                  disabled={!inputText.trim()}
+                  className="w-9 h-9 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm"
+                  style={{ backgroundColor: T.salmon }}
+                >
+                  ⬆️
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Action Suggestion Chips */}
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-6 max-w-xl">
+            <button onClick={handleSelfie} className="px-3.5 py-1.5 rounded-full bg-white border border-[#E2D9C2] text-xs font-semibold hover:border-[#FF3366] hover:text-[#FF3366] transition-colors shadow-2xs">
+              📷 ถ่ายเซลฟี่ประเมินอารมณ์
+            </button>
+            <button onClick={handleHomeworkPhoto} className="px-3.5 py-1.5 rounded-full bg-white border border-[#E2D9C2] text-xs font-semibold hover:border-[#FF3366] hover:text-[#FF3366] transition-colors shadow-2xs">
+              🖼️ เฉลยรูปการบ้าน (Bio, Math, Coding)
+            </button>
+            <button onClick={handleVoice} className="px-3.5 py-1.5 rounded-full bg-white border border-[#E2D9C2] text-xs font-semibold hover:border-[#FF3366] hover:text-[#FF3366] transition-colors shadow-2xs">
+              🎤 พูดระบายสภาวะจิตใจ
             </button>
           </div>
         </div>
-      </div>
+      ) : (
+        /* ── ACTIVE CHAT STREAM ── */
+        <div className="flex-1 flex flex-col overflow-hidden bg-white/90 rounded-2xl border border-[#E2D9C2] shadow-sm">
+          {/* Header */}
+          <div className="px-5 py-3 flex items-center justify-between border-b border-[#EDE6D3] bg-white">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `1.5px solid ${T.salmon}` }}
+              >
+                {EMO[mood]?.emoji || "😌"}
+              </div>
+              <div>
+                <p className="font-bold text-sm" style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>
+                  กระจกสะท้อนใจ
+                </p>
+                <p className="text-xs flex items-center gap-1 font-medium text-gray-500">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  สภาวะอารมณ์: {EMO[mood]?.label || "ปกติ"}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={resetChat}
+              className="px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-all text-gray-600 text-xs font-semibold flex items-center gap-1 border border-gray-200"
+              title="เริ่มการสนทนาใหม่"
+            >
+              🔄 ล้างข้อความ
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div ref={chatBodyRef} className="flex-1 overflow-y-auto p-5 space-y-4 max-w-4xl mx-auto w-full" style={{ scrollbarWidth: "thin" }}>
+            {messages.map((msg) => (
+              <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                {msg.role === "system" ? (
+                  <div className="w-full px-4 py-2 rounded-2xl text-xs font-mono text-center" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
+                    💡 {msg.text}
+                  </div>
+                ) : msg.cardType === "emotion" && msg.emotionData ? (
+                  <div
+                    className="max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed"
+                    style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+                  >
+                    <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                      ผลการประเมินเบื้องต้นจากใบหน้า · {msg.emotionData.label}
+                    </p>
+                    <p>{msg.emotionData.note}</p>
+                  </div>
+                ) : msg.cardType === "ocr" ? (
+                  <div className="max-w-[85%] p-4 rounded-2xl text-sm" style={{ backgroundColor: T.cream, border: "1.5px dashed #aaa" }}>
+                    <p className="font-bold text-xs text-gray-500 mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>📷 ผลจาก OCR API</p>
+                    <p className="text-xs text-gray-500 italic border-l-2 pl-3 py-1 my-1" style={{ borderColor: T.salmon }}>{msg.ocrText}</p>
+                  </div>
+                ) : (
+                  <div
+                    className="max-w-[82%] px-5 py-3.5 rounded-2xl text-sm leading-relaxed shadow-xs"
+                    style={{
+                      backgroundColor: msg.role === "user" ? T.salmon : T.white,
+                      color: msg.role === "user" ? T.black : T.black,
+                      border: msg.role === "user" ? "none" : "1.5px solid #EDE6D3",
+                      borderBottomRightRadius: msg.role === "user" ? "4px" : "20px",
+                      borderBottomLeftRadius: msg.role === "bot" ? "4px" : "20px",
+                      fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                    }}
+                  >
+                    <MathText text={msg.text} />
+                    {msg.role === "bot" && (
+                      <button onClick={() => speakText(msg.text)} className="mt-1 text-xs opacity-60 hover:opacity-100 transition-opacity">🔊 ฟังเสียง</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            {isAnalyzing && (
+              <div className="flex justify-start">
+                <div className="px-5 py-3 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.salmon}` }}>
+                  <div className="flex gap-1.5">
+                    {[0, 150, 300].map((d) => (
+                      <div key={d} className="w-2.5 h-2.5 rounded-full animate-bounce" style={{ backgroundColor: T.salmon, animationDelay: `${d}ms` }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Support strip */}
+          {supportStrip && (
+            <div className="px-4 pt-2">
+              <div
+                className="flex items-center justify-between gap-3 p-3 rounded-2xl text-xs leading-relaxed"
+                style={{ backgroundColor: "#FFF3EE", border: "1.5px dashed #E3A48E" }}
+              >
+                <p style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#6E3826" }}>
+                  รู้สึกหนักใจอยู่ใช่ไหม? กระจกอยู่ตรงนี้เสมอ — มีคนที่พร้อมฟังคุณตลอด 24 ชม. ด้วยนะ
+                </p>
+                <a
+                  href="tel:1323"
+                  className="flex-shrink-0 px-3 py-1.5 rounded-full font-bold text-[11px] flex items-center gap-1.5 transition-all active:scale-[0.97]"
+                  style={{ backgroundColor: T.red, color: T.white }}
+                >
+                  โทร 1323
+                </a>
+                <button onClick={onDismissSupport} className="flex-shrink-0 p-1 hover:bg-black/5 rounded">✕</button>
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Floating Prompt Card (Claude Style!) */}
+          <div className="p-4 bg-transparent max-w-3xl mx-auto w-full">
+            <div className="bg-white rounded-3xl p-3 shadow-sm border border-[#E2D9C2] transition-all focus-within:shadow-md focus-within:border-[#FF3366]">
+              <textarea
+                placeholder="พิมพ์ความรู้สึกของคุณ หรือถามโจทย์การบ้าน..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+                rows={2}
+                className="w-full bg-transparent outline-none text-sm resize-none"
+                style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
+              />
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-1">
+                <div className="flex items-center gap-1.5">
+                  <button onClick={handleSelfie} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-base" title="ถ่ายเซลฟี่">
+                    📷
+                  </button>
+                  <button onClick={handleHomeworkPhoto} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-base" title="แนบรูปการบ้าน">
+                    🖼️
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium border border-gray-200">
+                    ThaiLLM 3.0
+                  </span>
+                  <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors text-base" title="พูดระบาย">
+                    🎙️
+                  </button>
+                  <button
+                    onClick={() => sendMessage()}
+                    disabled={!inputText.trim()}
+                    className="w-8 h-8 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm"
+                    style={{ backgroundColor: T.salmon }}
+                  >
+                    ⬆️
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
