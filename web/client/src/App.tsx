@@ -2221,7 +2221,13 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
 
     const startTime = Date.now();
     try {
-      const result = await api.sendMessage(textToSend.trim());
+      // Build history from current messages (last 10, text only, skip images)
+      const chatHistory = messages
+        .filter((m) => m.text && !m.imageUrl)
+        .slice(-10)
+        .map((m) => ({ role: m.role, text: m.text }));
+
+      const result = await api.sendMessage(textToSend.trim(), chatHistory);
       const duration = Date.now() - startTime;
       setModalityState({ mode: "text", status: "success", startedAt: startTime, duration });
 

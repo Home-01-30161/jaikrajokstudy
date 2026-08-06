@@ -151,8 +151,8 @@ export const api = {
   createSession: () =>
     request<{ ok: boolean }>("/session", { method: "POST" }),
 
-  sendMessage: (message: string) =>
-    request<ChatResult>("/chat/send", json({ message })),
+  sendMessage: (message: string, history: { role: string; text: string }[] = []) =>
+    request<ChatResult>("/chat/send", json({ message, history })),
 
   analyzeSelfie: (image: Blob, filename = "selfie.jpg") =>
     request<AnalysisResult>("/selfie/analyze", upload(image, filename)),

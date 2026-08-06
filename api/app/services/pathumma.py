@@ -61,7 +61,7 @@ def _strip_emoji(text: str) -> str:
     return "\n".join(line.rstrip() for line in cleaned.split("\n")).strip()
 
 
-async def generate_reply(user_text: str, *, emotion_hint: str | None = None) -> ServiceResult:
+async def generate_reply(user_text: str, *, emotion_hint: str | None = None, history: list | None = None) -> ServiceResult:
     """Generate a reply, preferring the TokenMind gateway (thaillm-8b).
 
     Falls back to the legacy AI for Thai /textqa/completion endpoint so a
@@ -74,7 +74,7 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None) -> 
         prompt = f"(อารมณ์โดยประมาณ: {emotion_hint})\nคำถาม/ข้อความของผู้เรียน: {user_text}"
 
     if settings.tokenmind_api_key:
-        result = await _generate_tokenmind(prompt, settings)
+        result = await _generate_tokenmind(prompt, settings, history=history or [])
         if result.ok:
             return result
         logger.warning("TokenMind LLM failed (%s); falling back to textqa", result.error)
@@ -88,21 +88,30 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None) -> 
     return await _generate_textqa(prompt, settings)
 
 
-async def _generate_tokenmind(prompt: str, settings) -> ServiceResult:
+async def _generate_tokenmind(prompt: str, settings, history: list | None = None) -> ServiceResult:
     """OpenAI-compatible /chat/completions call against the TokenMind gateway."""
     url = f"{settings.tokenmind_base_url.rstrip('/')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {settings.tokenmind_api_key}",
         "Content-Type": "application/json",
     }
+
+    # Build messages with conversation history
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # Append up to last 10 turns of history (user+bot pairs)
+    for h in (history or [])[-10:]:
+        role = "assistant" if h.get("role") == "bot" else "user"
+        text = (h.get("text") or "").strip()
+        if text:
+            messages.append({"role": role, "content": text})
+
+    # Append current user message
+    messages.append({"role": "user", "content": prompt})
+
     payload = {
         "model": settings.tokenmind_llm_model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        # Generous budget: the reasoning block is billed too, and a small cap
-        # truncates mid-<think> and yields an empty answer.
+        "messages": messages,
         "max_tokens": 1024,
         "temperature": 0.4,
     }

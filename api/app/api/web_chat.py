@@ -61,8 +61,14 @@ def is_crisis(text: str) -> bool:
     return any(k in lowered or k.replace(" ", "") in stripped for k in CRISIS_KEYWORDS)
 
 
+class HistoryMessage(BaseModel):
+    role: str  # "user" | "bot"
+    text: str
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=_MAX_MESSAGE_CHARS)
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=20)
 
 
 class ChatResponse(BaseModel):
@@ -177,7 +183,7 @@ def _resize_image_for_ocr(image_bytes: bytes, max_pixels: int = 500_000) -> byte
         return image_bytes
 
 
-async def _mood_and_reply(user_id: str, text: str, *, source: str) -> tuple[str, str, float | None, list[str]]:
+async def _mood_and_reply(user_id: str, text: str, *, source: str, history: list | None = None) -> tuple[str, str, float | None, list[str]]:
     """Sentiment -> mood -> mood-aware LLM reply. Returns (mood, reply, confidence, degraded)."""
     degraded: list[str] = []
 
@@ -191,7 +197,7 @@ async def _mood_and_reply(user_id: str, text: str, *, source: str) -> tuple[str,
 
     detected = mood_svc.classify(text, polarity, score)
 
-    llm = await pathumma.generate_reply(text, emotion_hint=mood_svc.MOOD_LABELS_TH.get(detected))
+    llm = await pathumma.generate_reply(text, emotion_hint=mood_svc.MOOD_LABELS_TH.get(detected), history=history)
     if llm.ok and llm.text:
         reply = llm.text
     else:
@@ -237,7 +243,7 @@ async def send_message(
         )
 
     detected, reply, score, degraded = await _mood_and_reply(
-        user_id, text, source="text"
+        user_id, text, source="text", history=[{"role": m.role, "text": m.text} for m in req.history]
     )
     return ChatResponse(
         reply=reply,
