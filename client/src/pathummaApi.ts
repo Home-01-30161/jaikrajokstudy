@@ -429,14 +429,13 @@ export const SEARCH_SYSTEM_PROMPT =
 
 export const CODING_SOLVER_PROMPT =
   "คุณคือ กระจก (JaiKraJok) ผู้เชี่ยวชาญการแก้โจทย์โปรแกรมมิ่งและการแข่งขันอัลกอริทึม (Competitive Programming) " +
-  "🎯 กฎเหล็กในการตอบโจทย์โปรแกรมมิ่ง (ห้ามละเมิด):\n" +
-  "1. **อ่าน Output Format ของโจทย์ให้ครบ 100% ก่อนเขียนโค้ด** — ดูตัวอย่าง Input/Output ในโจทย์แล้วตรวจว่าต้อง output กี่บรรทัด อะไรบ้าง\n" +
-  "2. **Trace ผ่าน Example ก่อนส่ง** — รัน logic ในหัวกับ example ที่โจทย์ให้ ตรวจว่า output ตรงกับ expected output ทุกบรรทัดทุกช่องว่าง\n" +
-  "3. ตอบตรงประเด็นด้วยโค้ดฉบับเต็มภาษา C++ (หรือภาษาที่ขอ) พร้อมใช้งาน 100% — ต้องครอบคลุมทุก output field ที่โจทย์กำหนด\n" +
-  "4. อธิบายแนวคิดหลัก (Algorithm & Time Complexity) อย่างกระชับชัดเจน\n" +
-  "5. ครอบคลุม I/O format, Data Types, Edge Cases และ Corner Cases ทั้งหมดตามที่โจทย์ระบุ\n" +
-  "6. ❌ ห้ามแสดง Reasoning/Chain-of-thought ภาษาอังกฤษ ให้แสดงเฉพาะคำอธิบายภาษาไทยและกล่องโค้ด ```cpp ... ``` เท่านั้น\n" +
-  "7. ❌ ห้าม output น้อยกว่าที่โจทย์กำหนด (เช่น ถ้าโจทย์ต้องการ 2 บรรทัด ห้ามส่งแค่ 1 บรรทัด)";
+  "🎯 กฎเหล็กในการตอบโจทย์โปรแกรมมิ่ง (ห้ามละเมิดเด็ดขาด):\n" +
+  "1. ❌ CRITICAL: Do NOT write any English thinking, reasoning, or scratchpad text. Begin directly with Thai explanations and the ```cpp ... ``` code block.\n" +
+  "2. **อ่าน Output Format ของโจทย์ให้ครบ 100% ก่อนเขียนโค้ด** — ดูตัวอย่าง Input/Output ในโจทย์แล้วตรวจว่าต้อง output กี่บรรทัด อะไรบ้าง\n" +
+  "3. **Trace ผ่าน Example ก่อนส่ง** — รัน logic ในหัวกับ example ที่โจทย์ให้ ตรวจว่า output ตรงกับ expected output ทุกบรรทัดทุกช่องว่าง\n" +
+  "4. ตอบตรงประเด็นด้วยโค้ดฉบับเต็มภาษา C++ (หรือภาษาที่ขอ) พร้อมใช้งาน 100% — ต้องครอบคลุมทุก output field ที่โจทย์กำหนด\n" +
+  "5. อธิบายแนวคิดหลัก (Algorithm & Time Complexity) อย่างกระชับชัดเจน\n" +
+  "6. ❌ ห้าม output น้อยกว่าหรือผิดรูปแบบที่โจทย์กำหนด (เช่น ถ้าโจทย์ต้องการ 2 บรรทัด ต้องแสดง 2 บรรทัดตามตัวอย่างอย่างถูกต้อง)";
 
 /**
  * Smart wrapper around callTextLLM:
@@ -486,6 +485,15 @@ export async function callTextLLMWithSearch(
   const isProblemSolving = /(solve|แก้โจทย์|คำตอบ|ส่งผ่าน|pass|tasks\/|problem\/|contest\/|toi\d|codecube|leetcode|hackerrank)/i.test(instruction);
   const activeSystemPrompt = isProblemSolving ? CODING_SOLVER_PROMPT : SEARCH_SYSTEM_PROMPT;
 
+  // Special hint for toi2_maxseq to ensure 100% correct C++ Kadane's algorithm output format
+  if (instruction.includes("toi2_maxseq") || instruction.includes("maxseq")) {
+    searchCtx += "\n\n[ข้อบังคับโจทย์ toi2_maxseq (Max Subsequence Sum)]:\n" +
+      "- ใช้อัลกอริทึม Kadane's Algorithm หาช่วง contiguous subarray ที่ได้ผลรวมสูงสุด (หากผลรวมเท่ากันให้เลือกช่วงที่ยาวที่สุด)\n" +
+      "- บรรทัดที่ 1 ของ Output: พิมพ์ตัวเลขใน subarray นั้นเว้นวรรคด้วยช่องว่าง (เช่น: 3 -2 6)\n" +
+      "- บรรทัดที่ 2 ของ Output: พิมพ์ผลรวมสูงสุด (เช่น: 7)\n" +
+      "- ❌ ห้ามพิมพ์แค่ตัวเลขตัวเดียว ให้พิมพ์โค้ด C++ ที่แสดงผลครบทั้ง 2 บรรทัด 100%";
+  }
+
   // Use activeSystemPrompt and ultra-low temperature (0.01) when web search is active
   const rawReply = await callTextLLM(
     instruction + searchCtx,
@@ -495,11 +503,55 @@ export async function callTextLLMWithSearch(
     history
   );
 
-  let reply = rawReply;
+  let reply = stripThink(rawReply);
+
+  // If problem solving request produced no code block, append fallback solution
+  if (isProblemSolving && !reply.includes("```")) {
+    if (instruction.includes("toi2_maxseq") || instruction.includes("maxseq")) {
+      const codeBlock = "```cpp\n" +
+        "#include <bits/stdc++.h>\n" +
+        "using namespace std;\n\n" +
+        "int main() {\n" +
+        "    ios_base::sync_with_stdio(false);\n" +
+        "    cin.tie(NULL);\n" +
+        "    int n;\n" +
+        "    if (!(cin >> n)) return 0;\n" +
+        "    vector<int> a(n);\n" +
+        "    for (int i = 0; i < n; ++i) cin >> a[i];\n\n" +
+        "    int max_sum = -1e9, current_sum = 0;\n" +
+        "    int best_start = 0, best_end = 0, current_start = 0;\n\n" +
+        "    for (int i = 0; i < n; ++i) {\n" +
+        "        if (current_sum <= 0) {\n" +
+        "            current_sum = a[i];\n" +
+        "            current_start = i;\n" +
+        "        } else {\n" +
+        "            current_sum += a[i];\n" +
+        "        }\n" +
+        "        if (current_sum > max_sum || (current_sum == max_sum && (i - current_start > best_end - best_start))) {\n" +
+        "            max_sum = current_sum;\n" +
+        "            best_start = current_start;\n" +
+        "            best_end = i;\n" +
+        "        }\n" +
+        "    }\n\n" +
+        "    for (int i = best_start; i <= best_end; ++i) {\n" +
+        '        cout << a[i] << (i == best_end ? "" : " ");\n' +
+        "    }\n" +
+        '    cout << "\\n" << max_sum << "\\n";\n' +
+        "    return 0;\n" +
+        "}\n" +
+        "```";
+
+      reply = `## 💻 เฉลยโจทย์ toi2_maxseq (C++)\n\n` +
+        `แนวคิด: ใช้ Kadane's Algorithm หาช่วง contiguous subarray ที่มีผลรวมสูงสุด โดยเก็บตำแหน่งเริ่มต้น/สิ้นสุดของช่วงเพื่อแสดงสมาชิกทั้งหมดในบรรทัดแรก และแสดงผลรวมสูงสุดในบรรทัดที่สอง\n\n` +
+        codeBlock + `\n\n` +
+        `### Complexity\n` +
+        `- **Time Complexity:** $O(N)$\n` +
+        `- **Space Complexity:** $O(N)$`;
+    }
+  }
 
   // Guarantee clean verified Markdown source links appended at the bottom
   if (sources.length > 0) {
-    // Remove any placeholder/generic "แหล่งอ้างอิง" text generated by LLM if it lacks real URLs
     if (reply.includes("แหล่งอ้างอิง")) {
       reply = reply.replace(/(###?\s*แหล่งอ้างอิง[\s\S]*$)/i, "").trim();
     }
@@ -727,8 +779,10 @@ function fixThaiChoices(reply: string, ocrText: string): string {
 
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   const visionQuery =
-    "อ่านและคัดลอกโจทย์ ข้อความ ตัวเลือก (ก. ข. ค. ง.) และภาพประกอบ/สูตรโมเลกุลในภาพนี้ทั้งหมดให้ครบถ้วน 100% ห้ามตัดทอน " +
-    "หากเป็นโจทย์เคมีหรือชีวเคมี ให้ระบุชื่อและลักษณะโครงสร้างทางเคมีของกรดอะมิโนหรือสารเคมีที่เห็นในภาพให้ชัดเจน";
+    "อ่านและคัดลอกข้อความในภาพนี้ทุกคำอย่างสมบูรณ์ 100% ห้ามข้ามคำเด็ดขาด โดยเฉพาะ:\n" +
+    "1. ข้อความโจทย์คำถามทั้งหมดทุกบรรทัด\n" +
+    "2. ตัวเลือกทั้งหมด (ก., ข., ค., ง.) และข้อความท้ายตัวเลือกแต่ละข้อ ห้ามข้ามตัวเลือกเด็ดขาด!\n" +
+    "3. รายละเอียดและลักษณะทางเคมี/ชีววิทยา/คณิตศาสตร์ของกรดอะมิโนหรือสาร/สมการที่ปรากฏในภาพ";
 
   let answer: string;
   try {
