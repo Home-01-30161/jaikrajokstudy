@@ -404,8 +404,48 @@ function SalmonBtn({ children, onClick, fullWidth = false }: {
   );
 }
 
+/* ============ USER AUTHENTICATION SYSTEM ============ */
+export interface UserAccount {
+  id: string;
+  email: string;
+  name: string;
+  passwordHash: string;
+}
+
+export function getUsersList(): UserAccount[] {
+  try {
+    const list = localStorage.getItem("jaikrajok:users");
+    if (list) return JSON.parse(list);
+  } catch {}
+  return [];
+}
+
+export function saveUsersList(users: UserAccount[]) {
+  try {
+    localStorage.setItem("jaikrajok:users", JSON.stringify(users));
+  } catch {}
+}
+
+export function getCurrentUser(): UserAccount | null {
+  try {
+    const userStr = localStorage.getItem("jaikrajok:current_user");
+    if (userStr) return JSON.parse(userStr);
+  } catch {}
+  return null;
+}
+
+export function setCurrentUser(user: UserAccount | null) {
+  try {
+    if (user) {
+      localStorage.setItem("jaikrajok:current_user", JSON.stringify(user));
+    } else {
+      localStorage.removeItem("jaikrajok:current_user");
+    }
+  } catch {}
+}
+
 /* ============ LOGIN PAGE ============ */
-function LoginPage({ onNext }: { onNext: () => void }) {
+function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSuccess: (user: UserAccount) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -415,6 +455,78 @@ function LoginPage({ onNext }: { onNext: () => void }) {
     gsap.fromTo(".login-img", { x: -30 }, { x: 0, duration: 1.0, ease: "power3.out" });
     gsap.fromTo(".login-form", { y: 20 }, { y: 0, duration: 0.8, ease: "back.out(1.2)", delay: 0.2 });
   }, []);
+
+  const handleSubmit = () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
+      toast("กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน");
+      return;
+    }
+
+    if (mode === "login") {
+      const users = getUsersList();
+      const found = users.find((u) => u.email === cleanEmail && u.passwordHash === password);
+      if (found) {
+        setCurrentUser(found);
+        toast(`ยินดีต้อนรับกลับ คุณ${found.name}!`);
+        onLoginSuccess(found);
+      } else {
+        const emailExists = users.some((u) => u.email === cleanEmail);
+        if (emailExists) {
+          toast("รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
+        } else {
+          toast("ไม่พบบัญชีนี้ ระบบกำลังเปลี่ยนเป็นสมัครสมาชิกให้คุณ");
+          setMode("signup");
+        }
+      }
+    } else {
+      // Signup mode
+      if (cleanEmail.length < 5 || !cleanEmail.includes("@")) {
+        toast("กรุณากรอกอีเมลที่ถูกต้อง");
+        return;
+      }
+      if (password.length < 4) {
+        toast("รหัสผ่านต้องมีความยาวอย่างน้อย 4 ตัวอักษร");
+        return;
+      }
+      const users = getUsersList();
+      if (users.some((u) => u.email === cleanEmail)) {
+        toast("อีเมลนี้ได้รับการลงทะเบียนแล้ว กรุณาล็อกอิน");
+        setMode("login");
+        return;
+      }
+
+      const newUser: UserAccount = {
+        id: "usr_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+        email: cleanEmail,
+        name: cleanEmail.split("@")[0],
+        passwordHash: password,
+      };
+
+      users.push(newUser);
+      saveUsersList(users);
+      setCurrentUser(newUser);
+      toast(`สมัครสมาชิกเรียบร้อยแล้ว! ยินดีต้อนรับคุณ ${newUser.name}`);
+      onLoginSuccess(newUser);
+    }
+  };
+
+  const handleGoogleLogin = () => {
+    const googleUser: UserAccount = {
+      id: "usr_google_demo",
+      email: "google_user@gmail.com",
+      name: "Google User",
+      passwordHash: "google_pass_demo",
+    };
+    const users = getUsersList();
+    if (!users.some((u) => u.id === googleUser.id)) {
+      users.push(googleUser);
+      saveUsersList(users);
+    }
+    setCurrentUser(googleUser);
+    toast("เข้าสู่ระบบด้วย Google สำเร็จ!");
+    onLoginSuccess(googleUser);
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden" style={{ backgroundColor: T.black }}>
@@ -501,9 +613,11 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           </label>
           <input
             type="email"
+            placeholder="example@gmail.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl mb-4 outline-none transition-all focus:ring-2"
+            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
+            className="w-full px-4 py-3 rounded-2xl mb-4 outline-none transition-all focus:ring-2 placeholder:text-gray-400"
             style={{
               backgroundColor: "rgba(255,255,255,0.8)",
               border: "1px solid rgba(0,0,0,0.05)",
@@ -517,9 +631,11 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           </label>
           <input
             type="password"
+            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl mb-6 outline-none transition-all focus:ring-2"
+            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
+            className="w-full px-4 py-3 rounded-2xl mb-6 outline-none transition-all focus:ring-2 placeholder:text-gray-400"
             style={{
               backgroundColor: "rgba(255,255,255,0.8)",
               border: "1px solid rgba(0,0,0,0.05)",
@@ -529,10 +645,7 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           />
 
           <button
-            onClick={() => {
-              if (!email || !password) { toast("กรุณากรอกอีเมลและรหัสผ่าน"); return; }
-              onNext();
-            }}
+            onClick={handleSubmit}
             className="w-full py-3.5 rounded-full font-bold text-white text-base mb-3 transition-all active:scale-[0.97]"
             style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
           >
@@ -542,14 +655,15 @@ function LoginPage({ onNext }: { onNext: () => void }) {
           <div className="text-center text-xs mb-3" style={{ color: "rgba(26,26,26,0.6)", fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}>or</div>
 
           <button
-            className="w-full py-3 rounded-full font-bold text-base mb-3 transition-all active:scale-[0.97] bg-white flex items-center justify-center"
+            onClick={() => setMode(mode === "login" ? "signup" : "login")}
+            className="w-full py-3 rounded-full font-bold text-base mb-3 transition-all active:scale-[0.97] bg-white flex items-center justify-center border border-black/10"
             style={{ color: T.black, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif" }}
           >
-            Sign Up
+            {mode === "login" ? "Sign Up" : "Log In"}
           </button>
 
           <button
-            onClick={() => toast("ฟีเจอร์ Google Login กำลังพัฒนา")}
+            onClick={handleGoogleLogin}
             className="w-full py-3 rounded-full font-bold text-white text-base transition-all active:scale-[0.97] flex items-center justify-center gap-2"
             style={{ backgroundColor: T.red, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", boxShadow: "0 2px 12px rgba(196,30,58,0.3)" }}
           >
@@ -702,7 +816,8 @@ export interface ChatSession {
 }
 
 /* ============ MAIN APP SHELL ============ */
-function AppShell() {
+function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; onLogout?: () => void }) {
+  const userKey = currentUser ? currentUser.id : "guest";
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [age] = useState("16");
   const [guardianConsent] = useState(true);
@@ -710,19 +825,19 @@ function AppShell() {
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("jaikrajok:sessions") || "null");
+      const saved = JSON.parse(localStorage.getItem(`jaikrajok:sessions:${userKey}`) || "null");
       if (Array.isArray(saved) && saved.length > 0) return saved;
     } catch {}
     return [
       {
-        id: "session_1",
+        id: `session_${userKey}_1`,
         title: "สนทนาใหม่",
         timestamp: Date.now(),
         messages: [
           {
             id: "init",
             role: "bot",
-            text: "สวัสดีค่ะ วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ",
+            text: `สวัสดีค่ะคุณ ${currentUser ? currentUser.name : "ผู้เรียน"} วันนี้อยากเล่าอะไรให้กระจกฟังไหม จะพิมพ์ พูด ถ่ายเซลฟี่ หรือถ่ายรูปการบ้านก็ได้นะ`,
             timestamp: Date.now(),
           },
         ],
@@ -730,13 +845,13 @@ function AppShell() {
       },
     ];
   });
-  const [activeSessionId, setActiveSessionId] = useState<string>(() => sessions[0]?.id || "session_1");
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => sessions[0]?.id || `session_${userKey}_1`);
 
   useEffect(() => {
     try {
-      localStorage.setItem("jaikrajok:sessions", JSON.stringify(sessions));
+      localStorage.setItem(`jaikrajok:sessions:${userKey}`, JSON.stringify(sessions));
     } catch {}
-  }, [sessions]);
+  }, [sessions, userKey]);
 
   // Derived current active session state
   const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
@@ -789,7 +904,7 @@ function AppShell() {
 
   const [trendData, setTrendData] = useState<TrendPoint[]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("jaikrajok:trend") || "[]");
+      const saved = JSON.parse(localStorage.getItem(`jaikrajok:trend:${userKey}`) || "[]");
       return Array.isArray(saved) ? saved : [];
     } catch {
       return [];
@@ -797,7 +912,7 @@ function AppShell() {
   });
   const [logEntries, setLogEntries] = useState<LogEntry[]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("jaikrajok:logs") || "[]");
+      const saved = JSON.parse(localStorage.getItem(`jaikrajok:logs:${userKey}`) || "[]");
       return Array.isArray(saved) ? saved : [];
     } catch {
       return [];
@@ -823,12 +938,12 @@ function AppShell() {
   const [isRecording, setIsRecording] = useState(false);
 
   useEffect(() => {
-    try { localStorage.setItem("jaikrajok:trend", JSON.stringify(trendData)); } catch { /* storage full or blocked */ }
-  }, [trendData]);
+    try { localStorage.setItem(`jaikrajok:trend:${userKey}`, JSON.stringify(trendData)); } catch { /* storage full or blocked */ }
+  }, [trendData, userKey]);
 
   useEffect(() => {
-    try { localStorage.setItem("jaikrajok:logs", JSON.stringify(logEntries)); } catch { /* storage full or blocked */ }
-  }, [logEntries]);
+    try { localStorage.setItem(`jaikrajok:logs:${userKey}`, JSON.stringify(logEntries)); } catch { /* storage full or blocked */ }
+  }, [logEntries, userKey]);
 
   useEffect(() => {
     if (concernStreak >= 3 && !escalationShownRef.current) {
@@ -1479,20 +1594,28 @@ function AppShell() {
                 </div>
               </div>
 
-              {/* User Profile & Status */}
+              {/* User Profile & Logout */}
               <div className="mt-auto pt-3 border-t border-white/10 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs border border-amber-300">
-                      👤
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="w-7 h-7 rounded-full bg-[#FF3366] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                      {currentUser ? currentUser.name[0].toUpperCase() : "👤"}
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-white/90">ผู้เรียน</p>
-                      <p className="text-[10px] text-white/40 font-mono">Free plan · ThaiLLM</p>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white/90 truncate">{currentUser ? currentUser.name : "ผู้เรียน"}</p>
+                      <p className="text-[10px] text-white/40 font-mono truncate">{currentUser ? currentUser.email : "Free plan · ThaiLLM"}</p>
                     </div>
                   </div>
-                  <span className="text-sm" title={EMO[mood]?.label || "ปกติ"}>{EMO[mood]?.emoji}</span>
+                  <span className="text-sm flex-shrink-0" title={EMO[mood]?.label || "ปกติ"}>{EMO[mood]?.emoji}</span>
                 </div>
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    className="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold text-red-300 hover:text-red-100 hover:bg-white/10 transition-colors flex items-center gap-2"
+                  >
+                    <span>🚪</span> ออกจากระบบ
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -2699,10 +2822,23 @@ const PageWrapper = ({ children }: { children: React.ReactNode, pageKey: string 
 };
 
 export default function App() {
-  const [page, setPage] = useState<Page>("login");
+  const [currentUser, setCurrentUserState] = useState<UserAccount | null>(() => getCurrentUser());
+  const [page, setPage] = useState<Page>(() => (getCurrentUser() ? "app" : "login"));
   const [age, setAge] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianApproved, setGuardianApproved] = useState(false);
+
+  const handleLoginSuccess = (user: UserAccount) => {
+    setCurrentUserState(user);
+    setPage("app");
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentUserState(null);
+    setPage("login");
+    toast("ออกจากระบบเรียบร้อยแล้ว");
+  };
 
   // Global click ripple effect
   useEffect(() => {
@@ -2745,7 +2881,14 @@ export default function App() {
   return (
     <div className="font-sans">
       <Toaster richColors position="top-center" />
-      {page === "login" && <PageWrapper pageKey="login"><LoginPage onNext={() => setPage("onb1")} /></PageWrapper>}
+      {page === "login" && (
+        <PageWrapper pageKey="login">
+          <LoginPage
+            onNext={() => setPage("onb1")}
+            onLoginSuccess={handleLoginSuccess}
+          />
+        </PageWrapper>
+      )}
       {page === "onb1" && <PageWrapper pageKey="onb1"><OnbWelcome onNext={() => setPage("onb2")} /></PageWrapper>}
       {page === "onb2" && (
         <PageWrapper pageKey="onb2">
@@ -2774,7 +2917,14 @@ export default function App() {
         </PageWrapper>
       )}
       {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={() => setPage("app")} /></PageWrapper>}
-      {page === "app" && <PageWrapper pageKey="app"><AppShell /></PageWrapper>}
+      {page === "app" && (
+        <PageWrapper pageKey="app">
+          <AppShell
+            currentUser={currentUser}
+            onLogout={handleLogout}
+          />
+        </PageWrapper>
+      )}
     </div>
   );
 }
