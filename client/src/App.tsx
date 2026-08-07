@@ -1,4 +1,5 @@
 ﻿import { useState, useRef, useCallback, useEffect } from "react";
+import emailjs from "@emailjs/browser";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
@@ -427,6 +428,8 @@ export interface UserAccount {
   avatarUrl?: string;
   age?: string;
   guardianConsent?: boolean;
+  guardianEmail?: string;
+  consentAt?: string;
 }
 
 export function getUsersList(): UserAccount[] {
@@ -746,9 +749,6 @@ function GoogleOAuthModal({
 
 /* ============ LOGIN PAGE ============ */
 function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; onLoginSuccess: (user: UserAccount) => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showGoogleModal, setShowGoogleModal] = useState(false);
   const [pendingRegistration, setPendingRegistration] = useState<{ email: string; passwordHash: string; otpCode: string } | null>(null);
@@ -761,74 +761,6 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
   }, []);
 
   const generateOtpCode = () => Math.floor(100000 + Math.random() * 900000).toString();
-
-  const handleSubmit = () => {
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !password) {
-      toast("กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน");
-      return;
-    }
-
-    if (mode === "login") {
-      const users = getUsersList();
-      const found = users.find((u) => u.email === cleanEmail && u.passwordHash === password);
-      if (found) {
-        setCurrentUser(found);
-        toast(`ยินดีต้อนรับกลับ คุณ${found.name}!`);
-        onLoginSuccess(found);
-      } else {
-        const emailExists = users.some((u) => u.email === cleanEmail);
-        if (emailExists) {
-          toast("รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
-        } else {
-          toast("ไม่พบบัญชีนี้ — ต้องการสมัครสมาชิกด้วยอีเมลนี้ไหม? กด 'สมัครสมาชิก' ด้านบน");
-        }
-      }
-    } else {
-      // Signup mode — requirement: send verification code to Gmail
-      if (cleanEmail.length < 5 || !cleanEmail.includes("@")) {
-        toast("กรุณากรอกอีเมลที่ถูกต้อง");
-        return;
-      }
-      if (password.length < 4) {
-        toast("รหัสผ่านต้องมีความยาวอย่างน้อย 4 ตัวอักษร");
-        return;
-      }
-      const users = getUsersList();
-      if (users.some((u) => u.email === cleanEmail)) {
-        toast("อีเมลนี้ได้รับการลงทะเบียนแล้ว กรุณาล็อกอิน");
-        setMode("login");
-        return;
-      }
-
-      // Generate 6-digit OTP code
-      const otp = generateOtpCode();
-      setPendingRegistration({ email: cleanEmail, passwordHash: password, otpCode: otp });
-      setOtpPreviewUrl(null);
-      setShowOtpModal(true);
-
-      // Trigger real HTTP POST to /api/send-otp
-      toast(`📧 กำลังส่งรหัสยืนยัน 6 หลักไปที่ ${cleanEmail}...`);
-      fetch("/api/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, otp }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.previewUrl) {
-            setOtpPreviewUrl(data.previewUrl);
-            toast(`📧 ส่งอีเมลรหัสยืนยันสำเร็จ! สามารถเปิดดูใน Inbox ได้`, { duration: 6000 });
-          } else {
-            toast(`📧 ส่งอีเมลรหัสยืนยันไปที่ ${cleanEmail} สำเร็จแล้ว!`);
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to send OTP mail:", err);
-          toast(`📧 ส่งรหัสยืนยัน 6 หลักไปที่ ${cleanEmail} เรียบร้อยแล้ว`);
-        });
-    }
-  };
 
   const handleVerifyOtpSuccess = () => {
     if (!pendingRegistration) return;
@@ -990,18 +922,11 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             <span style={{ fontSize: 9, color: T.red, fontFamily: "monospace", letterSpacing: "0.05em", lineHeight: 1 }}>
-              {mode === "login" ? "A1" : "B1"}
+              A1
             </span>
           </div>
 
-          {/* Header — handwritten-weight label + big title */}
-          <p className="text-xs tracking-widest uppercase mb-1" style={{
-            color: "#7A6535",
-            fontFamily: "'Noto Sans Thai', sans-serif",
-            letterSpacing: "0.2em",
-          }}>
-            {mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
-          </p>
+          {/* Header label removed — Google sign-in only */}
           <h1 style={{
             fontFamily: "'Noto Sans Thai', 'Sarabun', sans-serif",
             fontWeight: 800,
@@ -1022,149 +947,7 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
             transform: "rotate(-0.5deg)",
           }} />
 
-          {/* Mode tabs — inline ruled style, no pill */}
-          <div role="tablist" className="flex mb-6" style={{ borderBottom: `1px solid ${T.khaki}`, gap: 0 }}>
-            {(["login", "signup"] as const).map((m) => (
-              <button
-                key={m}
-                role="tab"
-                aria-selected={mode === m}
-                onClick={() => setMode(m)}
-                style={{
-                  flex: 1,
-                  paddingBottom: 8,
-                  paddingTop: 4,
-                  fontSize: 13,
-                  fontWeight: mode === m ? 700 : 500,
-                  fontFamily: "'Noto Sans Thai', sans-serif",
-                  color: mode === m ? T.ink : "#7A6535",
-                  background: "transparent",
-                  border: "none",
-                  borderBottom: mode === m ? `2px solid ${T.ink}` : "2px solid transparent",
-                  cursor: "pointer",
-                  transition: "all 0.18s",
-                  marginBottom: -1,
-                  letterSpacing: "0.01em",
-                }}
-              >
-                {m === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
-              </button>
-            ))}
-          </div>
-
-          {/* Email field */}
-          <label htmlFor="lp-email" style={{
-            display: "block",
-            fontSize: 11,
-            fontWeight: 600,
-            color: "#7A6535",
-            fontFamily: "'Noto Sans Thai', sans-serif",
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            marginBottom: 6,
-          }}>
-            อีเมล
-          </label>
-          <input
-            id="lp-email"
-            type="email"
-            placeholder="example@gmail.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
-            style={{
-              width: "100%",
-              padding: "10px 0",
-              marginBottom: 20,
-              background: "transparent",
-              border: "none",
-              borderBottom: `1px solid ${T.khaki}`,
-              outline: "none",
-              color: T.ink,
-              fontFamily: "'Noto Sans Thai', sans-serif",
-              fontSize: 15,
-              boxSizing: "border-box",
-            }}
-            onFocus={(e) => { e.currentTarget.style.borderBottomColor = T.ink; }}
-            onBlur={(e) => { e.currentTarget.style.borderBottomColor = T.khaki; }}
-          />
-
-          {/* Password field */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-            <label htmlFor="lp-pass" style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "#7A6535",
-              fontFamily: "'Noto Sans Thai', sans-serif",
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-            }}>
-              รหัสผ่าน
-            </label>
-            {mode === "login" && (
-              <button
-                onClick={() => toast("ระบบรีเซ็ตรหัสผ่านกำลังพัฒนา — ติดต่อผู้ดูแลระบบ")}
-                style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  fontSize: 11, color: T.teal,
-                  fontFamily: "'Noto Sans Thai', sans-serif",
-                  textDecoration: "underline",
-                  textUnderlineOffset: 2,
-                  padding: 0,
-                }}
-              >
-                ลืมรหัสผ่าน?
-              </button>
-            )}
-          </div>
-          <input
-            id="lp-pass"
-            type="password"
-            placeholder="อย่างน้อย 4 ตัวอักษร"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
-            style={{
-              width: "100%",
-              padding: "10px 0",
-              marginBottom: 28,
-              background: "transparent",
-              border: "none",
-              borderBottom: `1px solid ${T.khaki}`,
-              outline: "none",
-              color: T.ink,
-              fontFamily: "'Noto Sans Thai', sans-serif",
-              fontSize: 15,
-              boxSizing: "border-box",
-            }}
-            onFocus={(e) => { e.currentTarget.style.borderBottomColor = T.ink; }}
-            onBlur={(e) => { e.currentTarget.style.borderBottomColor = T.khaki; }}
-          />
-
-          {/* Primary CTA — ink-block style */}
-          <button
-            onClick={handleSubmit}
-            style={{
-              width: "100%",
-              padding: "13px 0",
-              marginBottom: 12,
-              background: T.ink,
-              color: T.paper,
-              fontFamily: "'Noto Sans Thai', sans-serif",
-              fontSize: 15,
-              fontWeight: 700,
-              border: "none",
-              cursor: "pointer",
-              letterSpacing: "0.04em",
-              transition: "background 0.15s, transform 0.1s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = T.red; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = T.ink; }}
-            onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.98)"; }}
-            onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
-          >
-            {mode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
-          </button>
+          {/* Tabs removed — Google sign-in only */}
 
           {/* Google sign-in — correct branding */}
           <button
@@ -1324,9 +1107,9 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
   );
 }
 
-function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmail }: {
-  approved: boolean;
-  onSend: (email: string) => void;
+function GuardianPage({ stage, onSubmitEmail, onNext, guardianEmail, setGuardianEmail }: {
+  stage: "input" | "pending" | "approved";
+  onSubmitEmail: (email: string) => Promise<void>;
   onNext: () => void;
   guardianEmail: string;
   setGuardianEmail: (v: string) => void;
@@ -1336,21 +1119,22 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
     if (!cardRef.current) return;
     gsap.fromTo(cardRef.current, { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.85, ease: "expo.out" });
     gsap.fromTo(cardRef.current.querySelectorAll(".grd-el"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.55, ease: "expo.out", stagger: 0.1, delay: 0.4 });
-  }, []);
+  }, [stage]);
   return (
     <main className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
       <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-40" alt="" />
       <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0 onb-float" alt="" />
       <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0 onb-float2" alt="" />
       <div ref={cardRef} className="relative mx-auto z-10" style={{ opacity: 0, background: "#ffffff", borderRadius: "4px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "6px 6px 0 #1A1208, 0 2px 40px rgba(0,0,0,0.08)", border: "1.5px solid #1A1208" }}>
-        <p className="grd-el" style={{ opacity: 0, fontFamily: "monospace", fontSize: 10, letterSpacing: "0.12em", color: "#C4B88A", textTransform: "uppercase", marginBottom: 16 }}>ขั้นตอน 2 / 3</p>
+        <p className="grd-el" style={{ opacity: 0, fontFamily: "monospace", fontSize: 10, letterSpacing: "0.12em", color: "#7A6535", textTransform: "uppercase", marginBottom: 16 }}>ขั้นตอน 2 / 3</p>
         <h2 className="grd-el" style={{ opacity: 0, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", fontSize: "2.1rem", fontWeight: 900, color: "#1A1208", marginBottom: 12, lineHeight: 1.15 }}>
           ขอความยินยอม<br />จากผู้ปกครอง
         </h2>
         <p className="grd-el" style={{ opacity: 0, fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 14, color: "#1A120899", marginBottom: 32, lineHeight: 1.7 }}>
-          เนื่องจากคุณอายุต่ำกว่า 18 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณก่อนเข้าใช้งาน
+          เนื่องจากคุณอายุต่ำกว่า 18 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณก่อนเข้าใช้งาน ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)
         </p>
-        {!approved ? (
+
+        {stage === "input" && (
           <div className="flex flex-col gap-5">
             <input
               type="email"
@@ -1362,14 +1146,26 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
               onFocus={e => { e.currentTarget.style.borderColor = "#C8382A"; }}
               onBlur={e => { e.currentTarget.style.borderColor = "#1A1208"; }}
             />
-            <button onClick={() => onSend(guardianEmail)} className="grd-el onb-btn-ink" style={{ opacity: 0, backgroundColor: "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: "pointer" }}>
-              <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>ส่งคำขอความยินยอม →</span>
+            <button onClick={() => onSubmitEmail(guardianEmail)} className="grd-el onb-btn-ink" style={{ opacity: 0, backgroundColor: "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: "pointer" }}>
+              <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>ส่งคำขอให้ผู้ปกครอง →</span>
             </button>
           </div>
-        ) : (
+        )}
+
+        {stage === "pending" && (
+          <div className="flex flex-col gap-5">
+            <div className="grd-el p-5" style={{ opacity: 0, backgroundColor: "#FFF8E1", border: "1.5px solid #F9A825", borderRadius: 0, fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 13, color: "#5D4037", lineHeight: 1.7 }}>
+              <p style={{ fontWeight: 700, marginBottom: 8, fontFamily: "monospace", letterSpacing: "0.06em" }}>รอการยืนยันจากผู้ปกครอง</p>
+              <p>ส่งอีเมลไปยัง <strong>{guardianEmail}</strong> แล้ว</p>
+              <p style={{ marginTop: 8 }}>ผู้ปกครองต้องกดลิงก์ในอีเมลเพื่อยืนยัน — หน้านี้จะอัปเดตโดยอัตโนมัติเมื่อผู้ปกครองคลิก</p>
+            </div>
+          </div>
+        )}
+
+        {stage === "approved" && (
           <div className="flex flex-col gap-5">
             <div className="grd-el p-5 text-center" style={{ opacity: 0, backgroundColor: "#E8F5E9", border: "1.5px solid #4CAF50", borderRadius: 0, color: "#2E7D32", fontFamily: "'Noto Sans Thai', monospace", fontWeight: 700, letterSpacing: "0.06em", fontSize: 13 }}>
-              (pass) ได้รับความยินยอมแล้ว
+              (pass) ผู้ปกครองยืนยันแล้ว — บันทึกเวลา {new Date().toLocaleString("th-TH")}
             </div>
             <button onClick={onNext} className="grd-el onb-btn-ink" style={{ opacity: 0, backgroundColor: "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: "pointer" }}>
               <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>ถัดไป →</span>
@@ -1381,8 +1177,9 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
   );
 }
 
-function PrivacyPage({ onNext }: { onNext: () => void }) {
+function PrivacyPage({ onNext }: { onNext: (consentAt: string) => void }) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [checked, setChecked] = useState(false);
   useEffect(() => {
     if (!cardRef.current) return;
     gsap.fromTo(cardRef.current, { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.85, ease: "expo.out" });
@@ -1394,12 +1191,12 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
       <img src={IMG.chartGraphNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0 onb-float2" alt="" />
       <img src={IMG.dots} className="absolute top-16 right-16 w-32 h-auto pointer-events-none z-0 onb-float" alt="" />
       <div ref={cardRef} className="relative mx-auto z-10" style={{ opacity: 0, background: "#ffffff", borderRadius: "4px", padding: "48px 56px", maxWidth: "600px", width: "100%", boxShadow: "6px 6px 0 #1A1208, 0 2px 40px rgba(0,0,0,0.08)", border: "1.5px solid #1A1208" }}>
-        <p className="prv-el" style={{ opacity: 0, fontFamily: "monospace", fontSize: 10, letterSpacing: "0.12em", color: "#C4B88A", textTransform: "uppercase", marginBottom: 16 }}>ขั้นตอน 3 / 3</p>
+        <p className="prv-el" style={{ opacity: 0, fontFamily: "monospace", fontSize: 10, letterSpacing: "0.12em", color: "#7A6535", textTransform: "uppercase", marginBottom: 16 }}>ขั้นตอน 3 / 3</p>
         <h2 className="prv-el" style={{ opacity: 0, fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", fontSize: "2.1rem", fontWeight: 900, color: "#1A1208", marginBottom: 20, lineHeight: 1.15 }}>
           นโยบายความ<br />เป็นส่วนตัว
         </h2>
         <div
-          className="prv-el mb-8 text-sm leading-relaxed overflow-y-auto"
+          className="prv-el mb-6 text-sm leading-relaxed overflow-y-auto"
           style={{
             opacity: 0,
             backgroundColor: "#EDE8DC",
@@ -1412,12 +1209,31 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
             scrollbarWidth: "thin",
           }}
         >
-          <p className="mb-4">เราให้ความสำคัญกับความเป็นส่วนตัวของคุณ ข้อมูลทั้งหมดที่คุณแชร์ใน JaiKraJok จะถูกเก็บรักษาเป็นความลับและปลอดภัย</p>
-          <p className="mb-4">1. ข้อมูลส่วนบุคคลจะถูกใช้เพื่อปรับปรุงประสบการณ์ของคุณเท่านั้น</p>
-          <p className="mb-4">2. เราไม่มีนโยบายส่งต่อข้อมูลของคุณให้กับบุคคลที่สาม</p>
-          <p>3. คุณสามารถขอลบข้อมูลของคุณได้ตลอดเวลาผ่านเมนูตั้งค่า</p>
+          <p className="mb-4" style={{ fontWeight: 700 }}>นโยบายการคุ้มครองข้อมูลส่วนบุคคล — JaiKraJok</p>
+          <p className="mb-4">เราให้ความสำคัญกับความเป็นส่วนตัวของคุณ ข้อมูลทั้งหมดที่คุณแชร์ใน JaiKraJok จะถูกเก็บรักษาเป็นความลับ</p>
+          <p className="mb-4">1. <strong>วัตถุประสงค์การเก็บข้อมูล:</strong> ข้อมูลส่วนบุคคลจะถูกใช้เพื่อให้บริการและปรับปรุงประสบการณ์ของคุณเท่านั้น</p>
+          <p className="mb-4">2. <strong>การไม่เปิดเผยข้อมูล:</strong> เราไม่มีนโยบายส่งต่อข้อมูลของคุณให้กับบุคคลที่สาม</p>
+          <p className="mb-4">3. <strong>สิทธิของเจ้าของข้อมูล:</strong> คุณสามารถขอเข้าถึง แก้ไข ส่งออก หรือลบข้อมูลของคุณได้ทุกเมื่อผ่านเมนูตั้งค่า</p>
+          <p className="mb-4">4. <strong>การจัดเก็บข้อมูล:</strong> ข้อมูลถูกจัดเก็บใน localStorage ของอุปกรณ์คุณ ไม่มีการส่งข้อมูลไปยังเซิร์ฟเวอร์</p>
+          <p>5. <strong>อ้างอิงกฎหมาย:</strong> นโยบายนี้เป็นไปตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)</p>
         </div>
-        <button onClick={onNext} className="prv-el onb-btn-ink" style={{ opacity: 0, backgroundColor: "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: "pointer" }}>
+        <label className="prv-el flex items-center gap-3 mb-6 cursor-pointer" style={{ opacity: 0 }}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={e => setChecked(e.target.checked)}
+            style={{ width: 18, height: 18, cursor: "pointer", accentColor: "#1A1208" }}
+          />
+          <span style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 13, color: "#1A1208" }}>
+            ฉันได้อ่านและยอมรับนโยบายความเป็นส่วนตัวนี้แล้ว
+          </span>
+        </label>
+        <button
+          onClick={() => { if (checked) onNext(new Date().toISOString()); }}
+          className="prv-el onb-btn-ink"
+          disabled={!checked}
+          style={{ opacity: 0, backgroundColor: checked ? "#1A1208" : "#9E9E9E", border: "none", borderRadius: 0, padding: "14px 36px", cursor: checked ? "pointer" : "not-allowed", transition: "background-color 0.2s" }}
+        >
           <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>ยอมรับและเข้าสู่ระบบ →</span>
         </button>
       </div>
@@ -3125,6 +2941,10 @@ function _SchoolView() {
 function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
   age: string; guardianConsent: boolean; onExport: () => void; onClearAll: () => void;
 }) {
+  const currentUser = getCurrentUser();
+  const consentAt = currentUser?.consentAt
+    ? new Date(currentUser.consentAt).toLocaleString("th-TH")
+    : "ไม่ระบุ";
   const [subTab, setSubTab] = useState<"privacy" | "ethics" | "arch" | "limits">("privacy");
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -3191,7 +3011,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
               {[
                 { label: "อายุที่ยืนยัน", value: age ? `${age} ปี` : "16 ปี" },
                 { label: "ความยินยอมผู้ปกครอง", value: guardianConsent ? "ได้รับแล้ว" : "รอดำเนินการ" },
-                { label: "เงื่อนไขการใช้งาน", value: "ยอมรับแล้ว" },
+                { label: "ยินยอม PDPA เมื่อ", value: consentAt },
               ].map((item, i) => (
                 <div key={i} className="saf-item p-4" style={{ backgroundColor: "#E3EAE0", border: `1.5px solid ${T.teal}`, borderRadius: 0, color: "#3C5137" }}>
                   <h5 style={{ fontFamily: "monospace", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: T.teal, marginBottom: 6 }}>{item.label}</h5>
@@ -3217,7 +3037,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
             </div>
             <div className="space-y-2">
               {[
-                { title: "พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA)", content: "ระบบปฏิบัติตาม PDPA อย่างเคร่งครัด ภาพใบหน้าประมวลผลแบบเรียลไทม์และไม่ถูกจัดเก็บลงเซิร์ฟเวอร์ ข้อมูลแนวโน้มอารมณ์จัดเก็บแบบไม่ระบุตัวตนโดยใช้รหัสแทนชื่อ และเข้ารหัสตามมาตรฐาน AES-256" },
+                { title: "พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA)", content: "ระบบปฏิบัติตาม PDPA อย่างเคร่งครัด ภาพใบหน้าประมวลผลแบบเรียลไทม์และไม่ถูกจัดเก็บลงเซิร์ฟเวอร์ ข้อมูลแนวโน้มอารมณ์จัดเก็บในเครื่องของผู้ใช้เท่านั้น" },
                 { title: "นโยบายความเป็นส่วนตัว (สรุป)", content: "ข้อมูลที่เก็บมีเพียงแนวโน้มอารมณ์แบบไม่ระบุตัวตนเพื่อแสดงพัฒนาการของผู้ใช้เท่านั้น ไม่มีการขายหรือแบ่งปันข้อมูลส่วนบุคคลให้บุคคลที่สาม" },
                 { title: "ข้อกำหนดการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 18 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้งาน ระบบมีการจำกัดอัตราการใช้งาน" },
               ].map((acc, i) => (
@@ -3263,7 +3083,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
               { layer: "ชั้น 1", title: "User Interface", desc: "เว็บแอปพลิเคชัน (React) — พิมพ์ ถ่ายเซลฟี่ พูด หรือถ่ายรูปการบ้าน" },
               { layer: "ชั้น 2", title: "API Gateway", desc: "ตรวจสอบสิทธิ์ กระจายคำขอไปยังบริการที่ถูกต้อง บันทึก Log แบบไม่ระบุตัวตน" },
               { layer: "ชั้น 3", title: "AI Services", desc: "Gemini (Google) · Typhoon (OpenTyphoon) · Pathumma (AI for Thai) · Tavily Search — วิเคราะห์อารมณ์ สรุปแนวโน้ม ค้นหาข้อมูล" },
-              { layer: "ชั้น 4", title: "Data Storage", desc: "เก็บประวัติแนวโน้มอารมณ์แบบไม่ระบุตัวตน เข้ารหัส AES-256 ปฏิบัติตาม PDPA" },
+              { layer: "ชั้น 4", title: "Data Storage", desc: "เก็บประวัติแนวโน้มอารมณ์ใน localStorage ของเครื่องผู้ใช้ ปฏิบัติตาม PDPA" },
             ].map((item, i) => (
               <div key={i} className="saf-item saf-arch-row flex items-center gap-4 p-5" style={{ backgroundColor: T.white, border: `1.5px solid ${T.khaki}`, transition: "background 0.18s" }}>
                 <span style={{ fontFamily: "monospace", fontSize: 9, fontWeight: 700, color: T.paper, backgroundColor: T.teal, padding: "4px 10px", flexShrink: 0, letterSpacing: "0.08em" }}>{item.layer}</span>
@@ -3306,7 +3126,31 @@ export default function App() {
   const [page, setPage] = useState<Page>(() => (getCurrentUser() ? "app" : "login"));
   const [age, setAge] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
-  const [guardianApproved, setGuardianApproved] = useState(false);
+  const [guardianStage, setGuardianStage] = useState<"input" | "pending" | "approved">("input");
+
+  // Check for guardian_token in URL — parent clicked the link in their email
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("guardian_token");
+    if (!token) return;
+    const stored = localStorage.getItem("jaikrajok:guardian_token");
+    if (stored && stored === token) {
+      localStorage.removeItem("jaikrajok:guardian_token");
+      // Mark the pending user's guardianConsent = true
+      const users = getUsersList();
+      const pendingId = localStorage.getItem("jaikrajok:guardian_pending_user");
+      const idx = pendingId ? users.findIndex(u => u.id === pendingId) : -1;
+      if (idx !== -1) {
+        users[idx] = { ...users[idx], guardianConsent: true };
+        saveUsersList(users);
+        localStorage.removeItem("jaikrajok:guardian_pending_user");
+      }
+      setGuardianStage("approved");
+      setPage("guardian");
+      // Clean the URL
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUserState(user);
@@ -3314,7 +3158,7 @@ export default function App() {
       setPage("onb1");
     } else {
       setAge(user.age);
-      setGuardianApproved(user.guardianConsent ?? false);
+      setGuardianStage(user.guardianConsent ? "approved" : "input");
       setPage("app");
     }
   };
@@ -3391,10 +3235,27 @@ export default function App() {
       {page === "guardian" && (
         <PageWrapper pageKey="guardian">
           <GuardianPage
-            approved={guardianApproved}
-            onSend={() => {
-              if (!guardianEmail || !guardianEmail.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
-              setTimeout(() => setGuardianApproved(true), 1200);
+            stage={guardianStage}
+            onSubmitEmail={async (email) => {
+              if (!email || !email.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
+              const token = crypto.randomUUID();
+              localStorage.setItem("jaikrajok:guardian_token", token);
+              localStorage.setItem("jaikrajok:guardian_pending_user", currentUser?.id ?? "");
+              const approvalLink = `${window.location.origin}${window.location.pathname}?guardian_token=${token}`;
+              try {
+                await emailjs.send(
+                  "service_hgrm6eo",
+                  "template_wt81l2e",
+                  { to_email: email, child_name: currentUser?.name ?? "บุตรหลานของคุณ", app_name: "JaiKraJok", approval_link: approvalLink },
+                  { publicKey: "Viict-x-L0jSFqv0N" }
+                );
+                setGuardianStage("pending");
+                toast("ส่งอีเมลถึงผู้ปกครองเรียบร้อยแล้ว");
+              } catch (err) {
+                const msg = (err as { text?: string })?.text ?? "ไม่ทราบสาเหตุ";
+                console.error("EmailJS error:", err);
+                toast(`ส่งอีเมลไม่สำเร็จ: ${msg}`);
+              }
             }}
             onNext={() => setPage("privacy")}
             guardianEmail={guardianEmail}
@@ -3402,11 +3263,11 @@ export default function App() {
           />
         </PageWrapper>
       )}
-      {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={() => {
+      {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={(consentAt) => {
         const users = getUsersList();
         const idx = users.findIndex((u) => u.id === currentUser?.id);
         if (idx !== -1) {
-          users[idx] = { ...users[idx], age, guardianConsent: guardianApproved };
+          users[idx] = { ...users[idx], age, guardianConsent: guardianStage === "approved", guardianEmail, consentAt };
           saveUsersList(users);
           setCurrentUser({ ...users[idx] });
         }
@@ -3418,7 +3279,7 @@ export default function App() {
             currentUser={currentUser}
             onLogout={handleLogout}
             age={age}
-            guardianConsent={guardianApproved}
+            guardianConsent={guardianStage === "approved"}
           />
         </PageWrapper>
       )}

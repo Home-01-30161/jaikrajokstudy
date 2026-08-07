@@ -12,7 +12,7 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
         { "key": "Cross-Origin-Embedder-Policy", "value": "unsafe-none" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' http://thaillm.or.th https://api.aiforthai.in.th https://generativelanguage.googleapis.com https://api.opentyphoon.ai https://api.tavily.com https://maps.googleapis.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'self';" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' http://thaillm.or.th https://api.aiforthai.in.th https://generativelanguage.googleapis.com https://api.opentyphoon.ai https://api.tavily.com https://maps.googleapis.com https://api.emailjs.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'self';" },
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
       ]
     },
@@ -30,56 +30,11 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/api/pathumma/:path*",
-      "destination": "https://api.aiforthai.in.th/:path*"
-    },
-    {
-      "source": "/api/thaillm/:path*",
-      "destination": "http://thaillm.or.th/:path*"
-    },
-    {
-      "source": "/api/gemini/:path*",
-      "destination": "https://generativelanguage.googleapis.com/:path*"
-    },
-    {
-      "source": "/api/typhoon/:path*",
-      "destination": "https://api.opentyphoon.ai/:path*"
-    },
-    {
-      "source": "/api/tavily/:path*",
-      "destination": "https://api.tavily.com/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
-}
-  "rewrites": [
-    {
-      "source": "/api/pathumma/:path*",
-      "destination": "https://api.aiforthai.in.th/:path*"
-    },
-    {
-      "source": "/api/thaillm/:path*",
-      "destination": "http://thaillm.or.th/:path*"
-    },
-    {
-      "source": "/api/gemini/:path*",
-      "destination": "https://generativelanguage.googleapis.com/:path*"
-    },
-    {
-      "source": "/api/typhoon/:path*",
-      "destination": "https://api.opentyphoon.ai/:path*"
-    },
-    {
-      "source": "/api/tavily/:path*",
-      "destination": "https://api.tavily.com/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/pathumma/:path*", "destination": "https://api.aiforthai.in.th/:path*" },
+    { "source": "/api/thaillm/:path*", "destination": "http://thaillm.or.th/:path*" },
+    { "source": "/api/gemini/:path*", "destination": "https://generativelanguage.googleapis.com/:path*" },
+    { "source": "/api/typhoon/:path*", "destination": "https://api.opentyphoon.ai/:path*" },
+    { "source": "/api/tavily/:path*", "destination": "https://api.tavily.com/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
