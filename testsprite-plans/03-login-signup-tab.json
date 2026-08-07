@@ -1,0 +1,11 @@
+{
+  "projectId": "42ae8b65-4b2b-4542-8041-7d21a9314269",
+  "type": "frontend",
+  "name": "Login/Signup tab switch — tabs toggle correctly",
+  "planSteps": [
+    { "type": "action", "description": "Navigate to https://jaikrajokstudy.vercel.app/" },
+    { "type": "assertion", "description": "The login tab is selected by default and shows a login form with email and password fields" },
+    { "type": "action", "description": "Click the signup tab (สมัครสมาชิก)" },
+    { "type": "assertion", "description": "The form switches to signup mode — the heading or button label changes to สมัครสมาชิก and a confirm password or name field appears" }
+  ]
+}

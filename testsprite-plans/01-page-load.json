@@ -1,0 +1,11 @@
+{
+  "projectId": "42ae8b65-4b2b-4542-8041-7d21a9314269",
+  "type": "frontend",
+  "name": "Page load — app renders without blank screen",
+  "planSteps": [
+    { "type": "action", "description": "Navigate to https://jaikrajokstudy.vercel.app/" },
+    { "type": "assertion", "description": "The page title contains text (not empty)" },
+    { "type": "assertion", "description": "The body is visible and contains at least one element with Thai text" },
+    { "type": "assertion", "description": "No JavaScript error dialog or white blank screen is shown" }
+  ]
+}

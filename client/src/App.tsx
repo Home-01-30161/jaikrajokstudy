@@ -227,7 +227,7 @@ interface LogEntry {
 }
 
 /* ============ CHECKERSTRIP ============ */
-function CheckerStrip({ className = "" }: { className?: string }) {
+function _CheckerStrip({ className = "" }: { className?: string }) {
   return (
     <div className={`flex overflow-hidden ${className}`} style={{ height: "36px", flexShrink: 0 }}>
       {Array.from({ length: 40 }).map((_, i) => (
@@ -238,7 +238,7 @@ function CheckerStrip({ className = "" }: { className?: string }) {
 }
 
 /* ============ GRAPH PAPER GRID ============ */
-function GraphPaper({ showDots = false, children }: { showDots?: boolean; children?: React.ReactNode }) {
+function _GraphPaper({ showDots = false, children }: { showDots?: boolean; children?: React.ReactNode }) {
   return (
     <div
       className="relative"
@@ -268,7 +268,7 @@ function GraphPaper({ showDots = false, children }: { showDots?: boolean; childr
 }
 
 /* ============ BRAIN CLOUD SVG ============ */
-function BrainCloud({ className = "", size = 200 }: { className?: string; size?: number }) {
+function _BrainCloud({ className = "", size = 200 }: { className?: string; size?: number }) {
   const h = Math.round(size * 0.8);
   return (
     <div className={`absolute pointer-events-none ${className}`} style={{ width: size, height: h }}>
@@ -299,7 +299,7 @@ function BrainCloud({ className = "", size = 200 }: { className?: string; size?:
 }
 
 /* ============ RED DOT CROSS ============ */
-function RedDotCross({ className = "", color = T.red }: { className?: string; color?: string }) {
+function _RedDotCross({ className = "", color = T.red }: { className?: string; color?: string }) {
   return (
     <div className={`absolute pointer-events-none ${className}`}>
       <svg viewBox="0 0 80 80" width="80" height="80" fill="none">
@@ -320,7 +320,7 @@ function RedDotCross({ className = "", color = T.red }: { className?: string; co
 }
 
 /* ============ HALFTONE DOT FIELD ============ */
-function HalftoneField({ className = "" }: { className?: string }) {
+function _HalftoneField({ className = "" }: { className?: string }) {
   return (
     <div
       className={`absolute pointer-events-none ${className}`}
@@ -333,7 +333,7 @@ function HalftoneField({ className = "" }: { className?: string }) {
 }
 
 /* ============ ONBOARDING CARD SHELL ============ */
-function OnbCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function _OnbCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <div
       className={`relative z-10 ${className}`}
@@ -353,7 +353,7 @@ function OnbCard({ children, className = "" }: { children: React.ReactNode; clas
 }
 
 /* ============ TEAL BADGE ============ */
-function TealBadge({ children }: { children: React.ReactNode }) {
+function _TealBadge({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="inline-block px-4 py-1.5 rounded-full text-sm mb-5"
@@ -372,7 +372,7 @@ function TealBadge({ children }: { children: React.ReactNode }) {
 }
 
 /* ============ TEAL BUTTON ============ */
-function TealBtn({ children, onClick, disabled = false, fullWidth = false }: {
+function _TealBtn({ children, onClick, disabled = false, fullWidth = false }: {
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
@@ -397,7 +397,7 @@ function TealBtn({ children, onClick, disabled = false, fullWidth = false }: {
 }
 
 /* ============ SALMON BUTTON (login) ============ */
-function SalmonBtn({ children, onClick, fullWidth = false }: {
+function _SalmonBtn({ children, onClick, fullWidth = false }: {
   children: React.ReactNode;
   onClick?: () => void;
   fullWidth?: boolean;
@@ -425,27 +425,29 @@ export interface UserAccount {
   name: string;
   passwordHash: string;
   avatarUrl?: string;
+  age?: string;
+  guardianConsent?: boolean;
 }
 
 export function getUsersList(): UserAccount[] {
   try {
     const list = localStorage.getItem("jaikrajok:users");
     if (list) return JSON.parse(list);
-  } catch {}
+  } catch { /* storage unavailable */ }
   return [];
 }
 
 export function saveUsersList(users: UserAccount[]) {
   try {
     localStorage.setItem("jaikrajok:users", JSON.stringify(users));
-  } catch {}
+  } catch { /* storage unavailable */ }
 }
 
 export function getCurrentUser(): UserAccount | null {
   try {
     const userStr = localStorage.getItem("jaikrajok:current_user");
     if (userStr) return JSON.parse(userStr);
-  } catch {}
+  } catch { /* storage unavailable */ }
   return null;
 }
 
@@ -456,7 +458,7 @@ export function setCurrentUser(user: UserAccount | null) {
     } else {
       localStorage.removeItem("jaikrajok:current_user");
     }
-  } catch {}
+  } catch { /* storage unavailable */ }
 }
 
 /* ============ OTP VERIFICATION MODAL ============ */
@@ -743,7 +745,7 @@ function GoogleOAuthModal({
 }
 
 /* ============ LOGIN PAGE ============ */
-function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSuccess: (user: UserAccount) => void }) {
+function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; onLoginSuccess: (user: UserAccount) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -875,7 +877,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
       return;
     }
 
-    const google = (window as any).google;
+    const google = (window as unknown as { google: { accounts: { oauth2: { initTokenClient: (opts: Record<string, unknown>) => { requestAccessToken: (opts?: Record<string, unknown>) => void } } } } }).google;
     if (!google?.accounts?.oauth2) {
       setShowGoogleModal(true);
       return;
@@ -885,7 +887,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
     const tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: googleClientId,
       scope: "openid email profile",
-      callback: async (tokenResponse: any) => {
+      callback: async (tokenResponse: { error?: string; access_token?: string }) => {
         if (tokenResponse.error) {
           console.error("Google OAuth error:", tokenResponse.error);
           setShowGoogleModal(true);
@@ -931,7 +933,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden login-page" style={{ backgroundColor: T.paper }}>
+    <main className="relative min-h-screen overflow-hidden login-page" style={{ backgroundColor: T.paper }}>
       {/* Ruled-line texture overlay — the newsprint ground */}
       <div aria-hidden="true" className="absolute inset-0 pointer-events-none z-0" style={{
         backgroundImage: `repeating-linear-gradient(transparent, transparent 27px, ${T.khaki}55 27px, ${T.khaki}55 28px)`,
@@ -994,7 +996,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
 
           {/* Header — handwritten-weight label + big title */}
           <p className="text-xs tracking-widest uppercase mb-1" style={{
-            color: T.khaki,
+            color: "#7A6535",
             fontFamily: "'Noto Sans Thai', sans-serif",
             letterSpacing: "0.2em",
           }}>
@@ -1035,7 +1037,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
                   fontSize: 13,
                   fontWeight: mode === m ? 700 : 500,
                   fontFamily: "'Noto Sans Thai', sans-serif",
-                  color: mode === m ? T.ink : T.khaki,
+                  color: mode === m ? T.ink : "#7A6535",
                   background: "transparent",
                   border: "none",
                   borderBottom: mode === m ? `2px solid ${T.ink}` : "2px solid transparent",
@@ -1055,7 +1057,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
             display: "block",
             fontSize: 11,
             fontWeight: 600,
-            color: T.khaki,
+            color: "#7A6535",
             fontFamily: "'Noto Sans Thai', sans-serif",
             letterSpacing: "0.14em",
             textTransform: "uppercase",
@@ -1092,7 +1094,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
             <label htmlFor="lp-pass" style={{
               fontSize: 11,
               fontWeight: 600,
-              color: T.khaki,
+              color: "#7A6535",
               fontFamily: "'Noto Sans Thai', sans-serif",
               letterSpacing: "0.14em",
               textTransform: "uppercase",
@@ -1199,7 +1201,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
           {/* Footer note */}
           <p style={{
             fontSize: 10,
-            color: T.khaki,
+            color: "#7A6535",
             fontFamily: "'Noto Sans Thai', sans-serif",
             textAlign: "center",
             lineHeight: 1.6,
@@ -1234,7 +1236,7 @@ function LoginPage({ onNext, onLoginSuccess }: { onNext: () => void; onLoginSucc
           onClose={() => setShowGoogleModal(false)}
         />
       )}
-    </div>
+    </main>
   );
 }
 
@@ -1253,7 +1255,7 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
     }
   }, []);
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+    <main className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
       <style>{`
         @keyframes onbBgDrift { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-12px) rotate(1.5deg)} }
         .onb-float { animation: onbBgDrift 6s ease-in-out infinite; }
@@ -1279,7 +1281,7 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
           <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>เริ่มกันเลย →</span>
         </button>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1292,7 +1294,7 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
     gsap.fromTo(els, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6, ease: "expo.out", stagger: 0.1, delay: 0.35 });
   }, []);
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+    <main className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
       <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-40" alt="" />
       <img src={IMG.booksStackNoBg} className="absolute bottom-0 left-0 w-80 h-auto pointer-events-none z-0 onb-float2" alt="" />
       <img src={IMG.glasses} className="absolute top-4 right-10 w-96 h-auto pointer-events-none z-0 opacity-80 onb-float" alt="" />
@@ -1318,11 +1320,17 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
           <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>ถัดไป →</span>
         </button>
       </div>
-    </div>
+    </main>
   );
 }
 
-function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmail }: any) {
+function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmail }: {
+  approved: boolean;
+  onSend: (email: string) => void;
+  onNext: () => void;
+  guardianEmail: string;
+  setGuardianEmail: (v: string) => void;
+}) {
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!cardRef.current) return;
@@ -1330,7 +1338,7 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
     gsap.fromTo(cardRef.current.querySelectorAll(".grd-el"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.55, ease: "expo.out", stagger: 0.1, delay: 0.4 });
   }, []);
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+    <main className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
       <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-40" alt="" />
       <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0 onb-float" alt="" />
       <img src={IMG.bulb} className="absolute bottom-16 left-16 w-32 h-auto pointer-events-none z-0 onb-float2" alt="" />
@@ -1354,7 +1362,7 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
               onFocus={e => { e.currentTarget.style.borderColor = "#C8382A"; }}
               onBlur={e => { e.currentTarget.style.borderColor = "#1A1208"; }}
             />
-            <button onClick={onSend} className="grd-el onb-btn-ink" style={{ opacity: 0, backgroundColor: "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: "pointer" }}>
+            <button onClick={() => onSend(guardianEmail)} className="grd-el onb-btn-ink" style={{ opacity: 0, backgroundColor: "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: "pointer" }}>
               <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>ส่งคำขอความยินยอม →</span>
             </button>
           </div>
@@ -1369,7 +1377,7 @@ function GuardianPage({ approved, onSend, onNext, guardianEmail, setGuardianEmai
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1381,7 +1389,7 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
     gsap.fromTo(cardRef.current.querySelectorAll(".prv-el"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.55, ease: "expo.out", stagger: 0.1, delay: 0.4 });
   }, []);
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+    <main className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
       <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-40" alt="" />
       <img src={IMG.chartGraphNoBg} className="absolute bottom-10 left-10 w-96 h-auto pointer-events-none z-0 onb-float2" alt="" />
       <img src={IMG.dots} className="absolute top-16 right-16 w-32 h-auto pointer-events-none z-0 onb-float" alt="" />
@@ -1413,7 +1421,7 @@ function PrivacyPage({ onNext }: { onNext: () => void }) {
           <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>ยอมรับและเข้าสู่ระบบ →</span>
         </button>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1426,17 +1434,15 @@ export interface ChatSession {
 }
 
 /* ============ MAIN APP SHELL ============ */
-function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; onLogout?: () => void }) {
+function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser: UserAccount | null; onLogout?: () => void; age: string; guardianConsent: boolean }) {
   const userKey = currentUser ? currentUser.id : "guest";
   const [currentView, setCurrentView] = useState<AppView>("home");
-  const [age] = useState("16");
-  const [guardianConsent] = useState(true);
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(`jaikrajok:sessions:${userKey}`) || "null");
       if (Array.isArray(saved) && saved.length > 0) return saved;
-    } catch {}
+    } catch { /* storage unavailable */ }
     return [
       {
         id: `session_${userKey}_1`,
@@ -1459,7 +1465,7 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
   useEffect(() => {
     try {
       localStorage.setItem(`jaikrajok:sessions:${userKey}`, JSON.stringify(sessions));
-    } catch {}
+    } catch { /* storage unavailable */ }
   }, [sessions, userKey]);
 
   // Derived current active session state
@@ -1528,8 +1534,8 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
     }
   });
   const [concernStreak, setConcernStreak] = useState(0);
-  const [modesUsed, setModesUsed] = useState<Set<string>>(new Set());
-  const [transparencyLogs, setTransparencyLogs] = useState<string[]>([]);
+  const [_modesUsed, setModesUsed] = useState<Set<string>>(new Set());
+  const [_transparencyLogs, setTransparencyLogs] = useState<string[]>([]);
   const [showEscalationModal, setShowEscalationModal] = useState(false);
   const escalationShownRef = useRef(false);
   const [showSupportStrip, setShowSupportStrip] = useState(false);
@@ -2002,7 +2008,7 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: T.cream }}>
+    <main className="relative min-h-screen flex flex-col" style={{ backgroundColor: T.cream }}>
 
       {/* TOP CHECKERBOARD with salmon tab break */}
       <div className="fixed top-0 left-0 right-0 z-50 flex" style={{ height: "36px" }}>
@@ -2167,8 +2173,8 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
                           style={{ background: "none", border: "none", cursor: "pointer", padding: "0 2px", color: T.khaki, fontSize: 10 }}
                         >
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                            <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                            <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                            <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                            <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                           </svg>
                         </button>
                       </div>
@@ -2414,12 +2420,12 @@ function AppShell({ currentUser, onLogout }: { currentUser: UserAccount | null; 
         </div>
       )}
 
-    </div>
+    </main>
   );
 }
 
 function HomeView({
-  mood, setMood, onGoChat, onGoTrend, tryMode, trendData, onMoodTap,
+  mood: _mood, setMood: _setMood, onGoChat, onGoTrend, tryMode, trendData: _trendData, onMoodTap: _onMoodTap,
 }: {
   mood: string;
   setMood: (v: string) => void;
@@ -2437,7 +2443,7 @@ function HomeView({
     gsap.fromTo(".hv-strip", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, stagger: 0.08, ease: "power3.out", delay: 0.3 });
   }, []);
 
-  const hour = new Date().getHours();
+  const _hour = new Date().getHours();
   const todayThai = new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" });
 
   const modes = [
@@ -2447,7 +2453,7 @@ function HomeView({
     { id: "photo" as const, track: "B4", th: "ถ่ายรูปการบ้าน", sub: "ให้กระจกช่วยดูการบ้าน" },
   ];
 
-  const moodOrder = ["stressed", "sad", "tired", "neutral", "calm", "positive"];
+  const _moodOrder = ["stressed", "sad", "tired", "neutral", "calm", "positive"];
 
   return (
     <div style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem", backgroundColor: T.paper }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
@@ -2693,8 +2699,8 @@ function ChatView({
                   title="ถ่ายเซลฟี่ประเมินอารมณ์"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                    <circle cx="12" cy="13" r="3"/>
+                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                    <circle cx="12" cy="13" r="3" />
                   </svg>
                 </button>
                 <button
@@ -2703,9 +2709,9 @@ function ChatView({
                   title="แนบรูปการบ้าน"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21 15 16 10 5 21"/>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
                   </svg>
                 </button>
               </div>
@@ -2722,10 +2728,10 @@ function ChatView({
                   title="พูดระบายสภาวะจิตใจ"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                    <line x1="12" y1="19" x2="12" y2="23"/>
-                    <line x1="8" y1="23" x2="16" y2="23"/>
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
                   </svg>
                 </button>
                 <button
@@ -2735,8 +2741,8 @@ function ChatView({
                   style={{ backgroundColor: T.salmon }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="19" x2="12" y2="5"/>
-                    <polyline points="5 12 12 5 19 12"/>
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
                   </svg>
                 </button>
               </div>
@@ -2750,7 +2756,7 @@ function ChatView({
               className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#C8382A] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
               style={{ color: "#1A1A1A", borderRadius: 0 }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" /><circle cx="12" cy="13" r="3" /></svg>
               <span>ถ่ายเซลฟี่ประเมินอารมณ์</span>
             </button>
             <button
@@ -2758,7 +2764,7 @@ function ChatView({
               className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#C8382A] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
               style={{ color: "#1A1A1A", borderRadius: 0 }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
               <span>เฉลยรูปการบ้าน</span>
             </button>
             <button
@@ -2766,7 +2772,7 @@ function ChatView({
               className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#C8382A] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
               style={{ color: "#1A1A1A", borderRadius: 0 }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
               <span>พูดระบาย</span>
             </button>
           </div>
@@ -2906,15 +2912,15 @@ function ChatView({
                 <div className="flex items-center gap-1.5">
                   <button onClick={handleSelfie} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="ถ่ายเซลฟี่">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                      <circle cx="12" cy="13" r="3"/>
+                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                      <circle cx="12" cy="13" r="3" />
                     </svg>
                   </button>
                   <button onClick={handleHomeworkPhoto} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="แนบรูปการบ้าน">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      <circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21 15 16 10 5 21"/>
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
                     </svg>
                   </button>
                 </div>
@@ -2927,10 +2933,10 @@ function ChatView({
                   </button>
                   <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="พูดระบาย">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                      <line x1="12" y1="19" x2="12" y2="23"/>
-                      <line x1="8" y1="23" x2="16" y2="23"/>
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                      <line x1="8" y1="23" x2="16" y2="23" />
                     </svg>
                   </button>
                   <button
@@ -2940,8 +2946,8 @@ function ChatView({
                     style={{ backgroundColor: T.salmon }}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="19" x2="12" y2="5"/>
-                      <polyline points="5 12 12 5 19 12"/>
+                      <line x1="12" y1="19" x2="12" y2="5" />
+                      <polyline points="5 12 12 5 19 12" />
                     </svg>
                   </button>
                 </div>
@@ -3043,7 +3049,7 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
                     <button onClick={() => onDeleteEntry(e.id)} style={{ background: "none", border: "none", cursor: "pointer", color: T.khaki, fontSize: 14, lineHeight: 1, transition: "color 0.15s" }}
                       onMouseEnter={e2 => { (e2.currentTarget as HTMLButtonElement).style.color = T.red; }}
                       onMouseLeave={e2 => { (e2.currentTarget as HTMLButtonElement).style.color = T.khaki; }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>
                     </button>
                   </div>
                 </div>
@@ -3069,7 +3075,7 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
 }
 
 /* ============ SCHOOL VIEW ============ */
-function SchoolView() {
+function _SchoolView() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="inline-block px-4 py-1.5 rounded-full text-xs font-mono font-bold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
@@ -3304,7 +3310,13 @@ export default function App() {
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUserState(user);
-    setPage("app");
+    if (!user.age) {
+      setPage("onb1");
+    } else {
+      setAge(user.age);
+      setGuardianApproved(user.guardianConsent ?? false);
+      setPage("app");
+    }
   };
 
   const handleLogout = () => {
@@ -3390,12 +3402,23 @@ export default function App() {
           />
         </PageWrapper>
       )}
-      {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={() => setPage("app")} /></PageWrapper>}
+      {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={() => {
+        const users = getUsersList();
+        const idx = users.findIndex((u) => u.id === currentUser?.id);
+        if (idx !== -1) {
+          users[idx] = { ...users[idx], age, guardianConsent: guardianApproved };
+          saveUsersList(users);
+          setCurrentUser({ ...users[idx] });
+        }
+        setPage("app");
+      }} /></PageWrapper>}
       {page === "app" && (
         <PageWrapper pageKey="app">
           <AppShell
             currentUser={currentUser}
             onLogout={handleLogout}
+            age={age}
+            guardianConsent={guardianApproved}
           />
         </PageWrapper>
       )}

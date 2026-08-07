@@ -1,6 +1,6 @@
 ## Use this model: Pathumma-ThaiLLM-qwen3-8b-think-3.0.0
 
-API Key: CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T
+API Key: (set VITE_THAILLM_API_KEY in .env)
 
 Manage API Keys →
 Consumer ID
@@ -11,7 +11,7 @@ New (OpenAI-compatible) — recommended
 
 curl http://thaillm.or.th/api/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T" \
+  -H "Authorization: Bearer $VITE_THAILLM_API_KEY" \
   -d '{
     "model": "pathumma-thaillm-qwen3-8b-think-3.0.0",
     "messages": [
@@ -24,7 +24,7 @@ Legacy (path-based) — still supported
 
 curl http://thaillm.or.th/api/pathumma/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T" \
+  -H "Authorization: Bearer $VITE_THAILLM_API_KEY" \
   -d '{
     "model": "/model",
     "messages": [

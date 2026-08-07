@@ -1,5 +1,6 @@
 import { useRef } from "react";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic variadic fn type has no narrower form
 type noop = (...args: any[]) => any;
 
 /**

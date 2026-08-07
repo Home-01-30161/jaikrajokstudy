@@ -1,0 +1,20 @@
+{
+  "testId": "7681804b-097e-44c4-b30a-5ecaf6b53fac",
+  "status": "blocked",
+  "startedAt": "2026-08-07T04:21:04.441Z",
+  "finishedAt": "2026-08-07T04:22:04.562Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/f4c84478-b0c1-709d-fa07-575c4897e321/1786076522593943//tmp/937804f8-f2de-4f49-bd3d-cb5d97a071e2/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_1985a8d77ee175c3",
+  "runIdIfAvailable": "669388f0-79f1-498c-93b1-eb74df2ca30e",
+  "codeVersion": "v1",
+  "targetUrl": "https://jaikrajokstudy.vercel.app/",
+  "targetUrlSource": "run",
+  "failedStepIndex": 3,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST FAILURE\n\nThe site did not show a not-found/404 page for the non-existent path — the application login page was displayed instead.\n\nObservations:\n- Navigated to /this-page-does-not-exist and the page displayed the application's login screen titled 'JaiKraJok' with visible email and password input fields and login buttons.\n- No 404 or not-found message, blank white screen, or server error was visible; the UI appears as the normal login page.",
+  "apiOutput": null,
+  "trace": null
+}

@@ -1,0 +1,9 @@
+{
+  "projectId": "42ae8b65-4b2b-4542-8041-7d21a9314269",
+  "type": "frontend",
+  "name": "404 — unknown route shows not-found page",
+  "planSteps": [
+    { "type": "action", "description": "Navigate to https://jaikrajokstudy.vercel.app/this-page-does-not-exist" },
+    { "type": "assertion", "description": "The page displays a not-found message or 404 indicator — it does not show a blank white screen or a server error" }
+  ]
+}

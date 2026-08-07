@@ -1,0 +1,11 @@
+{
+  "projectId": "42ae8b65-4b2b-4542-8041-7d21a9314269",
+  "type": "frontend",
+  "name": "Login — form renders and rejects empty submit",
+  "planSteps": [
+    { "type": "action", "description": "Navigate to https://jaikrajokstudy.vercel.app/" },
+    { "type": "assertion", "description": "A login form is visible with an email input field and a password input field" },
+    { "type": "action", "description": "Click the login/submit button without entering any credentials" },
+    { "type": "assertion", "description": "The form does not navigate away — it shows a validation error or the inputs are marked invalid" }
+  ]
+}

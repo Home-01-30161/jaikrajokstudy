@@ -235,7 +235,7 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
       const cells = tableMatch[1].split("|").map(c => c.trim());
       tableLines.push(cells.join("|"));
 
-      if (/^[\s\|:\-]+\s*$/.test(line)) {
+      if (/^[\s|:-]+\s*$/.test(line)) {
         tableAlign = cells.map(c => {
           if (c.startsWith(":") && c.endsWith(":")) return "center";
           if (c.endsWith(":")) return "right";

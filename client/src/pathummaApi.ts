@@ -1,4 +1,4 @@
-/**
+﻿/**
  * pathummaApi.ts — JaiKraJok ThaiLLM client (v5)
  * =====================================================
  * Uses the NEW ThaiLLM API (OpenAI-compatible):
@@ -11,7 +11,7 @@
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const THAILLM_KEY: string = (import.meta.env.VITE_THAILLM_API_KEY as string) ?? "CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T";
+const THAILLM_KEY: string = (import.meta.env.VITE_THAILLM_API_KEY as string) ?? "";
 const THAILLM_PROXY  = "/api/thaillm";
 const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
 
@@ -260,7 +260,7 @@ export async function callTextLLM(
 
   // Detect Math / Calculation / Explicit Math Homework Prompt
   // (Excludes simple range hyphens like "2-3 ประโยค" from false-triggering math mode)
-  const isMathOrChoice = /(โจทย์คณิต|คำนวณ|สมการ|ค\.ร\.น\.|ห\.ร\.ม\.|เศษเหลือ|ข้อสอบ|lcm|gcd|\bmod\b|\$\d|\d+\s*[\+\*\/%]\s*\d+|\d+\s*=\s*\d+)/i.test(instruction);
+  const isMathOrChoice = /(โจทย์คณิต|คำนวณ|สมการ|ค\.ร\.น\.|ห\.ร\.ม\.|เศษเหลือ|ข้อสอบ|lcm|gcd|\bmod\b|\$\d|\d+\s*[+*/%]\s*\d+|\d+\s*=\s*\d+)/i.test(instruction);
   if (isMathOrChoice) {
     effectiveTemperature = 0.05;
     extraInstruction = "\n\n[หากมีโจทย์คณิตศาสตร์ในคำขอ: แสดงขั้นตอนการคำนวณอย่างแม่นยำทีละบรรทัด ห้ามเดาตัวเลข " +
@@ -717,7 +717,7 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
   }
 
   // Derive emotionKey: use LLM sentiment first, fall back to keyword classifier
-  let emotionKey = "neutral";
+  let emotionKey: string;
   try {
     emotionKey = await analyzeSentiment(answer);
   } catch {
@@ -750,7 +750,7 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
 function fixThaiChoices(reply: string, ocrText: string): string {
   if (!reply) return reply;
 
-  const hasThaiChoices = /[กขคง][\.\)]|\bก\b|\bข\b|\bค\b|\bง\b/.test(ocrText);
+  const hasThaiChoices = /[กขคง][.)]|\bก\b|\bข\b|\bค\b|\bง\b/.test(ocrText);
   if (!hasThaiChoices) return reply;
 
   let result = reply;
@@ -799,7 +799,6 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   const lineStartChoiceRe = /(?:^|\n)\s*([กขคง])\.\s/g;
   const choiceLettersFound = new Set<string>();
   let _cm: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
   while ((_cm = lineStartChoiceRe.exec(answer)) !== null) {
     choiceLettersFound.add(_cm[1]);
   }
@@ -867,7 +866,7 @@ export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
   const isSupported = SUPPORTED.some(t => audioBlob.type.startsWith(t.split(";")[0]));
 
   let fileBlob = audioBlob;
-  let fileName = "recording.wav";
+  let fileName: string;
 
   if (!isSupported) {
     console.debug("[TyphoonASR] Converting", audioBlob.type, "→ WAV for upload");
@@ -987,14 +986,6 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Mood Classifier — Thai keyword-based (local fallback)
 // ═══════════════════════════════════════════════════════════════════════════════
-
-const MOOD_CUES: [string, string[]][] = [
-  ["positive", ["ยิ้ม", "สดใส", "ร่าเริง", "มีความสุข", "อารมณ์ดี", "ดีใจ", "สนุก", "เยี่ยม", "ภูมิใจ", "ชอบมาก", "happy", "สุขใจ", "สำเร็จ", "เบิกบาน", "เป็นมิตร", "หัวเราะ"]],
-  ["calm",     ["ผ่อนคลาย", "สบายใจ", "สงบ", "โล่งใจ", "ปกติดี", "calm", "โอเค"]],
-  ["stressed", ["เครียด", "กดดัน", "กังวล", "วิตก", "ประหม่า", "รับไม่ไหว", "stress", "สอบไม่ทัน", "หนักมาก"]],
-  ["tired",    ["เหนื่อย", "ง่วง", "อ่อนเพลีย", "หมดแรง", "ไม่มีแรง", "เพลีย", "tired", "นอนไม่หลับ", "ล้า"]],
-  ["sad",      ["เศร้า", "ร้องไห้", "เสียใจ", "ท้อแท้", "ท้อใจ", "สิ้นหวัง", "หมดกำลังใจ", "เหงา", "โดดเดี่ยว", "ผิดหวัง", "sad"]],
-];
 
 export function classifyMoodFromText(text: string): string {
   if (!text) return "neutral";

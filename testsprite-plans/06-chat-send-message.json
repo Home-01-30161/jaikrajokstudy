@@ -1,0 +1,13 @@
+{
+  "projectId": "42ae8b65-4b2b-4542-8041-7d21a9314269",
+  "type": "frontend",
+  "name": "Chat — typing and sending a message shows a response",
+  "planSteps": [
+    { "type": "action", "description": "Navigate to https://jaikrajokstudy.vercel.app/ and log in if prompted" },
+    { "type": "action", "description": "Navigate to the แชท (chat) view via the sidebar" },
+    { "type": "action", "description": "Click the message input field and type: สวัสดี" },
+    { "type": "action", "description": "Press Enter or click the send button" },
+    { "type": "assertion", "description": "The message สวัสดี appears in the chat history as a sent message (right-aligned or labeled as user)" },
+    { "type": "assertion", "description": "Within 30 seconds a response message appears in the chat from the assistant (JaiKraJok)" }
+  ]
+}
