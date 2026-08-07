@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # PostgreSQL connection (per hackathon guide section 11).
+    # On the server: postgresql+psycopg://app:team07pass@db:5432/app
+    # Locally: falls back to SQLite via store.py when left empty.
+    database_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("DATABASE_URL", "APP_DATABASE_URL"),
+    )
+
     # Hackathon deploy: proxy strips /api, so root_path keeps docs working.
     root_path: str = ""
     team: str = "team07"

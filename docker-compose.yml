@@ -3,6 +3,7 @@
 # base = 20000 + (7 - 1) * 10 = 20060
 #   20060 -> frontend  (V3 React application on container port 3000)
 #   20061 -> api       (FastAPI on container port 8000)
+#   db    -> PostgreSQL (internal only, no host port)
 #
 # TEAM / BASE / BASE_1 are injected by GitLab CI variables.
 name: ${TEAM:-team07}
@@ -46,24 +47,47 @@ services:
       LOG_LEVEL: INFO
       TEAM: ${TEAM:-team07}
       CORS_ORIGINS: https://${TEAM:-team07}.aiforthai.in.th
+      DATABASE_URL: postgresql+psycopg://app:${TEAM:-team07}pass@db:5432/app
       # Production must never inherit local TLS-debug overrides from .env.
       INSECURE_TLS: "0"
       PYTHONHTTPSVERIFY: "1"
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
-      - /data/hack/${TEAM:-team07}/data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 40s
+    depends_on:
+      db:
+        condition: service_healthy
     deploy:
       resources:
         limits:
           memory: 4G
           cpus: "4.0"
+
+  db:
+    <<: *common
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${TEAM:-team07}pass
+      POSTGRES_DB: app
+    volumes:
+      - /data/hack/${TEAM:-team07}/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
 
 networks:
   app:
