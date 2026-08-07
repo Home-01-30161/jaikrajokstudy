@@ -52,6 +52,7 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
+      - /data/hack/${TEAM:-team07}/data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 15s

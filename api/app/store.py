@@ -26,19 +26,26 @@ from app.utils.logging import get_logger
 logger = get_logger(__name__)
 _MIN_SCHOOL_USERS = 5
 
-_DEFAULT_DIR = Path("/app/uploads")
+_DEFAULT_DIR = Path("/app/data")
 _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
 
 
 def _db_path() -> Path:
-    """Resolve a writable location for the database file."""
+    """Resolve a writable location for the database file.
+
+    Resolution order:
+    1. JAIKRAJOK_DB_PATH env var — explicit override (e.g. for testing)
+    2. /app/data — the bind-mount declared in docker-compose.yml that
+       maps to /data/hack/teamNN/data on the host, so data survives redeploy
+    3. Local dev fallback: <repo>/api/data/jaikrajok.db
+    """
     override = os.getenv("JAIKRAJOK_DB_PATH")
     if override:
         return Path(override)
     if _DEFAULT_DIR.is_dir() and os.access(_DEFAULT_DIR, os.W_OK):
         return _DEFAULT_DIR / "jaikrajok.db"
-    # Local dev / CI where /app/uploads does not exist.
+    # Local dev / CI where /app/data does not exist.
     return Path(__file__).resolve().parent.parent / "data" / "jaikrajok.db"
 
 
