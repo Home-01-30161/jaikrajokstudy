@@ -3180,18 +3180,21 @@ export default function App() {
     setPage("guardian_confirm");
   }, []);
 
-  // Listen for guardian approval from another tab via BroadcastChannel
+  // Cross-tab approval: BroadcastChannel (instant) + localStorage poll (fallback for stale tabs)
   useEffect(() => {
     if (guardianStage !== "pending") return;
-    const bc = new BroadcastChannel("jaikrajok_guardian");
-    bc.onmessage = (e) => {
-      if (e.data === "approved") {
-        localStorage.removeItem("jaikrajok:guardian_token");
-        localStorage.removeItem("jaikrajok:guardian_pending_user");
-        setGuardianStage("approved");
-      }
+    const advance = () => {
+      localStorage.removeItem("jaikrajok:guardian_token");
+      localStorage.removeItem("jaikrajok:guardian_pending_user");
+      localStorage.removeItem("jaikrajok:guardian_approved");
+      setGuardianStage("approved");
     };
-    return () => bc.close();
+    const bc = new BroadcastChannel("jaikrajok_guardian");
+    bc.onmessage = (e) => { if (e.data === "approved") advance(); };
+    const poll = setInterval(() => {
+      if (localStorage.getItem("jaikrajok:guardian_approved") === "true") advance();
+    }, 1000);
+    return () => { bc.close(); clearInterval(poll); };
   }, [guardianStage]);
 
   const handleLoginSuccess = (user: UserAccount) => {
@@ -3318,6 +3321,7 @@ export default function App() {
       {page === "guardian_confirm" && (
         <PageWrapper pageKey="guardian_confirm">
           <GuardianConfirmPage onConfirm={() => {
+            localStorage.setItem("jaikrajok:guardian_approved", "true");
             new BroadcastChannel("jaikrajok_guardian").postMessage("approved");
             sessionStorage.removeItem("jaikrajok:confirm_token");
             toast("ยืนยันความยินยอมเรียบร้อยแล้ว กรุณาให้บุตรหลานดำเนินการต่อบนอุปกรณ์ของตน");
