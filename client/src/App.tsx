@@ -3180,19 +3180,18 @@ export default function App() {
     setPage("guardian_confirm");
   }, []);
 
-  // Listen for guardian approval from another tab (parent opened link in new tab, same browser)
+  // Listen for guardian approval from another tab via BroadcastChannel
   useEffect(() => {
     if (guardianStage !== "pending") return;
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "jaikrajok:guardian_approved" && e.newValue === "true") {
-        localStorage.removeItem("jaikrajok:guardian_approved");
+    const bc = new BroadcastChannel("jaikrajok_guardian");
+    bc.onmessage = (e) => {
+      if (e.data === "approved") {
         localStorage.removeItem("jaikrajok:guardian_token");
         localStorage.removeItem("jaikrajok:guardian_pending_user");
         setGuardianStage("approved");
       }
     };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => bc.close();
   }, [guardianStage]);
 
   const handleLoginSuccess = (user: UserAccount) => {
@@ -3319,16 +3318,7 @@ export default function App() {
       {page === "guardian_confirm" && (
         <PageWrapper pageKey="guardian_confirm">
           <GuardianConfirmPage onConfirm={() => {
-            const token = sessionStorage.getItem("jaikrajok:confirm_token");
-            const stored = localStorage.getItem("jaikrajok:guardian_token");
-            if (token && stored && token === stored) {
-              // Same device — directly approve
-              localStorage.setItem("jaikrajok:guardian_approved", "true");
-            } else {
-              // Different device — write approval under the token key so any device polling picks it up
-              // (cross-device only works if same browser profile; otherwise show instructions)
-              localStorage.setItem("jaikrajok:guardian_approved", "true");
-            }
+            new BroadcastChannel("jaikrajok_guardian").postMessage("approved");
             sessionStorage.removeItem("jaikrajok:confirm_token");
             toast("ยืนยันความยินยอมเรียบร้อยแล้ว กรุณาให้บุตรหลานดำเนินการต่อบนอุปกรณ์ของตน");
           }} />
