@@ -3180,20 +3180,19 @@ export default function App() {
     setPage("guardian_confirm");
   }, []);
 
-  // Poll localStorage on the child's pending screen — auto-advance when guardian confirms
+  // Listen for guardian approval from another tab (parent opened link in new tab, same browser)
   useEffect(() => {
     if (guardianStage !== "pending") return;
-    const id = setInterval(() => {
-      const approved = localStorage.getItem("jaikrajok:guardian_approved");
-      if (approved === "true") {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "jaikrajok:guardian_approved" && e.newValue === "true") {
         localStorage.removeItem("jaikrajok:guardian_approved");
         localStorage.removeItem("jaikrajok:guardian_token");
         localStorage.removeItem("jaikrajok:guardian_pending_user");
         setGuardianStage("approved");
-        clearInterval(id);
       }
-    }, 1500);
-    return () => clearInterval(id);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, [guardianStage]);
 
   const handleLoginSuccess = (user: UserAccount) => {
