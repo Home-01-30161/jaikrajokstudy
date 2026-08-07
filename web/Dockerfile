@@ -2,12 +2,11 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
-# Install locked dependencies before copying source so Docker can reuse the
-# dependency layer when only application code changes.
-# npm ci on Alpine may skip the musl-specific rollup binary (npm bug #4828),
-# so we force-install it afterwards.
+# package-lock.json was generated on Windows, so it lacks musl-specific native
+# binaries (rollup, lightningcss, etc.). npm ci would skip them (npm bug #4828).
+# Use `npm install` instead which resolves platform-correct optional deps.
 COPY package.json package-lock.json ./
-RUN npm ci && npm i @rollup/rollup-linux-x64-musl --no-save 2>/dev/null || true
+RUN npm install --prefer-offline
 
 COPY tsconfig.json vite.config.ts ./
 COPY client ./client
