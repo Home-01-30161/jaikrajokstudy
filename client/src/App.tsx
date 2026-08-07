@@ -1487,10 +1487,18 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     if (!("speechSynthesis" in window)) { toast("เบราว์เซอร์นี้ไม่รองรับ Text-to-Speech"); return; }
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = "th-TH";
-    u.rate = 0.98;
-    window.speechSynthesis.speak(u);
-    toast("🔊 กำลังอ่านข้อความเสียง...");
+    u.pitch = 1.15;
+    u.rate = 1.1;
+    const trySpeak = (voices: SpeechSynthesisVoice[]) => {
+      const ava = voices.find(v => v.name.toLowerCase().includes("ava") && v.name.toLowerCase().includes("natural"))
+        ?? voices.find(v => v.lang.startsWith("th"))
+        ?? voices.find(v => v.lang.startsWith("en"));
+      if (ava) u.voice = ava;
+      window.speechSynthesis.speak(u);
+    };
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) { trySpeak(voices); return; }
+    window.speechSynthesis.addEventListener("voiceschanged", () => trySpeak(window.speechSynthesis.getVoices()), { once: true });
   };
 
   const pushTrend = useCallback((key: string, sourceLabel: string) => {
