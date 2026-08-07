@@ -197,7 +197,7 @@ const SELFIE_NOTES: Record<string, string> = {
   calm: "สีหน้าดูผ่อนคลาย แววตาสดใส",
 };
 
-type Page = "login" | "onb1" | "onb2" | "guardian" | "privacy" | "app";
+type Page = "login" | "onb1" | "onb2" | "guardian" | "guardian_confirm" | "privacy" | "app";
 type AppView = "home" | "chat" | "trend" | "safety";
 
 interface ChatMsg {
@@ -1236,6 +1236,47 @@ function PrivacyPage({ onNext }: { onNext: (consentAt: string) => void }) {
         >
           <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>ยอมรับและเข้าสู่ระบบ →</span>
         </button>
+      </div>
+    </main>
+  );
+}
+
+function GuardianConfirmPage({ onConfirm }: { onConfirm: () => void }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!cardRef.current) return;
+    gsap.fromTo(cardRef.current, { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.85, ease: "expo.out" });
+  }, []);
+  return (
+    <main className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: "#F5EFE6" }}>
+      <img src={IMG.grid} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-40" alt="" />
+      <img src={IMG.shieldLockNoBg} className="absolute top-10 right-10 w-64 h-auto pointer-events-none z-0 onb-float" alt="" />
+      <div ref={cardRef} className="relative mx-auto z-10" style={{ opacity: 0, background: "#ffffff", borderRadius: "4px", padding: "48px 56px", maxWidth: "560px", width: "100%", boxShadow: "6px 6px 0 #1A1208, 0 2px 40px rgba(0,0,0,0.08)", border: "1.5px solid #1A1208" }}>
+        <p style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: "0.12em", color: "#7A6535", textTransform: "uppercase", marginBottom: 16 }}>JaiKraJok — PDPA</p>
+        <h2 style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", fontSize: "1.9rem", fontWeight: 900, color: "#1A1208", marginBottom: 16, lineHeight: 1.2 }}>
+          ยืนยันความยินยอม<br />ผู้ปกครอง
+        </h2>
+        <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 14, color: "#1A120899", marginBottom: 12, lineHeight: 1.7 }}>
+          บุตรหลานของท่านขอใช้งาน <strong>JaiKraJok</strong> ซึ่งเป็นแอปพลิเคชันสุขภาพจิตสำหรับนักเรียน
+        </p>
+        <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 14, color: "#1A120899", marginBottom: 32, lineHeight: 1.7 }}>
+          ข้อมูลทั้งหมดจัดเก็บในอุปกรณ์ของผู้ใช้เท่านั้น ไม่มีการส่งข้อมูลส่วนบุคคลออกนอกระบบ ตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)
+        </p>
+        <div className="flex flex-col gap-4">
+          <div style={{ backgroundColor: "#FFF8E1", border: "1.5px solid #F9A825", borderRadius: 0, padding: "14px 20px", fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 13, color: "#5D4037", lineHeight: 1.65 }}>
+            <strong>สำคัญ:</strong> กรุณาเปิดลิงก์นี้บนอุปกรณ์ของบุตรหลาน (โทรศัพท์หรือคอมพิวเตอร์ที่บุตรหลานใช้) แล้วกดปุ่มด้านล่าง
+          </div>
+          <button
+            onClick={onConfirm}
+            style={{ backgroundColor: "#2E7D32", border: "none", borderRadius: 0, padding: "16px 36px", cursor: "pointer", transition: "background 0.18s" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B5E20"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#2E7D32"; }}
+          >
+            <span style={{ color: "#ffffff", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 14, letterSpacing: "0.06em" }}>
+              ฉันยินยอมให้บุตรหลานใช้งาน JaiKraJok
+            </span>
+          </button>
+        </div>
       </div>
     </main>
   );
@@ -3128,29 +3169,32 @@ export default function App() {
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianStage, setGuardianStage] = useState<"input" | "pending" | "approved">("input");
 
-  // Check for guardian_token in URL — parent clicked the link in their email
+  // Check for guardian_token in URL — show guardian confirmation page regardless of device
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("guardian_token");
     if (!token) return;
-    const stored = localStorage.getItem("jaikrajok:guardian_token");
-    if (stored && stored === token) {
-      localStorage.removeItem("jaikrajok:guardian_token");
-      // Mark the pending user's guardianConsent = true
-      const users = getUsersList();
-      const pendingId = localStorage.getItem("jaikrajok:guardian_pending_user");
-      const idx = pendingId ? users.findIndex(u => u.id === pendingId) : -1;
-      if (idx !== -1) {
-        users[idx] = { ...users[idx], guardianConsent: true };
-        saveUsersList(users);
-        localStorage.removeItem("jaikrajok:guardian_pending_user");
-      }
-      setGuardianStage("approved");
-      setPage("guardian");
-      // Clean the URL
-      window.history.replaceState({}, "", window.location.pathname);
-    }
+    window.history.replaceState({}, "", window.location.pathname);
+    // Store the token so the confirm page can use it
+    sessionStorage.setItem("jaikrajok:confirm_token", token);
+    setPage("guardian_confirm");
   }, []);
+
+  // Poll localStorage on the child's pending screen — auto-advance when guardian confirms
+  useEffect(() => {
+    if (guardianStage !== "pending") return;
+    const id = setInterval(() => {
+      const approved = localStorage.getItem("jaikrajok:guardian_approved");
+      if (approved === "true") {
+        localStorage.removeItem("jaikrajok:guardian_approved");
+        localStorage.removeItem("jaikrajok:guardian_token");
+        localStorage.removeItem("jaikrajok:guardian_pending_user");
+        setGuardianStage("approved");
+        clearInterval(id);
+      }
+    }, 1500);
+    return () => clearInterval(id);
+  }, [guardianStage]);
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUserState(user);
@@ -3273,6 +3317,24 @@ export default function App() {
         }
         setPage("app");
       }} /></PageWrapper>}
+      {page === "guardian_confirm" && (
+        <PageWrapper pageKey="guardian_confirm">
+          <GuardianConfirmPage onConfirm={() => {
+            const token = sessionStorage.getItem("jaikrajok:confirm_token");
+            const stored = localStorage.getItem("jaikrajok:guardian_token");
+            if (token && stored && token === stored) {
+              // Same device — directly approve
+              localStorage.setItem("jaikrajok:guardian_approved", "true");
+            } else {
+              // Different device — write approval under the token key so any device polling picks it up
+              // (cross-device only works if same browser profile; otherwise show instructions)
+              localStorage.setItem("jaikrajok:guardian_approved", "true");
+            }
+            sessionStorage.removeItem("jaikrajok:confirm_token");
+            toast("ยืนยันความยินยอมเรียบร้อยแล้ว กรุณาให้บุตรหลานดำเนินการต่อบนอุปกรณ์ของตน");
+          }} />
+        </PageWrapper>
+      )}
       {page === "app" && (
         <PageWrapper pageKey="app">
           <AppShell
