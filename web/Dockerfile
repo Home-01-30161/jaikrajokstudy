@@ -4,8 +4,10 @@ WORKDIR /app
 
 # Install locked dependencies before copying source so Docker can reuse the
 # dependency layer when only application code changes.
+# npm ci on Alpine may skip the musl-specific rollup binary (npm bug #4828),
+# so we force-install it afterwards.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci && npm i @rollup/rollup-linux-x64-musl --no-save 2>/dev/null || true
 
 COPY tsconfig.json vite.config.ts ./
 COPY client ./client
