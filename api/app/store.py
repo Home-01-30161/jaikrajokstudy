@@ -4,8 +4,10 @@ Phase 1 had no persistence, so the trend and school views had nothing real to
 show. This adds the minimum needed: one row per mood reading, plus counters.
 
 Design notes:
-- SQLite file lives under /app/uploads, the only writable volume the compose
-  file mounts, so data survives container restarts.
+- SQLite file lives under /app/data, which is bind-mounted to the host at
+  /data/hack/teamNN/data (per hackathon guide section 11).  This is an
+  absolute path under /data/hack/${TEAM}, so data survives container
+  rebuilds and redeploys.
 - User ids are hashed before storage. The school view is described in the UI as
   anonymised, and that has to be true at rest, not just in the response.
 - All writes go through a lock because SQLite's default threading mode plus a
