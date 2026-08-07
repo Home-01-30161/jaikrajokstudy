@@ -2,11 +2,13 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
-# package-lock.json was generated on Windows, so it lacks musl-specific native
-# binaries (rollup, lightningcss, etc.). npm ci would skip them (npm bug #4828).
-# Use `npm install` instead which resolves platform-correct optional deps.
+# Install locked dependencies before copying source so Docker can reuse the
+# dependency layer when only application code changes.
+# package-lock.json is regenerated on Linux/musl (via `npm install` inside a
+# node:22-alpine container) so it carries rollup/lightningcss musl binaries;
+# npm ci is then safe and reproducible.
 COPY package.json package-lock.json ./
-RUN npm install --prefer-offline
+RUN npm ci
 
 COPY tsconfig.json vite.config.ts ./
 COPY client ./client
