@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
-import { defineConfig, type Plugin, type ViteDevServer } from "vite";
+import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 // =============================================================================
@@ -339,71 +339,130 @@ function vitePluginOtpEmail(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics(), vitePluginCollageBuild(), vitePluginOtpEmail()];
+function vitePluginSsenseDev(): Plugin {
+  return {
+    name: "ssense-dev-proxy",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api/ssense", async (req, res, next) => {
+        if (req.method !== "POST") return next();
+        let body = "";
+        req.on("data", (chunk) => { body += chunk.toString(); });
+        req.on("end", async () => {
+          try {
+            const { text } = JSON.parse(body);
+            if (!text) {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Missing text" }));
+              return;
+            }
+            const params = new URLSearchParams({ text });
+            const upstream = await fetch("https://api.aiforthai.in.th/ssense", {
+              method: "POST",
+              headers: {
+                "Apikey": process.env.PATHUMMA_API_KEY ?? "",
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: params.toString(),
+            });
+            const data = await upstream.json().catch(() => ({}));
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(JSON.stringify(data));
+          } catch (e: any) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+      });
+    },
+  };
+}
 
-export default defineConfig({
-  plugins,
-  resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
-    },
-  },
-  envDir: path.resolve(import.meta.dirname),
-  root: path.resolve(import.meta.dirname, "client"),
-  build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true,
-  },
-  server: {
-    port: 3000,
-    strictPort: false, // Will find next available port if 3000 is busy
-    host: true,
-    proxy: {
-      '/api/pathumma': {
-        target: 'https://api.aiforthai.in.th',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path: string) => path.replace(/^\/api\/pathumma/, ''),
-      },
-      '/api/thaillm': {
-        target: 'http://thaillm.or.th',
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path: string) => path.replace(/^\/api\/thaillm/, ''),
-      },
-      '/api/gemini': {
-        target: 'https://generativelanguage.googleapis.com',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path: string) => path.replace(/^\/api\/gemini/, ''),
-      },
-      '/api/typhoon': {
-        target: 'https://api.opentyphoon.ai',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path: string) => path.replace(/^\/api\/typhoon/, ''),
-      },
-      '/api/tavily': {
-        target: 'https://api.tavily.com',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path: string) => path.replace(/^\/api\/tavily/, ''),
+export default defineConfig(({ mode }) => {
+  // loadEnv with prefix='' loads ALL vars (not just VITE_) into process.env
+  const env = loadEnv(mode, path.resolve(import.meta.dirname), '');
+  // Explicitly populate process.env so proxy configure callbacks can read them
+  Object.assign(process.env, env);
+
+  const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics(), vitePluginCollageBuild(), vitePluginOtpEmail(), vitePluginSsenseDev()];
+
+  return {
+    plugins,
+    resolve: {
+      alias: {
+        "@": path.resolve(import.meta.dirname, "client", "src"),
+        "@shared": path.resolve(import.meta.dirname, "shared"),
+        "@assets": path.resolve(import.meta.dirname, "attached_assets"),
       },
     },
-    allowedHosts: [
-      ".manuspre.computer",
-      ".manus.computer",
-      ".manus-asia.computer",
-      ".manuscomputer.ai",
-      ".manusvm.computer",
-      "localhost",
-      "127.0.0.1",
-    ],
-    fs: {
-      strict: false,
-      deny: ["**/.*"],
+    envDir: path.resolve(import.meta.dirname),
+    root: path.resolve(import.meta.dirname, "client"),
+    build: {
+      outDir: path.resolve(import.meta.dirname, "dist/public"),
+      emptyOutDir: true,
     },
-  },
+    server: {
+      port: 3000,
+      strictPort: false,
+      host: true,
+      proxy: {
+        '/api/pathumma': {
+          target: 'https://api.aiforthai.in.th',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path: string) => path.replace(/^\/api\/pathumma/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.setHeader('Apikey', env.PATHUMMA_API_KEY ?? '');
+            });
+          },
+        },
+        '/api/thaillm': {
+          target: 'http://thaillm.or.th',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path: string) => path.replace(/^\/api\/thaillm/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.setHeader('Authorization', `Bearer ${env.THAILLM_API_KEY ?? ''}`);
+            });
+          },
+        },
+        '/api/gemini': {
+          target: 'https://generativelanguage.googleapis.com',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path: string) => {
+            const stripped = path.replace(/^\/api\/gemini/, '');
+            const sep = stripped.includes('?') ? '&' : '?';
+            return `${stripped}${sep}key=${env.GEMINI_API_KEY ?? ''}`;
+          },
+        },
+        '/api/typhoon': {
+          target: 'https://api.opentyphoon.ai',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path: string) => path.replace(/^\/api\/typhoon/, ''),
+        },
+        '/api/tavily': {
+          target: 'https://api.tavily.com',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path: string) => path.replace(/^\/api\/tavily/, ''),
+        },
+      },
+      allowedHosts: [
+        ".manuspre.computer",
+        ".manus.computer",
+        ".manus-asia.computer",
+        ".manuscomputer.ai",
+        ".manusvm.computer",
+        "localhost",
+        "127.0.0.1",
+      ],
+      fs: {
+        strict: false,
+        deny: ["**/.*"],
+      },
+    },
+  };
 });

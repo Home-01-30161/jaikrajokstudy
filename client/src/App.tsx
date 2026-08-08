@@ -1,5 +1,4 @@
 ﻿import { useState, useRef, useCallback, useEffect } from "react";
-import emailjs from "@emailjs/browser";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
@@ -79,38 +78,16 @@ interface MoodInfo {
 }
 
 const EMO: Record<string, MoodInfo> = {
-  stressed: {
-    label: "เครียด / กังวล",
-    emoji: "😣",
-    valence: 0.18,
+  negative: {
+    label: "เชิงลบ",
+    emoji: "😔",
+    valence: 0.2,
     color: "#A85F73",
     bg: "#F1DEE3",
     text: "#6B3B49",
     edge: "#A85F73",
     mid: "#F1DEE3",
     concern: true,
-  },
-  sad: {
-    label: "ท้อแท้ / เศร้า",
-    emoji: "😢",
-    valence: 0.28,
-    color: "#6F6389",
-    bg: "#E7E3EF",
-    text: "#423A56",
-    edge: "#6F6389",
-    mid: "#E7E3EF",
-    concern: true,
-  },
-  tired: {
-    label: "เหนื่อยล้า",
-    emoji: "😴",
-    valence: 0.35,
-    color: "#887F9E",
-    bg: "#E7E3EF",
-    text: "#423A56",
-    edge: "#6F6389",
-    mid: "#E7E3EF",
-    concern: false,
   },
   neutral: {
     label: "ปกติ",
@@ -148,25 +125,15 @@ const EMO: Record<string, MoodInfo> = {
 };
 
 const KEYWORDS: Record<string, string[]> = {
-  stressed: ["เครียด", "กังวล", "กลัว", "สอบ", "ทำไม่ทัน", "หนัก", "กดดัน", "วิตก", "แย่แล้ว", "ไม่ทัน"],
-  sad: ["เศร้า", "ท้อ", "ผิดหวัง", "ร้องไห้", "แย่", "เบื่อ", "หมดหวัง", "น้อยใจ"],
-  tired: ["เหนื่อย", "ง่วง", "หมดแรง", "ไม่มีแรง", "อ่อนเพลีย", "นอนไม่พอ", "ล้า", "หมดไฟ"],
-  positive: ["ดีใจ", "สนุก", "มีความสุข", "โล่งใจ", "ผ่านไปได้", "ภูมิใจ", "สำเร็จ", "ทำได้แล้ว"],
+  negative: ["เครียด", "กังวล", "กลัว", "กดดัน", "วิตก", "เศร้า", "ท้อ", "ผิดหวัง", "แย่", "เหนื่อย", "หมดแรง", "อ่อนเพลีย", "ล้า"],
+  positive: ["ดีใจ", "สนุก", "มีความสุข", "โล่งใจ", "ภูมิใจ", "สำเร็จ", "ทำได้แล้ว"],
   calm: ["สงบ", "โอเค", "ปกติ", "สบายใจ", "ผ่อนคลาย"],
 };
 
 const RESPONSES: Record<string, string[]> = {
-  stressed: [
-    "เข้าใจนะ ความกดดันแบบนี้เป็นเรื่องปกติมากสำหรับช่วงใกล้สอบ ลองพักสายตาสัก 5 นาที แล้วเลือกทำโจทย์ที่มั่นใจที่สุดก่อนได้ไหม กระจกอยู่เป็นเพื่อนด้วยนะ",
-    "ฟังดูหนักใจไม่น้อยเลย ลองหายใจเข้าลึกๆ ช้าๆ สัก 3 ครั้ง แล้วค่อยแบ่งงานเป็นชิ้นเล็กๆ ทีละอย่างนะ",
-  ],
-  sad: [
+  negative: [
+    "เข้าใจนะ ความรู้สึกแบบนี้เป็นเรื่องปกติ ลองหายใจเข้าลึกๆ ช้าๆ สัก 3 ครั้ง แล้วค่อยเล่าให้ฟังต่อได้ไหม กระจกอยู่ตรงนี้นะ",
     "ขอบคุณที่กล้าเล่าให้ฟังนะ ความรู้สึกแบบนี้ไม่ผิดเลย อยากให้รู้ว่ามีที่นี่ให้ระบายได้เสมอ",
-    "บางวันก็เป็นแบบนี้แหละ ให้ตัวเองได้เศร้าได้บ้างก็ได้ ลองเล่าเพิ่มได้ไหมว่าเกิดอะไรขึ้น",
-  ],
-  tired: [
-    "ร่างกายกำลังบอกว่าต้องการพักนะ ลองงีบสัก 20 นาที หรือลุกไปเดินยืดเส้นยืดสายก่อนได้ไหม",
-    "เหนื่อยล้าสะสมแบบนี้ ถ้าฝืนต่อไปสมองจะจำเนื้อหาได้ยากขึ้นนะ ลองพักจริงจังสักครู่กัน",
   ],
   neutral: [
     "รับทราบนะ ถ้ามีอะไรอยากเล่าเพิ่มเติม หรืออยากให้ช่วยดูการบ้านก็บอกกระจกได้เลย",
@@ -189,10 +156,9 @@ const TRANSPARENCY: Record<string, string> = {
   รูปการบ้าน: "กำลังอ่านข้อความจากภาพ (OCR API)",
 };
 
-const SELFIE_RESULTS = ["stressed", "tired", "neutral", "calm"];
+const SELFIE_RESULTS = ["negative", "neutral", "calm"];
 const SELFIE_NOTES: Record<string, string> = {
-  stressed: "กระจกสังเกตสีหน้าดูเกร็งบริเวณคิ้วและรอบดวงตา อาจมีสัญญาณของความเครียดสะสม",
-  tired: "กระจกสังเกตสีหน้าดูเหนื่อยล้า อาจกำลังพักผ่อนไม่เพียงพอ",
+  negative: "กระจกสังเกตสีหน้าดูเกร็งหรือเหนื่อยล้า อาจมีสัญญาณของความเครียดสะสม",
   neutral: "สีหน้าอยู่ในเกณฑ์ปกติ ไม่พบสัญญาณผิดปกติชัดเจน",
   calm: "สีหน้าดูผ่อนคลาย แววตาสดใส",
 };
@@ -1484,21 +1450,28 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   }, []);
 
   const speakText = (text: string) => {
-    if (!("speechSynthesis" in window)) { toast("เบราว์เซอร์นี้ไม่รองรับ Text-to-Speech"); return; }
+    if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.pitch = 1.15;
-    u.rate = 1.1;
-    const trySpeak = (voices: SpeechSynthesisVoice[]) => {
-      const ava = voices.find(v => v.name.toLowerCase().includes("ava") && v.name.toLowerCase().includes("natural"))
-        ?? voices.find(v => v.lang.startsWith("th"))
-        ?? voices.find(v => v.lang.startsWith("en"));
-      if (ava) u.voice = ava;
-      window.speechSynthesis.speak(u);
-    };
+    const clean = text
+      .replace(/\$\$[\s\S]*?\$\$/g, " ")       // block math $$...$$
+      .replace(/\$[^$\n]{0,80}\$/g, " ")         // inline math $...$
+      .replace(/\\[a-zA-Z]+\{[^}]{0,40}\}/g, " ")// \cmd{...}
+      .replace(/\\[a-zA-Z]+/g, " ")               // bare \cmd
+      .replace(/^\s*[-–—]\s+/gm, "")              // leading list dash
+      .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "") // emoji (surrogate pairs)
+      .replace(/\s+/g, " ")
+      .trim();
+    // Only bail if nothing readable remains (no Thai, no letters, no digits)
+    if (!/[฀-๿a-zA-Z0-9]/.test(clean)) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = "th-TH";
+    u.pitch = 1.1;
+    u.rate = 0.9;
     const voices = window.speechSynthesis.getVoices();
-    if (voices.length > 0) { trySpeak(voices); return; }
-    window.speechSynthesis.addEventListener("voiceschanged", () => trySpeak(window.speechSynthesis.getVoices()), { once: true });
+    const th = voices.filter(v => v.lang.startsWith("th"));
+    const voice = th.find(v => v.name.includes("Google")) ?? th[0];
+    if (voice) { u.voice = voice; u.lang = voice.lang; }
+    window.speechSynthesis.speak(u);
   };
 
   const pushTrend = useCallback((key: string, sourceLabel: string) => {
@@ -2120,9 +2093,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
                     const info = EMO[key] || EMO.neutral;
                     setMood(key);
                     const openingLines: Record<string, string> = {
-                      stressed: "วันนี้รู้สึกเครียด / กังวลอยู่นิดหน่อยค่ะ",
-                      sad: "วันนี้ใจมันท้อแท้อยู่เลยค่ะ",
-                      tired: "วันนี้รู้สึกเหนื่อยล้ามากค่ะ",
+                      negative: "วันนี้รู้สึกไม่ค่อยดีเลยค่ะ",
                       neutral: "วันนี้รู้สึกปกติดีค่ะ",
                       calm: "วันนี้ใจสงบผ่อนคลายค่ะ",
                       positive: "วันนี้รู้สึกสดใส มีความสุขมากค่ะ",
@@ -2318,7 +2289,7 @@ function HomeView({
     { id: "photo" as const, track: "B4", th: "ถ่ายรูปการบ้าน", sub: "ให้กระจกช่วยดูการบ้าน" },
   ];
 
-  const _moodOrder = ["stressed", "sad", "tired", "neutral", "calm", "positive"];
+  const _moodOrder = ["negative", "neutral", "calm", "positive"];
 
   return (
     <div style={{ margin: "-1.75rem -1.25rem", marginTop: "-1.5rem", backgroundColor: T.paper }} className="md:!-mx-8 md:!-my-7 overflow-x-hidden">
@@ -3296,12 +3267,11 @@ export default function App() {
               localStorage.setItem("jaikrajok:guardian_pending_user", currentUser?.id ?? "");
               const approvalLink = `${window.location.origin}${window.location.pathname}?guardian_token=${token}`;
               try {
-                await emailjs.send(
-                  "service_hgrm6eo",
-                  "template_wt81l2e",
-                  { to_email: email, child_name: currentUser?.name ?? "บุตรหลานของคุณ", app_name: "JaiKraJok", approval_link: approvalLink },
-                  { publicKey: "Viict-x-L0jSFqv0N" }
-                );
+                await fetch("/api/guardian-email", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ to_email: email, child_name: currentUser?.name ?? "บุตรหลานของคุณ", approval_link: approvalLink }),
+                }).then(r => { if (!r.ok) throw new Error(`${r.status}`); });
                 setGuardianStage("pending");
                 toast("ส่งอีเมลถึงผู้ปกครองเรียบร้อยแล้ว");
               } catch (err) {

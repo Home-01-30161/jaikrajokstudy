@@ -157,11 +157,11 @@ process.stdout.write("Running Playwright + axe...\n");
 // 6–11. API latency
 process.stdout.write("Checking APIs...\n");
 {
-  const thaillmKey  = process.env.VITE_THAILLM_API_KEY  ?? "";
-  const geminiKey   = process.env.VITE_GEMINI_API_KEY   ?? "";
-  const tavilyKey   = process.env.VITE_TAVILY_API_KEY   ?? "";
-  const typhoonKey  = process.env.VITE_TYPHOON_ASR_KEY  ?? process.env.VITE_TYPHOON_API_KEY ?? "";
-  const pathummaKey = process.env.VITE_PATHUMMA_API_KEY ?? "";
+  const thaillmKey  = process.env.THAILLM_API_KEY  ?? "";
+  const geminiKey   = process.env.GEMINI_API_KEY   ?? "";
+  const tavilyKey   = process.env.TAVILY_API_KEY   ?? "";
+  const typhoonKey  = process.env.TYPHOON_ASR_KEY  ?? process.env.TYPHOON_API_KEY ?? "";
+  const pathummaKey = process.env.PATHUMMA_API_KEY ?? "";
 
   // ThaiLLM — 3 requests, avg
   const thaiBody = JSON.stringify({
@@ -186,47 +186,86 @@ process.stdout.write("Checking APIs...\n");
   record("ThaiLLM API", thaiStatus === 200 ? "PASS" : "FAIL",
     `HTTP ${thaiStatus} | avg ${avg} ms (${thaiTimes.map(t => t + "ms").join(", ")})`);
 
-  // Gemini
-  const g = await httpCheck(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-    { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: "hi" }] }] }) }
-  );
-  record("Gemini API", g.status === 200 ? "PASS" : "WARN",
-    `HTTP ${g.status} | ${g.ms} ms${g.status === 429 ? " (quota exhausted — expected)" : ""}`);
+  // Gemini — 3 requests via Vercel proxy (key stored server-side)
+  const geminiBody = JSON.stringify({ contents: [{ parts: [{ text: "hi" }] }] });
+  const geminiTimes = [];
+  let geminiStatus = 0;
+  for (let i = 0; i < 3; i++) {
+    const res = await httpCheck(
+      `https://jaikrajokstudy.vercel.app/api/gemini/v1beta/models/gemini-2.0-flash-lite:generateContent`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: geminiBody }
+    );
+    geminiStatus = res.status;
+    geminiTimes.push(res.ms);
+  }
+  const geminiAvg = Math.round(geminiTimes.reduce((a, b) => a + b, 0) / geminiTimes.length);
+  record("Gemini API", geminiStatus === 200 ? "PASS" : "FAIL",
+    `HTTP ${geminiStatus} | avg ${geminiAvg} ms (${geminiTimes.map(t => t + "ms").join(", ")})`);
 
-  // Tavily
-  const tv = await httpCheck("https://api.tavily.com/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${tavilyKey}` },
-    body: JSON.stringify({ query: "test", max_results: 1 }),
-  });
-  record("Tavily API", tv.status === 200 ? "PASS" : "FAIL", `HTTP ${tv.status} | ${tv.ms} ms`);
+  // Tavily — 3 requests, avg
+  const tavilyBody = JSON.stringify({ query: "test", max_results: 1 });
+  const tavilyTimes = [];
+  let tavilyStatus = 0;
+  for (let i = 0; i < 3; i++) {
+    const res = await httpCheck("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tavilyKey}` },
+      body: tavilyBody,
+    });
+    tavilyStatus = res.status;
+    tavilyTimes.push(res.ms);
+  }
+  const tavilyAvg = Math.round(tavilyTimes.reduce((a, b) => a + b, 0) / tavilyTimes.length);
+  record("Tavily API", tavilyStatus === 200 ? "PASS" : "FAIL",
+    `HTTP ${tavilyStatus} | avg ${tavilyAvg} ms (${tavilyTimes.map(t => t + "ms").join(", ")})`);
 
-  // Typhoon
-  const ty = await httpCheck("https://api.opentyphoon.ai/v1/models", {
-    headers: { Authorization: `Bearer ${typhoonKey}` },
-  });
-  record("Typhoon ASR API", ty.status === 200 ? "PASS" : "FAIL", `HTTP ${ty.status} | ${ty.ms} ms`);
+  // Typhoon — 3 requests, avg
+  const typhoonTimes = [];
+  let typhoonStatus = 0;
+  for (let i = 0; i < 3; i++) {
+    const res = await httpCheck("https://api.opentyphoon.ai/v1/models", {
+      headers: { Authorization: `Bearer ${typhoonKey}` },
+    });
+    typhoonStatus = res.status;
+    typhoonTimes.push(res.ms);
+  }
+  const typhoonAvg = Math.round(typhoonTimes.reduce((a, b) => a + b, 0) / typhoonTimes.length);
+  record("Typhoon ASR API", typhoonStatus === 200 ? "PASS" : "FAIL",
+    `HTTP ${typhoonStatus} | avg ${typhoonAvg} ms (${typhoonTimes.map(t => t + "ms").join(", ")})`);
 
-  // Pathumma VQA (422 = alive, no image sent — expected)
-  const p = await httpCheck("https://api.aiforthai.in.th/vqa/inference/", {
-    method: "POST",
-    headers: { Apikey: pathummaKey },
-  });
-  const pOk = p.status === 422 || p.status === 200;
-  record("Pathumma VQA API", pOk ? "PASS" : "FAIL",
-    `HTTP ${p.status} | ${p.ms} ms${p.status === 422 ? " (422 expected — no image payload)" : ""}`);
+  // Pathumma VQA — 3 requests, avg (422 = alive, no image sent — expected)
+  const pathuTimes = [];
+  let pathuStatus = 0;
+  for (let i = 0; i < 3; i++) {
+    const res = await httpCheck("https://api.aiforthai.in.th/vqa/inference/", {
+      method: "POST",
+      headers: { Apikey: pathummaKey },
+    });
+    pathuStatus = res.status;
+    pathuTimes.push(res.ms);
+  }
+  const pathuAvg = Math.round(pathuTimes.reduce((a, b) => a + b, 0) / pathuTimes.length);
+  const pathuOk = pathuStatus === 422 || pathuStatus === 200;
+  record("Pathumma VQA API", pathuOk ? "PASS" : "FAIL",
+    `HTTP ${pathuStatus} | avg ${pathuAvg} ms (${pathuTimes.map(t => t + "ms").join(", ")})`);
 
-  // Vercel site
-  const v = await httpCheck("https://jaikrajokstudy.vercel.app/");
-  record("Vercel site (TTFB)", v.status === 200 ? "PASS" : "FAIL", `HTTP ${v.status} | ${v.ms} ms`);
+  // Vercel site — 3 requests, avg
+  const vercelTimes = [];
+  let vercelStatus = 0;
+  for (let i = 0; i < 3; i++) {
+    const res = await httpCheck("https://jaikrajokstudy.vercel.app/");
+    vercelStatus = res.status;
+    vercelTimes.push(res.ms);
+  }
+  const vercelAvg = Math.round(vercelTimes.reduce((a, b) => a + b, 0) / vercelTimes.length);
+  record("Vercel site (TTFB)", vercelStatus === 200 ? "PASS" : "FAIL",
+    `HTTP ${vercelStatus} | avg ${vercelAvg} ms (${vercelTimes.map(t => t + "ms").join(", ")})`);
 }
 
 // 12. Promptfoo LLM eval
 process.stdout.write("Running Promptfoo...\n");
 {
-  const thaillmKey = process.env.VITE_THAILLM_API_KEY ?? "";
+  const thaillmKey = process.env.THAILLM_API_KEY ?? "";
   if (!thaillmKey) {
     record("Promptfoo LLM eval", "SKIP", "VITE_THAILLM_API_KEY not set");
   } else {
@@ -256,7 +295,7 @@ process.stdout.write("Checking k6...\n");
     record("k6 load test", "SKIP", "k6 not found — install with: winget install k6");
   } else {
     const ver = (r.stdout || "").split("\n")[0].trim();
-    const r2 = run(`k6 run ${resolve(ROOT, "load-test.js")} -e THAILLM_API_KEY=${process.env.VITE_THAILLM_API_KEY ?? ""}`, { timeout: 120_000 });
+    const r2 = run(`k6 run ${resolve(ROOT, "load-test.js")} -e THAILLM_API_KEY=${process.env.THAILLM_API_KEY ?? ""}`, { timeout: 120_000 });
     const out = r2.stdout + r2.stderr;
     const mReqs = out.match(/http_reqs[^\d]+(\d[\d,]+)/);
     const mP95  = out.match(/p\(95\)=([^\s]+)/);

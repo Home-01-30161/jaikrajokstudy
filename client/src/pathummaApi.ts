@@ -11,32 +11,22 @@
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const THAILLM_KEY: string = (import.meta.env.VITE_THAILLM_API_KEY as string) ?? "";
 const THAILLM_PROXY  = "/api/thaillm";
 const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
-
-const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
 const PATHUMMA_PROXY = "/api/pathumma";
-const GEMINI_KEY: string = (import.meta.env.VITE_GEMINI_API_KEY as string) ?? "";
-const GEMINI_PROXY = "/api/gemini";
-const TYPHOON_ASR_KEY: string = (import.meta.env.VITE_TYPHOON_ASR_KEY as string) ?? (import.meta.env.VITE_TYPHOON_API_KEY as string) ?? "";
-const TYPHOON_PROXY = "/api/typhoon";
-const TAVILY_KEY: string = (import.meta.env.VITE_TAVILY_API_KEY as string) ?? "";
-const TAVILY_PROXY = "/api/tavily";
+const GEMINI_PROXY   = "/api/gemini";
+const TYPHOON_PROXY  = "/api/typhoon";
+const TAVILY_PROXY   = "/api/tavily";
 
-export function hasApiKey(): boolean {
-  return THAILLM_KEY.trim().length > 0;
-}
+// Keys are now server-side only — always available
+export function hasApiKey(): boolean { return true; }
 
 function thaiLLMHeaders(): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${THAILLM_KEY}`,
-  };
+  return { "Content-Type": "application/json" };
 }
 
 function pathummaHeaders(): Record<string, string> {
-  return { Apikey: PATHUMMA_KEY, "X-lib": "jaikrajok-web" };
+  return { "X-lib": "jaikrajok-web" };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -362,14 +352,9 @@ export async function searchWeb(
   maxResults = 5,
   searchDepth: "basic" | "advanced" = "basic"
 ): Promise<TavilySearchResponse> {
-  if (!TAVILY_KEY.trim()) throw new Error("Tavily API key not configured");
-
   const res = await fetch(`${TAVILY_PROXY}/search`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${TAVILY_KEY}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       query,
       max_results: maxResults,
@@ -450,7 +435,7 @@ export async function callTextLLMWithSearch(
   temperature: number = 0.3,
   history?: { role: string; text: string }[]
 ): Promise<{ reply: string; searchUsed: boolean; sources: { title: string; url: string }[] }> {
-  const needsSearch = TAVILY_KEY.trim().length > 0 && NEEDS_SEARCH_RE.test(instruction);
+  const needsSearch = NEEDS_SEARCH_RE.test(instruction);
 
   if (!needsSearch) {
     const reply = await callTextLLM(instruction, systemPrompt, maxTokens, temperature, history);
@@ -576,30 +561,32 @@ export async function analyzeSentiment(text: string): Promise<string> {
   const tagMatch = text.match(/\[อารมณ์[:\s]+([^\]]+)\]/i);
   if (tagMatch) {
     const tag = tagMatch[1].trim().toLowerCase();
-    if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล")) return "stressed";
-    if (tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ")) return "sad";
-    if (tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า")) return "tired";
-    if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") || tag.includes("ดีใจ")) return "positive";
-    if (tag.includes("สงบ") || tag.includes("ผ่อนคลาย") || tag.includes("สบายใจ")) return "calm";
+    if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล") ||
+        tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
+        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า")) return "negative";
+    if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") ||
+        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย")) return "positive";
   }
 
-  const SENTIMENT_SYSTEM =
-    "You are a strict emotion classifier. Given text in Thai or English, classify the overall emotion into EXACTLY ONE word from this list: stressed, sad, tired, positive, calm, neutral. Output ONLY that single word.";
-
+  // 2. SSense API (primary)
   try {
-    const result = await callTextLLM(
-      `Classify overall emotion: "${text.slice(0, 300)}"`,
-      SENTIMENT_SYSTEM,
-      16,
-      0.01
-    );
-    const lower = result.toLowerCase().trim();
-    for (const key of ["stressed", "sad", "tired", "positive", "calm", "neutral"]) {
-      if (lower.includes(key)) return key;
+    const res = await fetch("/api/ssense", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.slice(0, 500) }),
+    });
+    if (res.ok) {
+      const raw = await res.json() as Record<string, unknown>[];
+      const polarity = (raw?.[0] as { sentiment?: { polarity?: string } })?.sentiment?.polarity ?? "";
+      if (polarity === "positive") return "positive";
+      if (polarity === "negative") return "negative";
+      return "neutral";
     }
   } catch {
-    // fall through to regex classifier
+    // fall through to keyword fallback
   }
+
+  // 3. Local keyword fallback
   return classifyMoodFromText(text);
 }
 
@@ -617,9 +604,8 @@ export async function callVisionLLM(
   query: string,
   filename = "image.jpg"
 ): Promise<string> {
-  // If Gemini API key is configured, use Gemini Flash Vision for multimodal understanding
-  if (GEMINI_KEY.trim().length > 0) {
-    try {
+  // Always use Gemini Vision via proxy
+  try {
       const base64Data = await blobToBase64(imageBlob);
       const mimeType = imageBlob.type || "image/jpeg";
 
@@ -646,7 +632,7 @@ export async function callVisionLLM(
       };
 
       const res = await fetch(
-        `${GEMINI_PROXY}/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_KEY}`,
+        `${GEMINI_PROXY}/v1beta/models/gemini-flash-latest:generateContent`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -669,7 +655,6 @@ export async function callVisionLLM(
     } catch (e) {
       console.warn("[Gemini Vision] Error, falling back to Pathumma VQA:", e);
     }
-  }
 
   // Fallback: Pathumma VQA
   const form = new FormData();
@@ -888,7 +873,7 @@ export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
 
   const res = await fetch(`${TYPHOON_PROXY}/v1/audio/transcriptions`, {
     method: "POST",
-    headers: { "Authorization": `Bearer ${TYPHOON_ASR_KEY}` },
+    headers: {},
     body: form,
   });
 
@@ -939,15 +924,13 @@ export async function callAudioLLM(audioBlob: Blob, instruction: string): Promis
 export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
   let transcription = "";
 
-  // Primary: Typhoon ASR (OpenAI-compatible, high-accuracy Thai ASR)
-  if (TYPHOON_ASR_KEY.trim().length > 0) {
-    try {
+  // Always use Typhoon ASR via proxy
+  try {
       transcription = await callTyphoonASR(audioBlob);
       console.debug("[TyphoonASR] Transcription:", transcription);
     } catch (err) {
       console.warn("[TyphoonASR] Failed, falling back to Pathumma AudioQA:", err);
     }
-  }
 
   // Fallback: Pathumma AudioQA
   if (!transcription) {
@@ -994,24 +977,18 @@ export function classifyMoodFromText(text: string): string {
   const tagMatch = text.match(/\[อารมณ์[:\s]+([^\]]+)\]/i);
   if (tagMatch) {
     const tag = tagMatch[1].trim().toLowerCase();
-    if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล")) return "stressed";
-    if (tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ")) return "sad";
-    if (tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า")) return "tired";
-    if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") || tag.includes("ดีใจ")) return "positive";
-    if (tag.includes("สงบ") || tag.includes("ผ่อนคลาย") || tag.includes("สบายใจ")) return "calm";
+    if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล") ||
+        tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
+        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า")) return "negative";
+    if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") ||
+        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย")) return "positive";
   }
 
   const lower = text.toLowerCase();
-
-  // 2. Remove negated positive phrases (e.g. "ไม่มีรอยยิ้ม", "ไม่ยิ้ม", "ไร้ความสุข") so "ไม่มีรอยยิ้ม" won't match "ยิ้ม"
   const cleaned = lower.replace(/(ไม่มี|ไม่|ไร้|ปราศจาก)\s*(รอยยิ้ม|ยิ้ม|ความสุข|ความสดใส|อารมณ์ดี|ความผ่อนคลาย)/g, "");
 
-  // 3. Priority order: check negative emotions first on cleaned text
-  if (/(เครียด|ปวดศีรษะ|หมอง|ตึง|กดดัน|กังวล|กลุ้ม|รับไม่ไหว|stress)/.test(cleaned)) return "stressed";
-  if (/(เหนื่อย|อ่อนเพลีย|หมดแรง|ไม่มีแรง|เพลีย|นอนไม่หลับ|ล้า|tired)/.test(cleaned)) return "tired";
-  if (/(เศร้า|เสียใจ|ท้อแท้|ท้อใจ|สิ้นหวัง|หมดกำลังใจ|เหงา|โดดเดี่ยว|ผิดหวัง|sad)/.test(cleaned)) return "sad";
-  if (/(ยิ้ม|สดใส|ร่าเริง|มีความสุข|อารมณ์ดี|ดีใจ|สนุก|เยี่ยม|ภูมิใจ|สุขใจ|สำเร็จ|เบิกบาน|เป็นมิตร|หัวเราะ|happy)/.test(cleaned)) return "positive";
-  if (/(ผ่อนคลาย|สบายใจ|สงบ|โล่งใจ|ปกติดี|calm|โอเค)/.test(cleaned)) return "calm";
+  if (/(เครียด|ปวดศีรษะ|หมอง|ตึง|กดดัน|กังวล|กลุ้ม|รับไม่ไหว|stress|เหนื่อย|อ่อนเพลีย|หมดแรง|ไม่มีแรง|เพลีย|นอนไม่หลับ|ล้า|tired|เศร้า|เสียใจ|ท้อแท้|ท้อใจ|สิ้นหวัง|หมดกำลังใจ|เหงา|โดดเดี่ยว|ผิดหวัง|sad)/.test(cleaned)) return "negative";
+  if (/(ยิ้ม|สดใส|ร่าเริง|มีความสุข|อารมณ์ดี|ดีใจ|สนุก|เยี่ยม|ภูมิใจ|สุขใจ|สำเร็จ|เบิกบาน|เป็นมิตร|หัวเราะ|happy|ผ่อนคลาย|สบายใจ|สงบ|โล่งใจ|ปกติดี|calm|โอเค)/.test(cleaned)) return "positive";
 
   return "neutral";
 }
