@@ -2809,6 +2809,55 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                 </p>
               </div>
 
+              {/* Accessibility Settings — in sidebar so reachable from every page */}
+              <div className="mt-4 pt-4" style={{ borderTop: "1px solid rgba(255,181,167,0.15)" }}>
+                <p style={{ fontFamily: "'IBM Plex Mono', monospace", color: "rgba(255,181,167,0.5)", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>
+                  การแสดงผล
+                </p>
+                {/* Font Size */}
+                <div className="mb-3">
+                  <p style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "rgba(255,181,167,0.7)", fontSize: "10px", marginBottom: "5px" }}>ขนาดตัวอักษร</p>
+                  <div className="flex gap-1">
+                    {([['normal', 'ปกติ'], ['large', 'ใหญ่'], ['xlarge', 'ใหญ่มาก']] as const).map(([val, lbl]) => (
+                      <button
+                        key={val}
+                        onClick={() => setAccessibilitySettings(s => ({ ...s, fontSize: val }))}
+                        className="flex-1 py-1 rounded-lg text-[10px] font-bold transition-all"
+                        style={{
+                          backgroundColor: accessibilitySettings.fontSize === val ? T.salmon : 'rgba(255,255,255,0.08)',
+                          color: accessibilitySettings.fontSize === val ? '#fff' : 'rgba(255,181,167,0.7)',
+                          border: `1px solid ${accessibilitySettings.fontSize === val ? T.salmon : 'rgba(255,181,167,0.2)'}`,
+                          fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                        }}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Font Family */}
+                <div className="mb-3">
+                  <p style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "rgba(255,181,167,0.7)", fontSize: "10px", marginBottom: "5px" }}>รูปแบบตัวอักษร</p>
+                  <div className="flex gap-1">
+                    {([['default', 'ปกติ'], ['dyslexic', 'อ่านง่าย']] as const).map(([val, lbl]) => (
+                      <button
+                        key={val}
+                        onClick={() => setAccessibilitySettings(s => ({ ...s, fontFamily: val }))}
+                        className="flex-1 py-1 rounded-lg text-[10px] font-bold transition-all"
+                        style={{
+                          backgroundColor: accessibilitySettings.fontFamily === val ? T.salmon : 'rgba(255,255,255,0.08)',
+                          color: accessibilitySettings.fontFamily === val ? '#fff' : 'rgba(255,181,167,0.7)',
+                          border: `1px solid ${accessibilitySettings.fontFamily === val ? T.salmon : 'rgba(255,181,167,0.2)'}`,
+                          fontFamily: "'Inter', 'Noto Sans Thai', sans-serif",
+                        }}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {/* Emergency 1323 Button */}
               <div className="mt-4 pt-4" style={{ borderTop: "1px solid rgba(255,181,167,0.15)" }}>
                 <a
@@ -4338,7 +4387,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
             <h4 className="font-bold text-base" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>การควบคุมข้อมูลของฉัน</h4>
             <p className="text-xs text-gray-600" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>คุณสามารถเข้าถึง ส่งออก หรือลบข้อมูลของตนเองได้ทุกเมื่อ</p>
             <div className="flex gap-3">
-              <button onClick={onExport} className="px-5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-xs font-bold flex items-center gap-1.5" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
+              <button onClick={onExport} className="px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all" style={{ border: `2px solid ${T.teal}`, color: T.teal, backgroundColor: '#E3EAE0', fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>
                 <DownloadIcon size={14} />
                 ส่งออกข้อมูลของฉัน
               </button>
