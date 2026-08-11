@@ -2120,6 +2120,20 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   ]);
   const [inputText, setInputText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzingElapsed, setAnalyzingElapsed] = useState(0); // seconds shown in indicator
+  const analyzingStartRef = useRef<number | null>(null);
+
+  // Tick elapsed timer while analyzing — gives user confidence system is working
+  useEffect(() => {
+    if (!isAnalyzing) { setAnalyzingElapsed(0); analyzingStartRef.current = null; return; }
+    analyzingStartRef.current = Date.now();
+    const timer = setInterval(() => {
+      if (analyzingStartRef.current) {
+        setAnalyzingElapsed(Math.floor((Date.now() - analyzingStartRef.current) / 1000));
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isAnalyzing]);
 
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
@@ -2961,6 +2975,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                   setInputText={setInputText}
                   sendMessage={() => sendMessage()}
                   isAnalyzing={isAnalyzing}
+                  analyzingElapsed={analyzingElapsed}
                   isRecording={isRecording}
                   handleSelfie={handleSelfie}
                   handleVoice={handleVoice}
@@ -3501,7 +3516,7 @@ function HomeView({
 
 /* ============ CHAT VIEW ============ */
 function ChatView({
-  messages, inputText, setInputText, sendMessage, isAnalyzing, isRecording,
+  messages, inputText, setInputText, sendMessage, isAnalyzing, analyzingElapsed, isRecording,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, concernStreak, transparencyLogs, supportStrip, onDismissSupport, onNotifyCounselor,
   showCrisisAlert, onDismissCrisis, crisisDetected, detailedTransparencyLogs,
@@ -3512,6 +3527,7 @@ function ChatView({
   setInputText: (v: string) => void;
   sendMessage: () => void;
   isAnalyzing: boolean;
+  analyzingElapsed: number;
   isRecording: boolean;
   handleSelfie: () => void;
   handleVoice: () => void;
@@ -3657,10 +3673,26 @@ function ChatView({
           {isAnalyzing && (
             <div className="flex justify-start">
               <div className="px-5 py-3 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}` }}>
-                <div className="flex gap-1.5">
-                  {[0, 150, 300].map((d) => (
-                    <div key={d} className="w-2.5 h-2.5 rounded-full " style={{ backgroundColor: T.teal, animationDelay: `${d}ms` }} />
-                  ))}
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1.5">
+                    {[0, 150, 300].map((d) => (
+                      <div
+                        key={d}
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{
+                          backgroundColor: T.teal,
+                          animation: `bounce 1.2s ease-in-out ${d}ms infinite`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span style={{ fontSize: "0.72rem", color: "#6B7280", fontFamily: "'Noto Sans Thai', sans-serif" }}>
+                    {analyzingElapsed < 5
+                      ? "กระจกกำลังคิด..."
+                      : analyzingElapsed < 20
+                      ? `กระจกกำลังคิด... (${analyzingElapsed}s)`
+                      : `กำลังประมวลผล กรุณารอสักครู่ (${analyzingElapsed}s)`}
+                  </span>
                 </div>
               </div>
             </div>

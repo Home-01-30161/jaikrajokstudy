@@ -16,7 +16,13 @@ SYSTEM_PROMPT = (
     "คุณคือ JaiKrajok (ใจกระจก) ผู้ช่วยการเรียนที่เข้าใจอารมณ์สำหรับนักเรียนมัธยมไทย "
     "บทบาทหลักของคุณคือช่วยเรื่องการเรียน อธิบายเนื้อหา วิเคราะห์โจทย์ และให้กำลังใจ "
     "ตอบเป็นภาษาไทย ชัดเจน สุภาพ ตรงประเด็น "
-    "สำคัญมาก: ตอบตาม context ของบทสนทนาเสมอ อย่าเปลี่ยน topic เอง "
+    # Anti-repetition: explicit instruction is the strongest guard against loop
+    "ห้ามซ้ำประโยคหรือย่อหน้าเดิมเด็ดขาด แต่ละข้อต้องมีเนื้อหาใหม่ที่แตกต่างกัน "
+    "ถ้าอธิบายครบแล้วให้หยุด อย่าเพิ่มข้อที่เหมือนเดิม "
+    # Length control
+    "ตอบให้กระชับ ไม่เกิน 5 ข้อหลัก ถ้าไม่จำเป็นต้องมีข้อย่อย "
+    # Context instruction
+    "ตอบตาม context ของบทสนทนาเสมอ อย่าเปลี่ยน topic เอง "
     "ถ้าผู้เรียนถามต่อจากข้อความก่อน ให้ตอบต่อจาก context นั้นโดยตรง "
     "อย่าวินิจฉัยโรคหรือแสดงตนเป็นนักจิตวิทยา "
     "ห้ามใช้อีโมจิหรือสัญลักษณ์รูปภาพ ใช้ข้อความล้วนเท่านั้น "
@@ -37,6 +43,46 @@ def _strip_reasoning(text: str) -> str:
     if "<think>" in text.lower():
         text = re.split(r"<think>", text, flags=re.IGNORECASE)[0]
     return text.strip()
+
+
+def _dedup_lines(text: str) -> str:
+    """Remove consecutively repeated lines/paragraphs that the model loops on.
+
+    Strategy: split on blank lines (paragraph) and numbered list items.
+    If a paragraph body is seen twice, keep only the first occurrence.
+    Similarity threshold: strip whitespace + punctuation before comparing.
+    """
+    # Normalise: collapse 3+ blank lines → 2
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    paragraphs = text.split("\n\n")
+    seen: list[str] = []
+    result: list[str] = []
+
+    def _normalise(s: str) -> str:
+        # Remove leading numbering like "1.", "2.", "ก)", etc. before comparing
+        s = re.sub(r"^\s*[\d๑-๙]+[.)]\s*", "", s, flags=re.MULTILINE)
+        return re.sub(r"[\s\W]+", "", s).lower()
+
+    for para in paragraphs:
+        key = _normalise(para)
+        # Allow short connectors / empty paragraphs through
+        if len(key) < 15:
+            result.append(para)
+            continue
+        # Check if this paragraph's content is already seen (>80% substring match)
+        duplicate = False
+        for s in seen:
+            if len(key) > 0 and len(s) > 0:
+                shorter, longer = (key, s) if len(key) <= len(s) else (s, key)
+                if shorter in longer or (len(shorter) >= 20 and shorter[:20] in longer):
+                    duplicate = True
+                    break
+        if not duplicate:
+            seen.append(key)
+            result.append(para)
+
+    return "\n\n".join(result).strip()
 
 
 # The system prompt forbids emoji, but the model complies only intermittently, so
@@ -186,7 +232,7 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
                 logger.warning("TokenMind: finish_reason=length — response was cut at max_tokens")
 
             text = _strip_emoji(
-                _strip_reasoning(_extract_text(raw_dict))
+                _dedup_lines(_strip_reasoning(_extract_text(raw_dict)))
             )
             if not text:
                 return ServiceResult(
@@ -243,7 +289,7 @@ async def _generate_textqa(prompt: str, settings) -> ServiceResult:
                 )
 
             text = _strip_emoji(
-                _strip_reasoning(_extract_text(raw if isinstance(raw, dict) else {}))
+                _dedup_lines(_strip_reasoning(_extract_text(raw if isinstance(raw, dict) else {})))
             )
             if not text:
                 return ServiceResult(
