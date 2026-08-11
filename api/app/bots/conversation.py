@@ -244,6 +244,30 @@ async def handle_text(user_id: str, text: str) -> str:
 
     mode = _get_mode(user_id)
 
+    # Rich Menu shortcuts — image/voice guide
+    if text in {"ตอบคำถามจากรูป"}:
+        _set_mode(user_id, "start")
+        return (
+            "━━━━━━━━━━━━━━━\n"
+            "📷 ตอบคำถามจากรูป\n"
+            "━━━━━━━━━━━━━━━\n"
+            "ถ่ายรูปการบ้าน โจทย์ หรือเนื้อหาที่ไม่เข้าใจ\n"
+            "แล้วส่งรูปมาได้เลย กระจกจะอ่านและอธิบายให้ ✨\n\n"
+            "💡 เคล็ดลับ: ถ่ายให้ตรง แสงพอ ตัวหนังสือชัด\n"
+            "แล้วกระจกจะอ่านได้แม่นขึ้นนะ"
+        )
+    if text in {"แชทด้วยเสียง"}:
+        _set_mode(user_id, "start")
+        return (
+            "━━━━━━━━━━━━━━━\n"
+            "🎤 แชทด้วยเสียง\n"
+            "━━━━━━━━━━━━━━━\n"
+            "กดปุ่มไมค์ใน LINE แล้วพูดสิ่งที่อยากถามหรืออยากระบาย\n"
+            "กระจกจะแปลงเสียงเป็นข้อความและตอบให้นะ 🎙️\n\n"
+            "💡 เคล็ดลับ: พูดในที่เงียบ ๆ\n"
+            "ชัดและช้านิดนึง กระจกจะเข้าใจได้ดีขึ้น"
+        )
+
     # Menu shortcuts
     if text in {"1", "เรียน", "study", "การบ้าน", "homework"}:
         _set_mode(user_id, "study")
@@ -254,7 +278,7 @@ async def handle_text(user_id: str, text: str) -> str:
             "ส่งคำถาม โจทย์ หรือเนื้อหาที่ไม่เข้าใจมาได้เลย\n"
             "หรือถ่ายรูปการบ้านส่งมาก็ได้นะ"
         )
-    if text in {"2", "อารมณ์", "emotion", "ความรู้สึก", "feeling"}:
+    if text in {"2", "อารมณ์", "emotion", "ความรู้สึก", "feeling", "เช็คอารมณ์"}:
         _set_mode(user_id, "emotion")
         return (
             "━━━━━━━━━━━━━━━\n"
@@ -263,14 +287,14 @@ async def handle_text(user_id: str, text: str) -> str:
             "ส่งข้อความที่อยากระบาย หรือบอกว่าวันนี้รู้สึกยังไง\n"
             "กระจกจะอ่านอารมณ์จากข้อความให้นะ"
         )
-    if text in {"3", "help", "ช่วยเหลือ", "เมนู", "menu", "วิธีใช้"}:
+    if text in {"3", "help", "ช่วยเหลือ", "เมนู", "menu", "วิธีใช้", "ข้อมูลแอป"}:
         _set_mode(user_id, "start")
         return HELP
 
     # Breathing exercise — trigger or repeat
     _BREATHE_TRIGGERS = {
         "หายใจ", "ลดเครียด", "breathe", "breathing",
-        "คลายเครียด", "เครียดมาก", "หายใจคลาย",
+        "คลายเครียด", "เครียดมาก", "หายใจคลาย", "ฝึกหายใจ",
     }
     if text in _BREATHE_TRIGGERS or (mode == "breathe" and text in {"อีกรอบ", "again", "repeat", "ทำอีก"}):
         _set_mode(user_id, "breathe")
@@ -283,7 +307,7 @@ async def handle_text(user_id: str, text: str) -> str:
     # Mood summary report
     _SUMMARY_TRIGGERS = {
         "สรุป", "ดูอารมณ์", "อารมณ์ฉัน", "สถิติ", "ประวัติ",
-        "summary", "report", "mood history",
+        "summary", "report", "mood history", "ดูสถิติ",
     }
     if text in _SUMMARY_TRIGGERS:
         _set_mode(user_id, "start")
