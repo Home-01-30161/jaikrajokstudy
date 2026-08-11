@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 
 from app.services import pathumma, sentiment
+from app.services.pathumma import strip_latex_for_line
 from app.services.mood import classify as classify_mood, MOOD_LABELS_TH
 from app.utils.logging import get_logger
 
@@ -388,7 +389,7 @@ async def handle_text(user_id: str, text: str) -> str:
             "พิมพ์ เมนู เพื่อดูตัวเลือกอื่น"
         )
 
-    reply = result.text or "..."
+    reply = strip_latex_for_line(result.text or "...")
     # Append subtle footer for study mode to remind about other features
     if mode == "study" and len(reply) < 4500:
         reply += "\n\n─────────────────\nพิมพ์ เมนู เพื่อดูตัวเลือกอื่น"

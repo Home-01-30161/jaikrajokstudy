@@ -2148,6 +2148,8 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const escalationRef = useRef<HTMLDivElement>(null);
   const selfieInputRef = useRef<HTMLInputElement>(null);
   const homeworkInputRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);  // for manual stop
+  const [isRecording, setIsRecording] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -2429,13 +2431,21 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
 
   const handleVoice = async () => {
     if (!sessionReady) return toast("กำลังเตรียมเซสชัน โปรดลองอีกครั้งในอีกสักครู่");
-    if (isAnalyzing) return toast("กรุณารอให้คำขอก่อนหน้าเสร็จก่อน");
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       return toast.error("เบราว์เซอร์นี้ไม่รองรับการบันทึกเสียง");
     }
 
+    // ถ้ากำลังบันทึกอยู่ → กดซ้ำ = หยุด
+    if (isRecording && recorderRef.current) {
+      recorderRef.current.stop();
+      return;
+    }
+
+    if (isAnalyzing) return toast("กรุณารอให้คำขอก่อนหน้าเสร็จก่อน");
+
     let stream: MediaStream | null = null;
     setIsAnalyzing(true);
+    setIsRecording(true);
     noteMultimodal("เสียงพูด");
     const voiceStart = Date.now();
     setModalityState({ mode: "voice", status: "recording", startedAt: voiceStart });
@@ -2444,15 +2454,18 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
       const preferredMime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]
         .find((mime) => MediaRecorder.isTypeSupported(mime));
       const recorder = new MediaRecorder(stream, preferredMime ? { mimeType: preferredMime } : undefined);
+      recorderRef.current = recorder;
       const chunks: Blob[] = [];
       const audio = await new Promise<Blob>((resolve, reject) => {
         recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
         recorder.onerror = () => reject(new Error("บันทึกเสียงไม่สำเร็จ"));
         recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
         recorder.start();
-        window.setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 5000);
-        toast("กำลังบันทึกเสียงไม่เกิน 5 วินาที");
+        // Auto-stop after 60s max as safety valve
+        window.setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 60000);
+        toast("🎙️ กำลังบันทึก... กดปุ่มไมค์อีกครั้งเพื่อหยุด", { duration: 60000, id: "voice-recording" });
       });
+      toast.dismiss("voice-recording");
       if (!audio.size) throw new Error("ไม่พบเสียงที่บันทึก");
 
       setModalityState({ mode: "voice", status: "processing", startedAt: voiceStart });
@@ -2470,10 +2483,13 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
         toast.error(result.error || "แปลงเสียงไม่สำเร็จ");
       }
     } catch (error) {
+      toast.dismiss("voice-recording");
       setModalityState({ mode: "voice", status: "error", startedAt: voiceStart, detail: error instanceof Error ? error.message : undefined });
       toast.error(error instanceof Error ? error.message : "แปลงเสียงไม่สำเร็จ");
     } finally {
       stream?.getTracks().forEach((track) => track.stop());
+      recorderRef.current = null;
+      setIsRecording(false);
       setIsAnalyzing(false);
     }
   };
@@ -2945,6 +2961,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                   setInputText={setInputText}
                   sendMessage={() => sendMessage()}
                   isAnalyzing={isAnalyzing}
+                  isRecording={isRecording}
                   handleSelfie={handleSelfie}
                   handleVoice={handleVoice}
                   handleHomeworkPhoto={handleHomeworkPhoto}
@@ -3484,7 +3501,7 @@ function HomeView({
 
 /* ============ CHAT VIEW ============ */
 function ChatView({
-  messages, inputText, setInputText, sendMessage, isAnalyzing,
+  messages, inputText, setInputText, sendMessage, isAnalyzing, isRecording,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, concernStreak, transparencyLogs, supportStrip, onDismissSupport, onNotifyCounselor,
   showCrisisAlert, onDismissCrisis, crisisDetected, detailedTransparencyLogs,
@@ -3495,6 +3512,7 @@ function ChatView({
   setInputText: (v: string) => void;
   sendMessage: () => void;
   isAnalyzing: boolean;
+  isRecording: boolean;
   handleSelfie: () => void;
   handleVoice: () => void;
   handleHomeworkPhoto: () => void;
@@ -3697,27 +3715,29 @@ function ChatView({
           <div className="flex items-center gap-2">
             {[
               { handler: handleSelfie, icon: <CameraIcon size={18} />, title: "ตรวจใบหน้าในภาพ", mode: "selfie" as ModalityMode },
-              { handler: handleVoice, icon: <MicIcon size={18} />, title: "พูดระบาย", mode: "voice" as ModalityMode },
+              { handler: handleVoice, icon: isRecording ? <span style={{fontSize:18}}>⏹</span> : <MicIcon size={18} />, title: isRecording ? "กดเพื่อหยุดบันทึก" : "พูดระบาย", mode: "voice" as ModalityMode },
               { handler: handleHomeworkPhoto, icon: <ImageIcon size={18} />, title: "แนบรูปการบ้าน", mode: "homework" as ModalityMode },
             ].map(({ handler, icon, title, mode }) => {
               const isActive =
                 modalityState?.mode === mode &&
                 (modalityState.status === "processing" || modalityState.status === "recording");
+              const isVoiceMode = mode === "voice";
               return (
                 <button
                   key={title}
                   onClick={handler}
-                  disabled={isAnalyzing}
+                  disabled={isAnalyzing && !isVoiceMode}
                   title={title}
                   aria-label={title}
                   aria-pressed={isActive}
                   className="p-2.5 rounded-full text-sm font-bold transition-all"
                   style={{
-                    border: `2px solid ${T.teal}`,
-                    backgroundColor: isActive ? T.teal : "#E3EAE0",
-                    color: isActive ? T.white : T.teal,
+                    border: `2px solid ${isRecording && isVoiceMode ? "#EF4444" : T.teal}`,
+                    backgroundColor: isActive ? (isRecording && isVoiceMode ? "#FEE2E2" : T.teal) : "#E3EAE0",
+                    color: isActive ? (isRecording && isVoiceMode ? "#EF4444" : T.white) : T.teal,
                     minWidth: "44px",
                     minHeight: "44px",
+                    animation: isRecording && isVoiceMode ? "pulse 1s infinite" : undefined,
                   }}
                   onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = T.teal; e.currentTarget.style.color = T.white; } }}
                   onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = "#E3EAE0"; e.currentTarget.style.color = T.teal; } }}

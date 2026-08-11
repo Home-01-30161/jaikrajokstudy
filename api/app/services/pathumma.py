@@ -64,6 +64,43 @@ def _strip_emoji(text: str) -> str:
     return "\n".join(line.rstrip() for line in cleaned.split("\n")).strip()
 
 
+# LaTeX → plain-text conversion for LINE (no KaTeX renderer available)
+_DISPLAY_MATH_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+_INLINE_MATH_RE  = re.compile(r"\$([^$\n]+?)\$")
+
+def _latex_to_plain(expr: str) -> str:
+    """Best-effort convert a LaTeX math expression to readable plain text."""
+    s = expr.strip()
+    s = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"(\1)/(\2)", s)
+    s = re.sub(r"\\sqrt\{([^}]+)\}", r"√(\1)", s)
+    s = re.sub(r"\\text\{([^}]+)\}", r"\1", s)
+    s = re.sub(r"\\mathrm\{([^}]+)\}", r"\1", s)
+    s = re.sub(r"\\mathbf\{([^}]+)\}", r"\1", s)
+    s = re.sub(r"\^\{([^}]+)\}", r"^\1", s)
+    s = re.sub(r"_\{([^}]+)\}", r"_\1", s)
+    replacements = {
+        r"\times": "×", r"\div": "÷", r"\pm": "±", r"\cdot": "·",
+        r"\leq": "≤", r"\geq": "≥", r"\neq": "≠", r"\approx": "≈",
+        r"\infty": "∞", r"\pi": "π", r"\alpha": "α", r"\beta": "β",
+        r"\gamma": "γ", r"\theta": "θ", r"\lambda": "λ", r"\mu": "μ",
+        r"\sigma": "σ", r"\omega": "ω", r"\Delta": "Δ", r"\sum": "Σ",
+        r"\int": "∫", r"\rightarrow": "→", r"\leftarrow": "←",
+        r"\Rightarrow": "⇒", r"\left": "", r"\right": "",
+    }
+    for latex_cmd, plain in replacements.items():
+        s = s.replace(latex_cmd, plain)
+    s = re.sub(r"\\[a-zA-Z]+", "", s)   # remove remaining \commands
+    s = re.sub(r"[{}]", "", s)           # remove stray braces
+    return s.strip()
+
+
+def strip_latex_for_line(text: str) -> str:
+    """Convert LaTeX math in a bot reply to plain text suitable for LINE."""
+    text = _DISPLAY_MATH_RE.sub(lambda m: _latex_to_plain(m.group(1)), text)
+    text = _INLINE_MATH_RE.sub(lambda m: _latex_to_plain(m.group(1)), text)
+    return text
+
+
 async def generate_reply(user_text: str, *, emotion_hint: str | None = None, history: list | None = None) -> ServiceResult:
     """Generate a reply, preferring the TokenMind gateway (thaillm-8b).
 
@@ -116,12 +153,13 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
     payload = {
         "model": settings.tokenmind_llm_model,
         "messages": messages,
-        "max_tokens": 4096,
-        "temperature": 0.4,
+        "max_tokens": 8192,
+        "temperature": 0.3,
+        "repetition_penalty": 1.15,  # reduce repetitive loop output
     }
     try:
         verify = not settings.insecure_tls
-        async with httpx.AsyncClient(timeout=90.0, verify=verify) as client:
+        async with httpx.AsyncClient(timeout=120.0, verify=verify) as client:
             resp = await client.post(url, headers=headers, json=payload)
             try:
                 raw = resp.json()
@@ -137,8 +175,18 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
                     raw=raw if isinstance(raw, dict) else {"body": str(raw)},
                 )
 
+            raw_dict = raw if isinstance(raw, dict) else {}
+
+            # Warn if model stopped due to token limit (answer may be truncated)
+            finish_reason = ""
+            choices = raw_dict.get("choices")
+            if isinstance(choices, list) and choices:
+                finish_reason = choices[0].get("finish_reason") or ""
+            if finish_reason == "length":
+                logger.warning("TokenMind: finish_reason=length — response was cut at max_tokens")
+
             text = _strip_emoji(
-                _strip_reasoning(_extract_text(raw if isinstance(raw, dict) else {}))
+                _strip_reasoning(_extract_text(raw_dict))
             )
             if not text:
                 return ServiceResult(
@@ -148,7 +196,7 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
                 service="pathumma",
                 ok=True,
                 text=text,
-                raw=raw if isinstance(raw, dict) else {},
+                raw=raw_dict,
             )
     except httpx.TimeoutException:
         return ServiceResult(service="pathumma", ok=False, error="timeout")
