@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime, timezone
 
 from app.services import pathumma, sentiment
 from app.services.mood import classify as classify_mood, MOOD_LABELS_TH
@@ -66,6 +67,7 @@ WELCOME = (
     "📷 รูปภาพ → วิเคราะห์ใบหน้า / อ่านการบ้าน\n"
     "🎤 เสียงพูด → แปลงเป็นข้อความแล้วตอบ\n"
     "🌬️ พิมพ์ หายใจ → ฝึกหายใจคลายเครียด\n"
+    "📊 พิมพ์ สรุป → ดูอารมณ์ 7 วันที่ผ่านมา\n"
     "━━━━━━━━━━━━━━━\n"
     "พิมพ์คำถามเรียนมาได้เลยนะ"
 )
@@ -83,6 +85,8 @@ HELP = (
     "   → Speech-to-Text แล้ว AI ตอบ\n\n"
     "🌬️ พิมพ์ หายใจ หรือ ลดเครียด\n"
     "   → ฝึกหายใจแบบ 4-4-4 คลายเครียด\n\n"
+    "📊 พิมพ์ สรุป หรือ ดูอารมณ์\n"
+    "   → สถิติอารมณ์ของคุณ 7 วันที่ผ่านมา\n\n"
     "━━━━━━━━━━━━━━━\n"
     "⚠️  ระบบนี้ไม่ใช่บริการทางการแพทย์\n"
     "หากทุกข์ใจมาก โทร 1323 (24 ชม.)"
@@ -148,6 +152,86 @@ def _is_crisis(text: str) -> bool:
     return any(k in lowered or k.replace(" ", "") in stripped for k in CRISIS_KEYWORDS)
 
 
+def _build_mood_summary(user_id: str) -> str:
+    """Pull user_trend() from store and format it as a LINE text message."""
+    try:
+        from app import store
+        data = store.user_trend(user_id, days=7)
+    except Exception:
+        return (
+            "ขออภัย ดึงข้อมูลอารมณ์ไม่ได้ชั่วคราว\n"
+            "ลองพิมพ์ สรุป อีกครั้งในอีกสักครู่นะ"
+        )
+
+    days_data = data.get("days", [])
+    total_msgs = data.get("messages", 0)
+    dominant = data.get("dominant_mood")
+
+    # Count each mood across the 7-day window
+    mood_counts: dict[str, int] = {}
+    for entry in days_data:
+        m = entry.get("mood", "neutral")
+        mood_counts[m] = mood_counts.get(m, 0) + 1
+
+    if not days_data:
+        return (
+            "📊 ยังไม่มีข้อมูลอารมณ์ในช่วง 7 วันที่ผ่านมา\n\n"
+            "ลองพิมพ์ระบายความรู้สึก หรือเลือก 2 เช็คอารมณ์\n"
+            "แล้วกระจกจะเริ่มเก็บสถิติให้นะ 😊"
+        )
+
+    # Emoji + Thai label for each mood
+    _EMOJI = {
+        "stressed": "😣",
+        "sad":      "😢",
+        "tired":    "😴",
+        "neutral":  "😐",
+        "calm":     "😌",
+        "positive": "😊",
+    }
+    _ORDER = ["positive", "calm", "neutral", "tired", "sad", "stressed"]
+
+    # Build bar chart rows (max bar = 8 chars wide)
+    max_count = max(mood_counts.values(), default=1)
+    bar_rows = []
+    for mood in _ORDER:
+        if mood not in mood_counts:
+            continue
+        count = mood_counts[mood]
+        label_th = MOOD_LABELS_TH.get(mood, mood)
+        emoji = _EMOJI.get(mood, "💭")
+        filled = round(count / max_count * 8)
+        bar = "█" * filled + "░" * (8 - filled)
+        bar_rows.append(f"{emoji} {label_th:<6}  {bar}  {count} วัน")
+
+    # Overall trend sentence
+    dominant_th = MOOD_LABELS_TH.get(dominant, dominant) if dominant else None
+    dominant_emoji = _EMOJI.get(dominant, "💭") if dominant else ""
+    if dominant in ("positive", "calm"):
+        trend_line = f"แนวโน้มโดยรวม: ดี {dominant_emoji}"
+    elif dominant in ("stressed", "sad"):
+        trend_line = f"แนวโน้มโดยรวม: ต้องการดูแล {dominant_emoji}"
+    elif dominant == "tired":
+        trend_line = f"แนวโน้มโดยรวม: เหนื่อย ควรพักผ่อน {dominant_emoji}"
+    else:
+        trend_line = f"แนวโน้มโดยรวม: ปกติ {dominant_emoji}"
+
+    # Active days label
+    unique_days = len(days_data)
+
+    lines = [
+        "📊 สรุปอารมณ์ 7 วันที่ผ่านมา",
+        "━━━━━━━━━━━━━━━",
+        *bar_rows,
+        "━━━━━━━━━━━━━━━",
+        trend_line,
+        f"บันทึกทั้งหมด {unique_days} วัน · {total_msgs} ข้อความ",
+        "",
+        "พิมพ์ เมนู เพื่อกลับหน้าหลัก",
+    ]
+    return "\n".join(lines)
+
+
 async def handle_text(user_id: str, text: str) -> str:
     text = (text or "").strip()
     if not text:
@@ -195,6 +279,15 @@ async def handle_text(user_id: str, text: str) -> str:
     # If in breathe mode but user typed something else — exit breathe mode and continue
     if mode == "breathe":
         _set_mode(user_id, "start")
+
+    # Mood summary report
+    _SUMMARY_TRIGGERS = {
+        "สรุป", "ดูอารมณ์", "อารมณ์ฉัน", "สถิติ", "ประวัติ",
+        "summary", "report", "mood history",
+    }
+    if text in _SUMMARY_TRIGGERS:
+        _set_mode(user_id, "start")
+        return _build_mood_summary(user_id)
 
     # Emotion mode — sentiment analysis
     if mode == "emotion":
