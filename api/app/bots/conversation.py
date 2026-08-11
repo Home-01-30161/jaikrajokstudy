@@ -65,6 +65,7 @@ WELCOME = (
     "หรือส่งมาได้เลย:\n"
     "📷 รูปภาพ → วิเคราะห์ใบหน้า / อ่านการบ้าน\n"
     "🎤 เสียงพูด → แปลงเป็นข้อความแล้วตอบ\n"
+    "🌬️ พิมพ์ หายใจ → ฝึกหายใจคลายเครียด\n"
     "━━━━━━━━━━━━━━━\n"
     "พิมพ์คำถามเรียนมาได้เลยนะ"
 )
@@ -80,6 +81,8 @@ HELP = (
     "   → การบ้าน: OCR + อธิบายขั้นตอน\n\n"
     "🎤 ส่งเสียงพูด\n"
     "   → Speech-to-Text แล้ว AI ตอบ\n\n"
+    "🌬️ พิมพ์ หายใจ หรือ ลดเครียด\n"
+    "   → ฝึกหายใจแบบ 4-4-4 คลายเครียด\n\n"
     "━━━━━━━━━━━━━━━\n"
     "⚠️  ระบบนี้ไม่ใช่บริการทางการแพทย์\n"
     "หากทุกข์ใจมาก โทร 1323 (24 ชม.)"
@@ -119,6 +122,23 @@ CRISIS_REPLY = (
     "   (ฟรี ตลอด 24 ชั่วโมง)\n\n"
     "โปรดติดต่อสายด่วนหรือคนที่ไว้ใจ\n"
     "ใกล้ตัวด้วยนะ เราอยู่ตรงนี้เสมอ"
+)
+
+BREATHE_REPLY = (
+    "🌬️ หายใจคลายเครียด 4-4-4\n"
+    "━━━━━━━━━━━━━━━\n"
+    "ค่อย ๆ ทำตามนะ ไม่ต้องรีบ\n\n"
+    "1️⃣  สูดลมเข้าช้า ๆ\n"
+    "     นับ 1... 2... 3... 4...\n\n"
+    "2️⃣  กลั้นลมหายใจไว้\n"
+    "     นับ 1... 2... 3... 4...\n\n"
+    "3️⃣  ผ่อนลมออกช้า ๆ\n"
+    "     นับ 1... 2... 3... 4...\n\n"
+    "🔄 ทำซ้ำ 4 รอบ\n\n"
+    "━━━━━━━━━━━━━━━\n"
+    "รู้สึกดีขึ้นไหม? 😊\n"
+    "พิมพ์ อีกรอบ เพื่อทำซ้ำ\n"
+    "หรือพิมพ์ เมนู เพื่อกลับหน้าหลัก"
 )
 
 
@@ -162,6 +182,19 @@ async def handle_text(user_id: str, text: str) -> str:
     if text in {"3", "help", "ช่วยเหลือ", "เมนู", "menu", "วิธีใช้"}:
         _set_mode(user_id, "start")
         return HELP
+
+    # Breathing exercise — trigger or repeat
+    _BREATHE_TRIGGERS = {
+        "หายใจ", "ลดเครียด", "breathe", "breathing",
+        "คลายเครียด", "เครียดมาก", "หายใจคลาย",
+    }
+    if text in _BREATHE_TRIGGERS or (mode == "breathe" and text in {"อีกรอบ", "again", "repeat", "ทำอีก"}):
+        _set_mode(user_id, "breathe")
+        return BREATHE_REPLY
+
+    # If in breathe mode but user typed something else — exit breathe mode and continue
+    if mode == "breathe":
+        _set_mode(user_id, "start")
 
     # Emotion mode — sentiment analysis
     if mode == "emotion":
