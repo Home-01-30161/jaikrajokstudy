@@ -308,7 +308,8 @@ async def handle_text(user_id: str, text: str) -> str:
         # Persist mood + check concern streak
         try:
             from app import store
-            store.record_mood(user_id, mood, source="line_text", confidence=result.score)
+            store.record_mood(user_id, mood, source="line_text", channel="line",
+                              confidence=result.score, text_confidence=result.score)
             streak = store.concern_streak(user_id, window=3)
         except Exception:
             streak = 0
@@ -347,7 +348,9 @@ async def handle_text(user_id: str, text: str) -> str:
                 _sent.polarity if hasattr(_sent, "polarity") else None,
                 _sent.score,
             )
-        store.record_mood(user_id, _bg_mood, source="line_chat", confidence=getattr(_sent, "score", None) if _sent.ok else None)
+        store.record_mood(user_id, _bg_mood, source="line_chat", channel="line",
+                          confidence=getattr(_sent, "score", None) if _sent.ok else None,
+                          text_confidence=getattr(_sent, "score", None) if _sent.ok else None)
         _bg_streak = store.concern_streak(user_id, window=3)
     except Exception:
         pass

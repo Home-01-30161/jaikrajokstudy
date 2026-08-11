@@ -208,7 +208,9 @@ async def _mood_and_reply(user_id: str, text: str, *, source: str, history: list
             "แต่เราอ่านข้อความของคุณแล้วนะ ลองส่งอีกครั้งในอีกสักครู่"
         )
 
-    store.record_mood(user_id, detected, source=source, confidence=score)
+    store.record_mood(user_id, detected, source=source, channel="web", confidence=score,
+                      text_confidence=score if source == "text" else None,
+                      audio_confidence=score if source == "voice" else None)
     return detected, reply, score, degraded
 
 
@@ -238,7 +240,7 @@ async def send_message(
 
     # Crisis language short-circuits the LLM: a generated reply is not safe here.
     if is_crisis(text):
-        store.record_mood(user_id, "sad", source="crisis")
+        store.record_mood(user_id, "sad", source="crisis", channel="web")
         return ChatResponse(
             reply=CRISIS_REPLY, emotion="negative", mood="sad", crisis=True, service="safety"
         )
@@ -367,7 +369,7 @@ async def transcribe_voice(
 
     transcript = result.text.strip()
     if is_crisis(transcript):
-        store.record_mood(user_id, "sad", source="crisis")
+        store.record_mood(user_id, "sad", source="crisis", channel="voice")
         return AnalysisResponse(
             ok=True, mood="sad", reply=CRISIS_REPLY, transcript=transcript, service="safety"
         )
@@ -410,7 +412,7 @@ async def homework_ocr(
         else "กระจกอ่านข้อความจากภาพได้แล้ว แต่ระบบ AI ยังตอบไม่ได้ตอนนี้ ลองอีกครั้งนะ"
     )
 
-    store.record_mood(user_id, "neutral", source="homework")
+    store.record_mood(user_id, "neutral", source="homework", channel="image")
     return AnalysisResponse(
         ok=True,
         mood="neutral",

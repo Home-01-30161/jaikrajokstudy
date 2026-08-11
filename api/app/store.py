@@ -57,14 +57,29 @@ def _init_pg(dsn: str):
     with _pg_pool.connection() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mood_events (
-                id          SERIAL PRIMARY KEY,
-                user_hash   TEXT    NOT NULL,
-                mood        TEXT    NOT NULL,
-                source      TEXT    NOT NULL,
-                confidence  REAL,
-                created_at  TEXT    NOT NULL
+                id                SERIAL PRIMARY KEY,
+                user_hash         TEXT    NOT NULL,
+                mood              TEXT    NOT NULL,
+                source            TEXT    NOT NULL,
+                channel           TEXT    NOT NULL DEFAULT 'web',
+                confidence        REAL,
+                face_confidence   REAL,
+                text_confidence   REAL,
+                audio_confidence  REAL,
+                created_at        TEXT    NOT NULL
             )
         """)
+        # Migrate existing tables — safe on both fresh and existing DBs
+        for col, typedef in [
+            ("channel",          "TEXT NOT NULL DEFAULT 'web'"),
+            ("face_confidence",  "REAL"),
+            ("text_confidence",  "REAL"),
+            ("audio_confidence", "REAL"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE mood_events ADD COLUMN {col} {typedef}")
+            except Exception:
+                pass  # column already exists — fine
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_mood_user
                 ON mood_events(user_hash, created_at)
@@ -72,6 +87,10 @@ def _init_pg(dsn: str):
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_mood_created
                 ON mood_events(created_at)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mood_channel
+                ON mood_events(channel, created_at)
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS message_counts (
@@ -96,17 +115,23 @@ def _init_sqlite():
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS mood_events (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_hash   TEXT    NOT NULL,
-            mood        TEXT    NOT NULL,
-            source      TEXT    NOT NULL,
-            confidence  REAL,
-            created_at  TEXT    NOT NULL
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_hash         TEXT    NOT NULL,
+            mood              TEXT    NOT NULL,
+            source            TEXT    NOT NULL,
+            channel           TEXT    NOT NULL DEFAULT 'web',
+            confidence        REAL,
+            face_confidence   REAL,
+            text_confidence   REAL,
+            audio_confidence  REAL,
+            created_at        TEXT    NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_mood_user
             ON mood_events(user_hash, created_at);
         CREATE INDEX IF NOT EXISTS idx_mood_created
             ON mood_events(created_at);
+        CREATE INDEX IF NOT EXISTS idx_mood_channel
+            ON mood_events(channel, created_at);
 
         CREATE TABLE IF NOT EXISTS message_counts (
             user_hash   TEXT PRIMARY KEY,
@@ -115,6 +140,17 @@ def _init_sqlite():
             last_seen   TEXT    NOT NULL
         );
     """)
+    # Migrate existing SQLite tables safely
+    for col, typedef in [
+        ("channel",          "TEXT NOT NULL DEFAULT 'web'"),
+        ("face_confidence",  "REAL"),
+        ("text_confidence",  "REAL"),
+        ("audio_confidence", "REAL"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE mood_events ADD COLUMN {col} {typedef}")
+        except Exception:
+            pass  # already exists
     conn.commit()
     _sqlite_conn = conn
     logger.info("Store ready (SQLite) at %s", path)
@@ -175,9 +211,24 @@ def record_mood(
     mood: str,
     *,
     source: str = "text",
+    channel: str = "web",
     confidence: float | None = None,
+    face_confidence: float | None = None,
+    text_confidence: float | None = None,
+    audio_confidence: float | None = None,
 ) -> None:
-    """Persist one mood reading. Never raises: a store failure must not break chat."""
+    """Persist one mood reading. Never raises: a store failure must not break chat.
+
+    Args:
+        user_id:          Raw LINE/web user id (will be hashed before storage).
+        mood:             One of stressed/sad/tired/neutral/calm/positive.
+        source:           Sub-source label e.g. 'line_text', 'web_chat', 'crisis'.
+        channel:          Top-level channel: 'web' | 'line' | 'voice' | 'image'.
+        confidence:       Overall sentiment confidence [0–1].
+        face_confidence:  Face Recognition API confidence (image channel).
+        text_confidence:  Sentiment Analysis API confidence (text channel).
+        audio_confidence: STT → sentiment confidence (voice channel).
+    """
     try:
         _ensure_init()
         uh = _hash_user(user_id)
@@ -186,9 +237,12 @@ def record_mood(
         if _use_pg:
             with _pg_pool.connection() as conn:
                 conn.execute(
-                    "INSERT INTO mood_events (user_hash, mood, source, confidence, created_at)"
-                    " VALUES (%s, %s, %s, %s, %s)",
-                    (uh, mood, source, confidence, now),
+                    "INSERT INTO mood_events"
+                    " (user_hash, mood, source, channel, confidence,"
+                    "  face_confidence, text_confidence, audio_confidence, created_at)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (uh, mood, source, channel, confidence,
+                     face_confidence, text_confidence, audio_confidence, now),
                 )
                 conn.execute(
                     "INSERT INTO message_counts (user_hash, messages, first_seen, last_seen)"
@@ -203,9 +257,12 @@ def record_mood(
             conn = _sqlite_conn
             with _lock:
                 conn.execute(
-                    "INSERT INTO mood_events (user_hash, mood, source, confidence, created_at)"
-                    " VALUES (?, ?, ?, ?, ?)",
-                    (uh, mood, source, confidence, now),
+                    "INSERT INTO mood_events"
+                    " (user_hash, mood, source, channel, confidence,"
+                    "  face_confidence, text_confidence, audio_confidence, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (uh, mood, source, channel, confidence,
+                     face_confidence, text_confidence, audio_confidence, now),
                 )
                 conn.execute(
                     "INSERT INTO message_counts (user_hash, messages, first_seen, last_seen)"
@@ -394,8 +451,9 @@ def export_user(user_id: str) -> dict:
 
         if _use_pg:
             rows = _pg_execute(
-                "SELECT mood, source, confidence, created_at FROM mood_events"
-                " WHERE user_hash = %s ORDER BY created_at",
+                "SELECT mood, source, channel, confidence,"
+                " face_confidence, text_confidence, audio_confidence, created_at"
+                " FROM mood_events WHERE user_hash = %s ORDER BY created_at",
                 (uh,), fetch="all",
             )
             counters = _pg_execute(
@@ -406,8 +464,9 @@ def export_user(user_id: str) -> dict:
             conn = _sqlite_conn
             with _lock:
                 rows = conn.execute(
-                    "SELECT mood, source, confidence, created_at FROM mood_events"
-                    " WHERE user_hash = ? ORDER BY created_at",
+                    "SELECT mood, source, channel, confidence,"
+                    " face_confidence, text_confidence, audio_confidence, created_at"
+                    " FROM mood_events WHERE user_hash = ? ORDER BY created_at",
                     (uh,),
                 ).fetchall()
                 counters = conn.execute(
@@ -419,10 +478,14 @@ def export_user(user_id: str) -> dict:
             "exported_at": _now(),
             "readings": [
                 {
-                    "at": r["created_at"],
-                    "mood": r["mood"],
-                    "source": r["source"],
-                    "confidence": r["confidence"],
+                    "at":               r["created_at"],
+                    "mood":             r["mood"],
+                    "source":           r["source"],
+                    "channel":          r["channel"],
+                    "confidence":       r["confidence"],
+                    "face_confidence":  r["face_confidence"],
+                    "text_confidence":  r["text_confidence"],
+                    "audio_confidence": r["audio_confidence"],
                 }
                 for r in rows
             ],
