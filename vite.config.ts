@@ -442,12 +442,22 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
           rewrite: (path: string) => path.replace(/^\/api\/typhoon/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.setHeader('Authorization', `Bearer ${env.TYPHOON_ASR_KEY ?? ''}`);
+            });
+          },
         },
         '/api/tavily': {
           target: 'https://api.tavily.com',
           changeOrigin: true,
           secure: true,
           rewrite: (path: string) => path.replace(/^\/api\/tavily/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.setHeader('Authorization', `Bearer ${env.TAVILY_API_KEY ?? ''}`);
+            });
+          },
         },
       },
       allowedHosts: [

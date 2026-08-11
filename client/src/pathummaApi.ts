@@ -11,10 +11,11 @@
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const THAILLM_PROXY  = "/api/thaillm";
-const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
+const THAILLM_PROXY  = "/api/typhoon";
+const THAILLM_MODEL  = "typhoon-v2.5-30b-a3b-instruct";
+const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
-const GEMINI_PROXY   = "/api/gemini";
+const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
 const TYPHOON_PROXY  = "/api/typhoon";
 const TAVILY_PROXY   = "/api/tavily";
 
@@ -26,7 +27,7 @@ function thaiLLMHeaders(): Record<string, string> {
 }
 
 function pathummaHeaders(): Record<string, string> {
-  return { "X-lib": "jaikrajok-web" };
+  return { Apikey: PATHUMMA_KEY, "X-lib": "jaikrajok-web" };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -36,8 +37,7 @@ function blobToBase64(blob: Blob): Promise<string> {
     const reader = new FileReader();
     reader.onloadend = () => {
       const dataUrl = (reader.result as string) || "";
-      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
-      resolve(base64);
+      resolve(dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl);
     };
     reader.onerror = reject;
     reader.readAsDataURL(blob);
@@ -302,7 +302,7 @@ export async function callTextLLM(
     temperature: effectiveTemperature,
   });
 
-  const res = await fetch(`${THAILLM_PROXY}/api/v1/chat/completions`, {
+  const res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
     method: "POST",
     headers: thaiLLMHeaders(),
     body,
@@ -602,81 +602,54 @@ export interface VisionResult {
 export async function callVisionLLM(
   imageBlob: Blob,
   query: string,
-  filename = "image.jpg"
+  _filename = "image.jpg"
 ): Promise<string> {
-  // Always use Gemini Vision via proxy
-  try {
-      const base64Data = await blobToBase64(imageBlob);
-      const mimeType = imageBlob.type || "image/jpeg";
+  const base64Data = await blobToBase64(imageBlob);
+  const mimeType = imageBlob.type || "image/jpeg";
 
-      const payload = {
-        contents: [
-          {
-            parts: [
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Data,
-                },
-              },
-              {
-                text: query,
-              },
-            ],
-          },
+  const ocrSystemPrompt =
+    "You are an OCR engine. Extract ALL text from the image exactly as it appears. " +
+    "Return clean Markdown only — no explanations, no commentary, no extra text. " +
+    "Format rules: " +
+    "- Mathematical equations: inline as $...$ and block as $$...$$ (LaTeX). " +
+    "- Tables: use HTML <table>...</table> format. " +
+    "- Diagrams, figures, charts: wrap in <figure>...</figure> and describe all visible elements, labels, annotations, and numbers in Thai. " +
+    "- Include ALL visible text: headings, body text, labels, captions, choices (ก. ข. ค. ง.), numbers, units. " +
+    "- Do NOT skip, summarize, or paraphrase any content. Transcribe verbatim.";
+
+  const payload = {
+    model: TYPHOON_OCR_MODEL,
+    messages: [
+      { role: "system", content: ocrSystemPrompt },
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+          { type: "text", text: query },
         ],
-        generationConfig: {
-          maxOutputTokens: 2048,
-          temperature: 0.1,
-        },
-      };
+      },
+    ],
+    max_tokens: 4096,
+    temperature: 0.1,
+    top_p: 0.6,
+    repetition_penalty: 1.2,
+  };
 
-      const res = await fetch(
-        `${GEMINI_PROXY}/v1beta/models/gemini-flash-latest:generateContent`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (res.ok) {
-        const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
-        const text = candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text && text.trim().length > 0) {
-          console.debug("[Gemini Vision] Response received:", text.slice(0, 100));
-          return text.trim();
-        }
-      } else {
-        const errText = await res.text().catch(() => "");
-        console.warn("[Gemini Vision] HTTP Error:", res.status, errText.slice(0, 200));
-      }
-    } catch (e) {
-      console.warn("[Gemini Vision] Error, falling back to Pathumma VQA:", e);
-    }
-
-  // Fallback: Pathumma VQA
-  const form = new FormData();
-  form.append("query", query);
-  form.append("file", imageBlob, filename);
-
-  const res = await fetch(`${PATHUMMA_PROXY}/vqa/inference/`, {
+  const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
     method: "POST",
-    headers: pathummaHeaders(),
-    body: form,
+    headers: { ...thaiLLMHeaders() },
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
-    console.error("[VisionLLM] HTTP error", res.status, errBody.slice(0, 300));
-    throw new Error(`Vision LLM ${res.status}: ${errBody.slice(0, 200)}`);
+    const errText = await res.text().catch(() => "");
+    throw new Error(`TyphoonOCR ${res.status}: ${errText.slice(0, 200)}`);
   }
 
-  const raw = await res.json().catch(() => ({}));
-  console.debug("[VisionLLM] raw response:", raw);
-  const text = stripThink(extractPathummaText(raw));
-  if (!text) throw new Error("Vision LLM returned empty response");
+  const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const choices = raw.choices as { message?: { content?: string } }[] | undefined;
+  const text = choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error("TyphoonOCR returned empty response");
   return text;
 }
 
@@ -763,17 +736,31 @@ function fixThaiChoices(reply: string, ocrText: string): string {
 }
 
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
-  // Step 1: OCR/Vision — extract problem text faithfully, no assumptions about format
-  const visionQuery =
-    "คัดลอกโจทย์และข้อมูลทั้งหมดในภาพนี้ให้ครบถ้วน 100% ตามที่ปรากฏจริงในภาพ " +
-    "รวมถึงตัวเลือก (ก. ข. ค. ง.) ถ้ามีในภาพ ห้ามเพิ่มเติมหรือประดิษฐ์ข้อมูลที่ไม่มีในภาพ";
+  // Two parallel vision calls: prose OCR + diagram measurement extraction
+  const [ocrResult, diagramResult] = await Promise.allSettled([
+    callVisionLLM(
+      imageBlob,
+      "Transcribe every piece of text visible in this image exactly as written. Include all Thai text, numbers, variable names, and labels."
+    ),
+    callVisionLLM(
+      imageBlob,
+      "List EVERY angle, measurement, number, and geometric label in this diagram. " +
+      "For each one state what it labels, e.g. 'angle at point A = 60deg', 'launch angle at O = 45deg', 'velocity = u'. " +
+      "Be exhaustive — do not skip any annotated value, even small ones."
+    ),
+  ]);
+
+  const ocrText = ocrResult.status === "fulfilled" ? ocrResult.value : "";
+  const diagramText = diagramResult.status === "fulfilled" ? diagramResult.value : "";
+  console.debug("[OCR text]", ocrText);
+  console.debug("[Diagram measurements]", diagramText);
 
   let answer: string;
-  try {
-    answer = await callVisionLLM(imageBlob, visionQuery);
-  } catch (e) {
-    console.warn("Vision LLM homework failed:", e);
+  if (!ocrText && !diagramText) {
+    console.warn("Vision LLM homework: both calls empty");
     answer = "ไม่สามารถอ่านโจทย์จากภาพได้ในขณะนี้";
+  } else {
+    answer = ocrText + (diagramText ? `\n\n[ค่าและมุมจากแผนภาพ]\n${diagramText}` : "");
   }
 
   // Step 2: Detect whether OCR actually found real multiple-choice items.
@@ -807,9 +794,11 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
       // Open-ended / individual problem — no choices, just solve step-by-step
       solvePrompt =
         `โจทย์ที่อ่านได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
+        `⚠️ หมายเหตุสำคัญ: ค่า มุม และ label ทุกอย่างใน <figure>...</figure> คือข้อมูลจากแผนภาพจริงในโจทย์\n` +
+        `— ต้องใช้ทุกมุม ทุกค่าเหล่านั้นในการคำนวณ ห้ามเดาหรือสมมติค่าที่ไม่มีในโจทย์\n\n` +
         `คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์\n` +
-        `1. **โจทย์**: สรุปสิ่งที่โจทย์กำหนดให้และสิ่งที่ต้องหา\n` +
-        `2. **วิเคราะห์และหาคำตอบ**: แสดงขั้นตอนการคำนวณหรืออธิบายทีละขั้นอย่างละเอียด\n` +
+        `1. **โจทย์**: สรุปข้อมูลที่กำหนด รวมมุมและค่าจากแผนภาพทุกจุด\n` +
+        `2. **วิเคราะห์และหาคำตอบ**: แสดงขั้นตอนการคำนวณอย่างละเอียด\n` +
         `3. **คำตอบสุดท้าย**: ระบุค่าคำตอบที่ได้ชัดเจน\n\n` +
         `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด เพราะโจทย์นี้ไม่มีตัวเลือก`;
     }
