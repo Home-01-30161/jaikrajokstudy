@@ -304,7 +304,16 @@ async def handle_text(user_id: str, text: str) -> str:
         mood = classify_mood(text, result.polarity if hasattr(result, "polarity") else None, result.score)
         emoji = _MOOD_EMOJI.get(mood, "💭")
         mood_th = MOOD_LABELS_TH.get(mood, label)
-        return (
+
+        # Persist mood + check concern streak
+        try:
+            from app import store
+            store.record_mood(user_id, mood, source="line_text", confidence=result.score)
+            streak = store.concern_streak(user_id, window=3)
+        except Exception:
+            streak = 0
+
+        reply = (
             f"━━━━━━━━━━━━━━━\n"
             f"ผลการวิเคราะห์อารมณ์\n"
             f"━━━━━━━━━━━━━━━\n\n"
@@ -314,8 +323,35 @@ async def handle_text(user_id: str, text: str) -> str:
             f"แล้วค่อยเรียนต่อก็ได้นะ\n\n"
             f"พิมพ์ เมนู เพื่อกลับหน้าหลัก"
         )
+        if streak >= 3:
+            reply += (
+                "\n\n━━━━━━━━━━━━━━━\n"
+                "🔔 กระจกสังเกตว่าช่วงนี้คุณดูหนักใจอยู่นิดหน่อย\n"
+                "ไม่เป็นไรนะ ทุกคนผ่านช่วงแบบนี้กันได้\n\n"
+                "อยากระบายอะไรไหม? พิมพ์มาได้เลย\n"
+                "หรือโทรคุยกับผู้เชี่ยวชาญก็ได้นะ\n"
+                "📞 1323 ฟรี ตลอด 24 ชั่วโมง"
+            )
+        return reply
 
     # Default — LLM reply (study mode or free chat)
+    # Run a quick sentiment check in the background to record mood + check streak
+    _bg_mood: str = "neutral"
+    _bg_streak: int = 0
+    try:
+        from app import store
+        _sent = await sentiment.analyze_text(text)
+        if _sent.ok:
+            _bg_mood = classify_mood(
+                text,
+                _sent.polarity if hasattr(_sent, "polarity") else None,
+                _sent.score,
+            )
+        store.record_mood(user_id, _bg_mood, source="line_chat", confidence=getattr(_sent, "score", None) if _sent.ok else None)
+        _bg_streak = store.concern_streak(user_id, window=3)
+    except Exception:
+        pass
+
     result = await pathumma.generate_reply(text)
     if not result.ok:
         logger.warning("Pathumma failed for %s: %s", user_id, result.error)
@@ -329,4 +365,15 @@ async def handle_text(user_id: str, text: str) -> str:
     # Append subtle footer for study mode to remind about other features
     if mode == "study" and len(reply) < 4500:
         reply += "\n\n─────────────────\nพิมพ์ เมนู เพื่อดูตัวเลือกอื่น"
+
+    # Concern streak alert — append after LLM reply if streak ≥ 3
+    if _bg_streak >= 3 and len(reply) < 4700:
+        reply += (
+            "\n\n━━━━━━━━━━━━━━━\n"
+            "🔔 กระจกสังเกตว่าช่วงนี้คุณดูหนักใจอยู่นิดหน่อย\n"
+            "ไม่เป็นไรนะ ทุกคนผ่านช่วงแบบนี้กันได้\n\n"
+            "อยากระบายอะไรไหม? พิมพ์มาได้เลย\n"
+            "หรือโทรคุยกับผู้เชี่ยวชาญก็ได้นะ\n"
+            "📞 1323 ฟรี ตลอด 24 ชั่วโมง"
+        )
     return reply
