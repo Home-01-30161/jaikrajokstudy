@@ -247,12 +247,7 @@ async def analyze_selfie(
     file: UploadFile = File(...),
     user_id: str = Depends(require_session),
 ) -> AnalysisResponse:
-    """Selfie mode: face detection.
-
-    The AI for Thai face API reports bounding boxes and mask status, not
-    expression, so this reports presence honestly instead of guessing a mood
-    from it. Mood still comes from what the student tells us.
-    """
+    """Selfie mode: emotion analysis via Typhoon Vision, fallback to AI for Thai face detection."""
     data = await _read_upload(file, "image/")
     result = await face.analyze_image(data)
 
@@ -274,6 +269,29 @@ async def analyze_selfie(
             service="face",
         )
 
+    # Typhoon Vision path — has emotion data
+    if result.service == "face-typhoon":
+        emotion_th = result.raw.get("emotion_th", "ปกติ")
+        description = result.raw.get("description", "")
+        confidence = result.score or 0.0
+        mood = result.label or "neutral"  # already mapped to UI mood by face.py
+
+        detail = f"ตรวจพบใบหน้า {count} ใบหน้า · อารมณ์: {emotion_th} ({confidence:.0%})"
+        reply = (
+            f"{description}\n\n"
+            f"กระจกอ่านจากสีหน้าว่าคุณดูรู้สึก {emotion_th} นะ "
+            f"ถ้าอยากคุยเรื่องนี้เพิ่มเติม พิมพ์มาได้เลย"
+        )
+
+        store.record_mood(
+            user_id, mood, source="selfie", channel="image",
+            face_confidence=confidence,
+        )
+        return AnalysisResponse(
+            ok=True, mood=mood, reply=reply, detail=detail, service="face-typhoon"
+        )
+
+    # AI for Thai fallback — no emotion, just presence
     scores = []
     for o in objects if isinstance(objects, list) else []:
         if isinstance(o, dict):

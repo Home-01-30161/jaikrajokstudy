@@ -1,6 +1,8 @@
-"""AI for Thai Face Detection client."""
+"""Face and emotion analysis using Typhoon Vision (primary) with AI for Thai face detection fallback."""
 
 from __future__ import annotations
+
+import base64
 
 import httpx
 
@@ -10,24 +12,163 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+_CHAT_URL = "https://api.opentyphoon.ai/v1/chat/completions"
+
+_EMOTION_PROMPT = (
+    "ดูภาพนี้และวิเคราะห์อารมณ์ของคนในภาพ\n"
+    "ตอบในรูปแบบ JSON เท่านั้น ดังนี้:\n"
+    "{\n"
+    "  \"face_count\": <จำนวนใบหน้า (integer)>,\n"
+    "  \"emotion\": \"<อารมณ์หลัก: happy / sad / stressed / angry / surprised / neutral / tired>\",\n"
+    "  \"emotion_th\": \"<ชื่ออารมณ์ภาษาไทย>\",\n"
+    "  \"confidence\": <ความมั่นใจ 0.0-1.0>,\n"
+    "  \"description\": \"<อธิบายสั้น ๆ ว่าคนในภาพดูรู้สึกอย่างไร ภาษาไทย 1 ประโยค>\"\n"
+    "}\n"
+    "ถ้าไม่มีใบหน้าในภาพ ให้ face_count เป็น 0 และ emotion เป็น \"none\"\n"
+    "ห้ามตอบอะไรนอกจาก JSON"
+)
+
+# Map Typhoon emotion labels → our 6 UI moods
+_EMOTION_TO_MOOD: dict[str, str] = {
+    "happy": "positive",
+    "sad": "sad",
+    "stressed": "stressed",
+    "angry": "stressed",
+    "surprised": "neutral",
+    "neutral": "neutral",
+    "tired": "tired",
+    "none": "neutral",
+}
+
 
 async def analyze_image(image_bytes: bytes) -> ServiceResult:
-    """Detect faces in an image using AI for Thai face detection API.
+    """Analyze faces and emotions in an image.
 
-    Returns face count, bounding boxes, and mask status per face.
+    Tries Typhoon Vision first (emotion-aware), falls back to AI for Thai
+    face detection (presence only) if Typhoon key is not configured.
     """
     settings = get_settings()
+
+    if settings.typhoon_api_key:
+        result = await _analyze_typhoon(image_bytes, settings)
+        if result.ok:
+            return result
+        logger.warning("Typhoon face analysis failed (%s); falling back to AI for Thai", result.error)
+
+    return await _analyze_aiforthai(image_bytes, settings)
+
+
+async def _analyze_typhoon(image_bytes: bytes, settings) -> ServiceResult:
+    """Use Typhoon Vision to detect faces and read emotions."""
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    data_url = f"data:image/jpeg;base64,{b64}"
+
+    headers = {
+        "Authorization": f"Bearer {settings.typhoon_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": "typhoon-ocr-preview",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _EMOTION_PROMPT},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }
+        ],
+        "max_tokens": 256,
+        "temperature": 0.1,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0, verify=not settings.insecure_tls) as client:
+            resp = await client.post(_CHAT_URL, headers=headers, json=payload)
+            try:
+                raw = resp.json()
+            except Exception:
+                raw = {"text": resp.text}
+
+            if resp.status_code >= 400:
+                logger.warning("Typhoon face HTTP %s: %s", resp.status_code, resp.text[:200])
+                return ServiceResult(service="face", ok=False, error=f"HTTP {resp.status_code}")
+
+            parsed = _parse_typhoon_response(raw if isinstance(raw, dict) else {})
+            if parsed is None:
+                return ServiceResult(service="face", ok=False, error="could not parse emotion JSON")
+
+            face_count = parsed.get("face_count", 0)
+            emotion = parsed.get("emotion", "neutral")
+            emotion_th = parsed.get("emotion_th", "ปกติ")
+            confidence = float(parsed.get("confidence", 0.5))
+            description = parsed.get("description", "")
+            mood = _EMOTION_TO_MOOD.get(emotion, "neutral")
+
+            return ServiceResult(
+                service="face-typhoon",
+                ok=True,
+                label=mood,
+                score=confidence,
+                raw={
+                    "face_count": face_count,
+                    "emotion": emotion,
+                    "emotion_th": emotion_th,
+                    "confidence": confidence,
+                    "description": description,
+                    # keep objects-compatible shape so web_chat.py fallback logic still works
+                    "objects": [{"score": confidence}] * face_count if face_count > 0 else [],
+                },
+            )
+    except httpx.TimeoutException:
+        return ServiceResult(service="face", ok=False, error="timeout")
+    except Exception as exc:
+        logger.exception("Typhoon face call failed")
+        return ServiceResult(service="face", ok=False, error=str(exc))
+
+
+def _parse_typhoon_response(raw: dict) -> dict | None:
+    """Extract JSON from Typhoon chat response."""
+    import json as _json
+    import re
+
+    choices = raw.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    msg = choices[0].get("message") or {}
+    content = (msg.get("content") or "").strip()
+    if not content:
+        return None
+
+    # Strip markdown code fences if present
+    content = re.sub(r"^```(?:json)?\s*", "", content)
+    content = re.sub(r"\s*```$", "", content)
+    content = content.strip()
+
+    try:
+        return _json.loads(content)
+    except (_json.JSONDecodeError, ValueError):
+        # Try to find JSON object anywhere in the response
+        match = re.search(r"\{.*\}", content, re.DOTALL)
+        if match:
+            try:
+                return _json.loads(match.group())
+            except Exception:
+                pass
+    return None
+
+
+async def _analyze_aiforthai(image_bytes: bytes, settings) -> ServiceResult:
+    """Fallback: AI for Thai face detection (presence + mask only, no emotion)."""
     if not settings.aiforthai_api_key:
-        return ServiceResult(service="face", ok=False, error="Missing AIFORTHAI_API_KEY")
+        return ServiceResult(service="face", ok=False, error="Missing TYPHOON_API_KEY and AIFORTHAI_API_KEY")
 
     url = f"{settings.aiforthai_base_url.rstrip('/')}/facedetect-w-wo-mask"
     headers = {"Apikey": settings.aiforthai_api_key, "X-lib": "ai4thai-lib"}
     files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
 
     try:
-        async with httpx.AsyncClient(
-            timeout=30.0, verify=not settings.insecure_tls
-        ) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=not settings.insecure_tls) as client:
             resp = await client.post(url, headers=headers, files=files)
             try:
                 raw = resp.json()
@@ -49,12 +190,7 @@ async def analyze_image(image_bytes: bytes) -> ServiceResult:
             if raw_dict.get("errmsg"):
                 err = str(raw_dict["errmsg"])[:300]
                 logger.warning("Face server error: %s", err)
-                return ServiceResult(
-                    service="face",
-                    ok=False,
-                    error=err,
-                    raw=raw_dict,
-                )
+                return ServiceResult(service="face", ok=False, error=err, raw=raw_dict)
 
             objects = raw_dict.get("objects", [])
             face_count = len(objects) if isinstance(objects, list) else 0
@@ -70,3 +206,4 @@ async def analyze_image(image_bytes: bytes) -> ServiceResult:
     except Exception as exc:
         logger.exception("Face API call failed")
         return ServiceResult(service="face", ok=False, error=str(exc))
+
