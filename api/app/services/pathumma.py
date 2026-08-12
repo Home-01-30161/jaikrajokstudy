@@ -447,7 +447,10 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
     }
     try:
         verify = not settings.insecure_tls
-        async with httpx.AsyncClient(timeout=120.0, verify=verify) as client:
+        # Hard 25s per-request timeout: ThaiLLM is the primary LLM and must
+        # complete well within LINE's ~50s reply window (face+OCR already took ~15s).
+        # If it times out, we fall through to TokenMind → textqa.
+        async with httpx.AsyncClient(timeout=25.0, verify=verify) as client:
             resp = await client.post(url, headers=headers, json=payload)
             try:
                 raw = resp.json()
@@ -539,7 +542,10 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
     }
     try:
         verify = not settings.insecure_tls
-        async with httpx.AsyncClient(timeout=120.0, verify=verify) as client:
+        # Hard 20s per-request timeout: TokenMind is the fallback after ThaiLLM.
+        # Together with ThaiLLM's 25s, total LLM budget is 45s which still fits
+        # inside LINE's ~50s reply window when face+OCR complete quickly.
+        async with httpx.AsyncClient(timeout=20.0, verify=verify) as client:
             resp = await client.post(url, headers=headers, json=payload)
             try:
                 raw = resp.json()
@@ -623,7 +629,7 @@ async def _generate_textqa(prompt: str, settings) -> ServiceResult:
     url = settings.pathumma_endpoint or PATHUMMA_TEXTQA_URL
     try:
         async with httpx.AsyncClient(
-            timeout=60.0, verify=not settings.insecure_tls
+            timeout=15.0, verify=not settings.insecure_tls
         ) as client:
             resp = await client.post(url, headers=headers, files=form)
             try:

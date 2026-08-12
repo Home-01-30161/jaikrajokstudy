@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from datetime import datetime, timezone
@@ -380,7 +381,18 @@ async def handle_text(user_id: str, text: str) -> str:
     except Exception:
         pass
 
-    result = await pathumma.generate_reply(text)
+    # Wrap LLM call with a hard 45s deadline so LINE never times out on text messages.
+    # Individual backends already have short timeouts (ThaiLLM=25s, TokenMind=20s,
+    # textqa=15s) for fast fallback; this outer guard is a final safety net.
+    try:
+        result = await asyncio.wait_for(pathumma.generate_reply(text), timeout=45.0)
+    except asyncio.TimeoutError:
+        logger.warning("pathumma.generate_reply timed out after 45s for user %s", user_id)
+        return (
+            "ขณะนี้ AI ใช้เวลาตอบนานเกินไป\n"
+            "ลองส่งใหม่อีกสักครู่นะ\n\n"
+            "พิมพ์ เมนู เพื่อดูตัวเลือกอื่น"
+        )
     if not result.ok:
         logger.warning("Pathumma failed for %s: %s", user_id, result.error)
         return (

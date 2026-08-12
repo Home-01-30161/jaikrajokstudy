@@ -311,11 +311,13 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
       3. Neither succeeds → generic error message
 
     KEY OPTIMISATION: face detection and OCR now run IN PARALLEL via asyncio.gather
-    so we don't pay the Typhoon face timeout (30s) before starting OCR (90s).
+    so we don't pay the Typhoon face timeout (15s) before starting OCR (35s).
     Total wall-clock time is max(face_time, ocr_time) instead of face_time + ocr_time.
 
-    An outer 40-second hard deadline ensures LINE never sees a timeout (LINE requires
-    response within ~50s; previously the serial chain could take 270s+).
+    An outer 45-second hard deadline (LINE allows ~50s) wraps the ENTIRE pipeline
+    including the LLM call, so LINE never sees a timeout regardless of how slow
+    ThaiLLM/TokenMind/textqa are. Each individual LLM backend also has its own
+    short timeout (ThaiLLM=25s, TokenMind=20s, textqa=15s) to trigger fast fallback.
     """
     try:
         data: bytearray = await blob.get_message_content(message_id)
@@ -326,7 +328,7 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
 
     async def _run_with_timeout() -> str:
         # Step 1 + Step 2 in PARALLEL — face detection and OCR start at the same time.
-        # This eliminates the serial 30s face timeout before OCR even begins.
+        # This eliminates the serial 15s face timeout before OCR even begins.
         face_task = asyncio.create_task(face.analyze_image(image_bytes))
         ocr_task  = asyncio.create_task(ocr.transcribe_image(image_bytes))
 
@@ -423,13 +425,14 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
 
         return _NO_FACE_PHRASE
 
-    # Hard 40-second deadline: LINE requires a reply within ~50s.
-    # Previously the serial face+OCR+fallback chain could take 270s+ causing LINE
-    # to re-deliver the message (which produced the duplicate reply in the screenshot).
+    # Hard 45-second deadline: LINE requires a reply within ~50s.
+    # Each LLM backend (ThaiLLM=25s, TokenMind=20s, textqa=15s) has its own
+    # short timeout so they fail fast and let the outer deadline stay clean.
+    # Previously 120s LLM timeouts caused LINE to re-deliver (duplicate reply).
     try:
-        return await asyncio.wait_for(_run_with_timeout(), timeout=40.0)
+        return await asyncio.wait_for(_run_with_timeout(), timeout=45.0)
     except asyncio.TimeoutError:
-        logger.warning("_handle_image timed out after 40s — returning graceful fallback")
+        logger.warning("_handle_image timed out after 45s — returning graceful fallback")
         return (
             "📷 กระจกกำลังประมวลผลรูปภาพช้าไปหน่อย\n\n"
             "ลองส่งรูปใหม่อีกครั้ง หรือพิมพ์โจทย์มาแทนได้เลยนะ"
