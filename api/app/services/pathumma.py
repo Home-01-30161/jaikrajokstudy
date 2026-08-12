@@ -159,6 +159,130 @@ def _is_english_dominant(text: str) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Anti-hallucination guards for thaillm-8b (TokenMind)
+# ---------------------------------------------------------------------------
+# thaillm-8b has specific hallucination patterns not seen in Qwen3-8b-think:
+#   1. Repetition loops: long runs of ---- ____ >>>  |||| with no content
+#   2. Off-topic rambling: quantum mechanics, Los Angeles, automata
+#   3. Full-width punctuation from Chinese: ： ， 。 which leak into Thai text
+#   4. Empty numbered lists: (iv): (v): (VI). with nothing after
+#   5. Mixed nonsense: random English mid-sentence ("Wait，let me correct")
+#   6. Fake transliteration: made-up Thai words like "อินเทียราซิตี้"
+#   7. Infinite <think> loops that exceed max_tokens with no </think>
+
+# Repetition pattern: 10+ identical chars in a row (dashes, underscores, pipes, etc.)
+_REPETITION_RE = re.compile(r"(.)\1{9,}")
+
+# Full-width CJK punctuation that leaks into output
+_CJK_PUNCT_RE = re.compile(r"[：，。；！？》《「」『』【】（）]")
+
+# Off-topic hallucination keywords — things thaillm-8b rambles about
+_OFFTOPIC_KEYWORDS = re.compile(
+    r"(quantum|automata|ลอสแอนเจลิส|แมดาลา|อินเทียราซิตี้|"
+    r"ไมโครโฟนอน|กฎฮวงเฮียน|เมทริกซ์ขนาดใหญ่|แอมพลิจู๊ด|"
+    r"วาดรูปแบบวานร|นวนิยายแห่งโลก|กราวิตัส-แมคนามรา|"
+    r"อัดลม|สาขาหลักภายใน|imgur\.com|"
+    r"Wait，|Let me correct|Actually re-read|Hmm maybe better)",
+    re.IGNORECASE,
+)
+
+# Empty numbered items: lines like "(iv):" or "(VI)." with nothing meaningful after
+_EMPTY_ITEM_RE = re.compile(
+    r"^\s*\(?(?:i{1,4}|iv|vi{0,3}|[0-9]+)[.)]:?\s*[_\s]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _detect_hallucination(text: str) -> str | None:
+    """Detect thaillm-8b hallucination patterns.
+
+    Returns a reason string if hallucination is detected, None if clean.
+    """
+    if not text or len(text) < 20:
+        return None
+
+    # 1. Repetition loops: 10+ same character in a row
+    rep_matches = _REPETITION_RE.findall(text)
+    if len(rep_matches) >= 3:
+        return f"repetition-loop ({len(rep_matches)} runs of repeated chars)"
+
+    # 2. Full-width CJK punctuation (：，。) — thaillm-8b leaks these
+    cjk_punct_count = len(_CJK_PUNCT_RE.findall(text))
+    if cjk_punct_count >= 3:
+        return f"cjk-punctuation ({cjk_punct_count} full-width marks)"
+
+    # 3. Off-topic keywords — model is rambling about unrelated topics
+    offtopic = _OFFTOPIC_KEYWORDS.findall(text)
+    if offtopic:
+        return f"off-topic ({offtopic[0]})"
+
+    # 4. Too many empty numbered items (model generating skeleton with no content)
+    empty_items = _EMPTY_ITEM_RE.findall(text)
+    if len(empty_items) >= 3:
+        return f"empty-skeleton ({len(empty_items)} empty items)"
+
+    # 5. Coherence check: ratio of actual Thai content vs junk chars
+    thai_chars = len(re.findall(r"[ก-๙]", text))
+    latin_chars = len(re.findall(r"[A-Za-z]", text))
+    symbol_chars = len(re.findall(r"[-_|><=+*/\\#@~`^{}()\[\]]", text))
+    total = len(text)
+
+    # If symbols outnumber meaningful text (Thai + Latin), it's junk
+    meaningful = thai_chars + latin_chars
+    if total > 100 and symbol_chars > meaningful:
+        return f"symbol-dominant (symbols={symbol_chars} > meaningful={meaningful})"
+
+    # 6. Low Thai density for long replies — model switched to English/gibberish
+    if total > 300 and thai_chars < total * 0.15:
+        return f"low-thai-density (thai={thai_chars}/{total} = {thai_chars*100//total}%)"
+
+    # 7. Line-level noise: too many lines that are just whitespace/symbols
+    lines = text.split("\n")
+    if len(lines) > 5:
+        junk_lines = sum(
+            1 for line in lines
+            if line.strip() and not re.search(r"[ก-๙A-Za-z0-9]", line)
+        )
+        if junk_lines > len(lines) * 0.4:
+            return f"junk-lines ({junk_lines}/{len(lines)} lines are symbol-only)"
+
+    return None
+
+
+def _sanitize_reply(text: str) -> str:
+    """Clean up thaillm-8b output: remove leaked CJK punctuation, fix formatting.
+
+    Unlike _detect_hallucination (which rejects), this tries to salvage
+    a mostly-good reply by stripping minor artifacts.
+    """
+    # Replace full-width CJK punctuation with Thai/standard equivalents
+    text = text.replace("：", ": ")
+    text = text.replace("，", ", ")
+    text = text.replace("。", ". ")
+    text = text.replace("；", "; ")
+    text = text.replace("！", "! ")
+    text = text.replace("？", "? ")
+
+    # Strip repetition runs (e.g. "--------") — replace with single instance
+    text = re.sub(r"(.)\1{4,}", lambda m: m.group(1) * 2, text)
+
+    # Remove lines that are purely symbols/whitespace
+    lines = text.split("\n")
+    cleaned = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not re.search(r"[ก-๙A-Za-z0-9]", stripped):
+            continue  # pure symbol line
+        cleaned.append(line)
+    text = "\n".join(cleaned)
+
+    # Collapse excessive blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
+
+
 def _strip_reasoning(text: str) -> str:
     """Strip <think>...</think> blocks and any leaked Chinese/English scratchpad.
 
@@ -705,15 +829,14 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
                     service="pathumma", ok=False, error="empty reply after stripping reasoning"
                 )
 
-            # Hallucination guard: reject TokenMind replies that contain Chinese,
-            # have no Thai, or are English-dominant (all observed failure modes).
+            # ── Hallucination guards (thaillm-8b specific) ──
+            # Guard 1: Chinese chars, no Thai, or English-dominant
             _chinese_in_reply = len(re.findall(r"[一-鿿]", text))
             _thai_in_reply = len(re.findall(r"[฀-๿]", text))
             if _chinese_in_reply > 0 or _thai_in_reply == 0 or _is_english_dominant(text):
                 logger.warning(
-                    "TokenMind reply failed hallucination guard "
-                    "(chinese=%d thai=%d english_dominant=%s) — triggering textqa fallback. "
-                    "Preview: %r",
+                    "TokenMind reply failed language guard "
+                    "(chinese=%d thai=%d english_dominant=%s). Preview: %r",
                     _chinese_in_reply, _thai_in_reply, _is_english_dominant(text), text[:120],
                 )
                 return ServiceResult(
@@ -721,6 +844,22 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
                     ok=False,
                     error="hallucinated reply (Chinese / no Thai / English-dominant)",
                 )
+
+            # Guard 2: Deep hallucination patterns (repetition, off-topic, junk)
+            hallucination_reason = _detect_hallucination(text)
+            if hallucination_reason:
+                logger.warning(
+                    "TokenMind reply failed hallucination guard: %s. Preview: %r",
+                    hallucination_reason, text[:120],
+                )
+                return ServiceResult(
+                    service="pathumma",
+                    ok=False,
+                    error=f"hallucinated reply ({hallucination_reason})",
+                )
+
+            # Sanitize: clean up minor artifacts (CJK punctuation, symbol runs)
+            text = _sanitize_reply(text)
 
             return ServiceResult(
                 service="pathumma",
