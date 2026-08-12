@@ -61,6 +61,10 @@ _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _CHINESE_LINE_RE = re.compile(
     r"^[一-鿿㐀-䶿＀-￯　-〿，。！？：；「」『』【】\s]+$"
 )
+# Matches lines that contain ANY Chinese characters mixed with other content
+# — catches hallucinations like "wind resistance。使用Newton second law旋转"
+_MIXED_CHINESE_RE = re.compile(r"[一-鿿㐀-䶿，。！？：；「」『』【】]{2,}")
+
 # Leaked English internal reasoning patterns from Qwen3-Think
 _ENG_REASONING_RE = re.compile(
     r"^(The (task|user|question|problem|answer|key|goal|request|response|instruction|content|text|image|context)|"
@@ -87,15 +91,20 @@ def _strip_reasoning(text: str) -> str:
         else:
             text = _THINK_RE.sub("", text).strip()
 
-    # 3. Strip any leading/trailing Chinese-only lines (leaked Qwen3 scratchpad)
+    # 3. Strip lines containing Chinese characters (pure OR mixed with other languages)
+    # This catches hallucinations like the answer.txt output where lines mix
+    # Chinese, English and Thai — e.g. "wind resistance。使用Newton" or "旋转（assuming...）"
     lines = text.split("\n")
-    # Drop leading Chinese-only lines
-    while lines and _CHINESE_LINE_RE.match(lines[0].strip()):
-        lines.pop(0)
-    # Drop trailing Chinese-only lines
-    while lines and _CHINESE_LINE_RE.match(lines[-1].strip()):
-        lines.pop()
-    text = "\n".join(lines).strip()
+    clean_lines = []
+    for line in lines:
+        if _MIXED_CHINESE_RE.search(line):
+            # Line has Chinese embedded — drop it entirely
+            continue
+        if _CHINESE_LINE_RE.match(line.strip()):
+            # Pure Chinese line — drop it
+            continue
+        clean_lines.append(line)
+    text = "\n".join(clean_lines).strip()
 
     # 4. If the whole text is still majority Chinese (no Thai at all), it's a
     #    leaked reasoning block — return empty so the caller triggers fallback.
@@ -103,9 +112,12 @@ def _strip_reasoning(text: str) -> str:
     chinese_chars = len(re.findall(r"[一-鿿]", text))
     if chinese_chars > 0 and thai_chars == 0:
         return ""
+    # If chinese chars outnumber Thai chars 2:1, it's still mostly hallucination
+    if chinese_chars > 0 and thai_chars > 0 and chinese_chars > thai_chars * 2:
+        return ""
 
     # 5. Strip leading English reasoning paragraphs that precede Thai content
-    first_thai = text.find("฀")  # first Thai character
+    first_thai = next((i for i, c in enumerate(text) if "฀" <= c <= "๿"), -1)
     if first_thai > 50:
         preamble = text[:first_thai]
         if _ENG_REASONING_RE.search(preamble):
@@ -252,8 +264,13 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None, his
 
 
 async def _generate_thaillm(prompt: str, settings, history: list | None = None) -> ServiceResult:
-    """OpenAI-compatible /chat/completions call against the ThaiLLM Playground API."""
-    url = f"{settings.thaillm_base_url.rstrip('/')}/chat/completions"
+    """OpenAI-compatible /chat/completions call against the ThaiLLM Playground API.
+
+    URL is always built from THAILLM_BASE_URL (default: http://thaillm.or.th/api/v1).
+    On the deployed server this must be set as APP_THAILLM_BASE_URL in CI/CD variables.
+    """
+    base = (settings.thaillm_base_url or "http://thaillm.or.th/api/v1").rstrip("/")
+    url = f"{base}/chat/completions"
     headers = {
         "Authorization": f"Bearer {settings.thaillm_api_key}",
         "Content-Type": "application/json",
@@ -323,7 +340,14 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
 
 
 async def _generate_tokenmind(prompt: str, settings, history: list | None = None) -> ServiceResult:
-    """OpenAI-compatible /chat/completions call against the TokenMind gateway (fallback)."""
+    """OpenAI-compatible /chat/completions call against the TokenMind gateway (fallback).
+
+    NOTE: TokenMind has been observed producing hallucinated mixed Chinese/English/Thai
+    output when ThaiLLM is unavailable. All replies are passed through _strip_reasoning
+    which strips mixed-Chinese lines, and additionally checked for minimum Thai content
+    before being accepted. Responses that contain Chinese characters or lack Thai are
+    rejected so the caller can fall through to textqa.
+    """
     url = f"{settings.tokenmind_base_url.rstrip('/')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {settings.tokenmind_api_key}",
@@ -385,6 +409,24 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
                 return ServiceResult(
                     service="pathumma", ok=False, error="empty reply after stripping reasoning"
                 )
+
+            # Hallucination guard: reject TokenMind replies that still contain Chinese
+            # characters or have no Thai characters — these are the garbage responses
+            # seen in answer.txt (mixed Chinese + English tornado/cactus hallucination).
+            _chinese_in_reply = len(re.findall(r"[一-鿿]", text))
+            _thai_in_reply = len(re.findall(r"[฀-๿]", text))
+            if _chinese_in_reply > 0 or _thai_in_reply == 0:
+                logger.warning(
+                    "TokenMind reply failed hallucination guard "
+                    "(chinese=%d thai=%d) — marking as failed to trigger textqa fallback",
+                    _chinese_in_reply, _thai_in_reply,
+                )
+                return ServiceResult(
+                    service="pathumma",
+                    ok=False,
+                    error="hallucinated reply (Chinese characters or no Thai content)",
+                )
+
             return ServiceResult(
                 service="pathumma",
                 ok=True,

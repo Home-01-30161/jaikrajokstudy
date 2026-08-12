@@ -47,6 +47,7 @@ from app.bots.conversation import WELCOME, handle_text, _is_crisis, CRISIS_REPLY
 from app.config import get_settings
 from app.services import face, ocr, stt
 from app.services import pathumma
+from app.services.pathumma import strip_latex_for_line
 from app.services.mood import classify as classify_mood, MOOD_LABELS_TH
 
 logger = logging.getLogger(__name__)
@@ -265,9 +266,17 @@ async def api_client_reply_flex_then_text(
 # Image handler -- detect intent from content
 # ---------------------------------------------------------------------------
 _OCR_PROMPT = (
-    "นักเรียนส่งรูปการบ้านมาทาง LINE "
-    "ข้อความที่อ่านได้จากภาพคือ:\n{text}\n\n"
-    "ช่วยอธิบายหรือแนะนำวิธีทำอย่างเป็นขั้นตอน โดยไม่เฉลยคำตอบตรง ๆ ทันที"
+    "นักเรียนส่งรูปการบ้านมาทาง LINE\n"
+    "ระบบ OCR อ่านข้อความจากภาพได้ดังนี้:\n"
+    "---\n"
+    "{text}\n"
+    "---\n\n"
+    "กฎสำคัญ:\n"
+    "1. ตอบเป็นภาษาไทยเท่านั้น ห้ามตอบเป็นภาษาจีน ภาษาญี่ปุ่น หรือภาษาอังกฤษล้วน\n"
+    "2. อธิบายเฉพาะโจทย์ที่อ่านได้จากข้อความด้านบนเท่านั้น ห้ามคิดเรื่องอื่น\n"
+    "3. อธิบายแนวคิดและวิธีคิดเป็นขั้นตอน ไม่เฉลยคำตอบตรง ๆ\n"
+    "4. ถ้าข้อความที่อ่านได้ไม่ชัดเจน ให้บอกว่าอ่านได้อะไรบ้างและถามนักเรียนให้ชัดขึ้น\n"
+    "5. ตอบกระชับ ไม่เกิน 400 คำ"
 )
 _NO_FACE_PHRASE = (
     "กระจกยังไม่เห็นใบหน้าในภาพนี้ ลองถ่ายให้เห็นหน้าชัด ๆ "
@@ -325,7 +334,6 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
                 )
                 llm = await pathumma.generate_reply(llm_prompt)
                 if llm.ok and llm.text:
-                    from app.services.pathumma import strip_latex_for_line
                     return strip_latex_for_line(llm.text)
                 # LLM failed — use structured fallback with emotion data
                 return (
@@ -346,7 +354,6 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
                     "ห้ามตอบเป็นภาษาจีนหรือภาษาอื่นที่ไม่ใช่ภาษาไทย"
                 )
                 if llm.ok and llm.text:
-                    from app.services.pathumma import strip_latex_for_line
                     return strip_latex_for_line(llm.text)
                 return (
                     f"กระจกเห็นใบหน้าของคุณแล้ว ({count} ใบหน้า) 😊\n\n"
@@ -360,9 +367,29 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
         extracted = ocr_result.text.strip()[:3000]
         llm = await pathumma.generate_reply(_OCR_PROMPT.format(text=extracted))
         if llm.ok and llm.text:
-            from app.services.pathumma import strip_latex_for_line
-            return strip_latex_for_line(llm.text)
-        return f"อ่านข้อความจากภาพได้แล้ว:\n\n{extracted}\n\n(ระบบ AI ยังตอบไม่ได้ตอนนี้ ลองอีกครั้งนะ)"
+            reply_text = strip_latex_for_line(llm.text)
+            # Sanity check: reject hallucinated replies that contain Chinese/Japanese
+            # characters or have no Thai content — fall back to raw OCR text instead
+            import re as _re
+            has_chinese = bool(_re.search(r"[一-鿿぀-ヿ]", reply_text))
+            has_thai = bool(_re.search(r"[฀-๿]", reply_text))
+            if has_chinese or not has_thai:
+                logger.warning(
+                    "LLM reply for OCR prompt contained hallucination "
+                    "(chinese=%s, has_thai=%s) — showing raw OCR text",
+                    has_chinese, has_thai,
+                )
+                return (
+                    "📷 กระจกอ่านข้อความจากภาพได้:\n\n"
+                    f"{extracted}\n\n"
+                    "พิมพ์ถามมาได้เลย ว่าอยากให้ช่วยอธิบายตรงไหน"
+                )
+            return reply_text
+        return (
+            "📷 กระจกอ่านข้อความจากภาพได้:\n\n"
+            f"{extracted}\n\n"
+            "พิมพ์ถามมาได้เลย ว่าอยากให้ช่วยอธิบายตรงไหน"
+        )
 
     return _NO_FACE_PHRASE
 
@@ -408,7 +435,7 @@ async def _handle_audio(message_id: str, blob: AsyncMessagingApiBlob) -> str:
     if llm.ok and llm.text:
         dots = "..." if len(transcript) > 80 else ""
         prefix = f"[กระจกได้ยิน: \"{transcript[:80]}{dots}\"]\n\n"
-        return prefix + llm.text
+        return prefix + strip_latex_for_line(llm.text)
 
     return (
         f"กระจกได้ยินว่า: \"{transcript[:200]}\"\n\n"
