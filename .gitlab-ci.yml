@@ -9,6 +9,11 @@ variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
+  # Force all jobs to use the host Docker socket instead of a DinD service.
+  # Without this the default docker:// executor injects DOCKER_HOST=tcp://docker:2375
+  # which fails with "lookup docker: no such host" on the hackathon shell runner.
+  DOCKER_HOST: "unix:///var/run/docker.sock"
+  DOCKER_TLS_CERTDIR: ""
 
 stages: [check, deploy, ops]
 
@@ -18,19 +23,8 @@ default:
     - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
     - apk add --no-cache curl bash >/dev/null
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
-    # How this job reaches the Docker daemon. If DOCKER_HOST points at
-    # tcp://docker:2375 but no dind service exists, every docker command fails
-    # with "lookup docker ... no such host". Prefer the mounted host socket.
-    - |
-      echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
-      if [ -S /var/run/docker.sock ]; then
-        echo "host socket: present -> using it"
-        unset DOCKER_HOST
-        export DOCKER_HOST=unix:///var/run/docker.sock
-      else
-        echo "host socket: ABSENT"
-      fi
-      docker info --format 'daemon ok: {{.ServerVersion}}' 2>&1 | head -3 || true
+    - echo "DOCKER_HOST=${DOCKER_HOST}"
+    - docker info --format 'daemon ok: {{.ServerVersion}}' 2>&1 | head -3
 
 # ------------------------------------------------------------
 #  Validate compose against hackathon rules
