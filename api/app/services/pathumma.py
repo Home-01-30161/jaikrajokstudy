@@ -761,16 +761,19 @@ async def _generate_typhoon(prompt: str, settings, history: list | None = None) 
             messages.append({"role": role, "content": text})
     messages.append({"role": "user", "content": prompt + extra_instruction})
 
+    # Typhoon-v2.5-30b is fast enough for 4096 tokens. Physics problems
+    # that show all steps typically need 2500-3500 tokens, so 2048 cuts
+    # them off mid-answer (finish_reason=length).  4096 avoids that.
     payload = {
         "model": settings.typhoon_llm_model,
         "messages": messages,
-        "max_tokens": 2048,
+        "max_tokens": 4096,
         "temperature": temperature,
     }
 
     try:
         verify = not settings.insecure_tls
-        async with httpx.AsyncClient(timeout=60.0, verify=verify) as client:
+        async with httpx.AsyncClient(timeout=90.0, verify=verify) as client:
             resp = await client.post(url, headers=headers, json=payload)
             try:
                 raw = resp.json()
