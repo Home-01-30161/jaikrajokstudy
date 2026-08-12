@@ -596,7 +596,8 @@ export async function analyzeSentiment(text: string): Promise<string> {
       const polarity = (raw?.[0] as { sentiment?: { polarity?: string } })?.sentiment?.polarity ?? "";
       if (polarity === "positive") return "positive";
       if (polarity === "negative") return "negative";
-      return "neutral";
+      // SSense said neutral — still run keyword fallback before accepting neutral
+      return classifyMoodFromText(text);
     }
   } catch {
     // fall through to keyword fallback
@@ -692,13 +693,9 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
     answer = "ไม่สามารถวิเคราะห์ภาพใบหน้าได้ในขณะนี้";
   }
 
-  // Derive emotionKey: use LLM sentiment first, fall back to keyword classifier
-  let emotionKey: string;
-  try {
-    emotionKey = await analyzeSentiment(answer);
-  } catch {
-    emotionKey = classifyMoodFromText(answer);
-  }
+  // Derive emotionKey: tag check + keyword scan on the vision answer (skip SSense —
+  // SSense reads sentence tone, not described emotion, so "บุคคลนี้ดูเหมือนจะโกรธ" → neutral)
+  const emotionKey = classifyMoodFromText(answer);
 
   let llmReply: string;
   try {
