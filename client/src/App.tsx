@@ -1529,6 +1529,8 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     },
     [activeSessionId]
   );
+  const setMoodRef = useRef(setMood);
+  setMoodRef.current = setMood;
 
   // Keep a ref that always reflects the latest messages — used to read history
   const messagesRef = useRef<ChatMsg[]>([]);
@@ -1672,7 +1674,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
 
   const pushTrend = useCallback((key: string, sourceLabel: string) => {
     const info = EMO[key] || EMO.neutral;
-    setMood(key);
+    setMoodRef.current(key);
     setTrendData((prev) => {
       const nextId = prev.length > 0 ? prev[prev.length - 1].id + 1 : 1;
       return [...prev, { id: nextId, valence: info.valence, color: info.color, key, label: info.label }].slice(-9);
