@@ -1397,12 +1397,13 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
 
   const saveWebMessage = (role: "user" | "bot", text: string) => {
     const uid = lineUserIdRef.current;
+    console.log("[saveWebMessage] uid:", uid, "role:", role);
     if (!uid) return;
     fetch("/api/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ line_user_id: uid, role, text: text.slice(0, 4000), source: "web" }),
-    }).then(r => { if (!r.ok) r.text().then(t => console.error("[saveWebMessage] failed:", r.status, t)); })
+    }).then(r => r.text().then(t => console.log("[saveWebMessage] response:", r.status, t)))
       .catch(e => console.error("[saveWebMessage] network error:", e));
   };
   const [currentView, setCurrentView] = useState<AppView>("home");
