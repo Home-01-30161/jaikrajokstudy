@@ -4,9 +4,10 @@
 #  base = 20000 + (7 - 1) * 10
 #     team07 -> BASE 20060  BASE_1 20061
 #
-#  Runner: shell executor — Docker is installed on the host.
-#  Jobs run directly on the host shell; no image/dind needed.
-#  Docker daemon is at /var/run/docker.sock (host socket).
+#  EXACT guide template (sasdasdasd.txt section 4.1)
+#  Only TEAM / BASE / BASE_1 changed for team07.
+#  Runner mounts /var/run/docker.sock into docker:27.3.1 job container.
+#  Do NOT add services/DOCKER_HOST/DOCKER_TLS_CERTDIR — breaks the socket.
 # ============================================================
 
 variables:
@@ -17,8 +18,10 @@ variables:
 stages: [check, deploy, ops]
 
 default:
+  image: docker:27.3.1
   before_script:
-    - docker compose version >/dev/null 2>&1 || apt-get install -y docker-compose-plugin >/dev/null
+    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
+    - apk add --no-cache curl bash >/dev/null
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
 
 # ------------------------------------------------------------
@@ -71,8 +74,6 @@ deploy:
     name: $TEAM
     url: https://$TEAM.aiforthai.in.th
   script:
-    # secret มาจาก CI/CD Variables ที่ขึ้นต้นด้วย APP_ (ตั้งเป็น Masked)
-    # อย่าใส่ set -x ในสเต็ปนี้ ค่าจะโผล่ใน job log
     - printenv | grep '^APP_' > .env || true
     - docker compose -p "$TEAM" up -d --build --remove-orphans
     - |
