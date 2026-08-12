@@ -77,7 +77,7 @@ deploy:
         sleep 5
       done
       docker compose -p "$TEAM" ps
-    - curl -fsS "http://127.0.0.1:${BASE_1}/health" && echo " <- /health OK"
+    - docker compose -p "$TEAM" exec -T api curl -fsS http://localhost:8000/health && echo " <- /health OK"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
