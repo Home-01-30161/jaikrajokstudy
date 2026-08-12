@@ -132,11 +132,15 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("TYPHOON_API_KEY", "APP_TYPHOON_API_KEY"),
     )
-    # NOTE: typhoon_ocr.py hardcodes the chat/completions endpoint and does not
-    # use this field — kept only for env-var compatibility during migration.
     typhoon_base_url: str = Field(
-        default="https://api.opentyphoon.ai/v1/chat/completions",
+        default="https://api.opentyphoon.ai/v1",
         validation_alias=AliasChoices("TYPHOON_BASE_URL", "APP_TYPHOON_BASE_URL"),
+    )
+    # Typhoon LLM model for text generation (same API key as OCR)
+    # Reference repo uses typhoon-v2.5-30b-a3b-instruct — best quality for Thai
+    typhoon_llm_model: str = Field(
+        default="typhoon-v2.5-30b-a3b-instruct",
+        validation_alias=AliasChoices("TYPHOON_LLM_MODEL", "APP_TYPHOON_LLM_MODEL"),
     )
 
     line_channel_access_token: str = Field(

@@ -676,10 +676,13 @@ def _wrap_plain_math(text: str) -> str:
 
 
 async def generate_reply(user_text: str, *, emotion_hint: str | None = None, history: list | None = None) -> ServiceResult:
-    """Generate a reply, preferring the TokenMind gateway (thaillm-8b).
+    """Generate a reply using the best available LLM.
 
-    Falls back to the legacy AI for Thai /textqa/completion endpoint so a
-    gateway outage degrades instead of breaking the bot.
+    Fallback chain (matching reference repo):
+      1. Typhoon LLM (typhoon-v2.5-30b-a3b-instruct) — best quality, same key as OCR
+      2. ThaiLLM Playground (pathumma-thaillm-qwen3-8b-think) — good but often down
+      3. TokenMind (thaillm-8b) — hallucinates, used as last resort
+      4. textqa (/textqa/completion) — weakest fallback
     """
     settings = get_settings()
 
@@ -688,13 +691,21 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None, his
     if emotion_hint and emotion_hint != "ปกติ":
         prompt = f"(อารมณ์โดยประมาณ: {emotion_hint})\nคำถาม/ข้อความของผู้เรียน: {user_text}"
 
-    # Prefer ThaiLLM (Qwen3-8b-think, best quality) → fall back to TokenMind (thaillm-8b) → textqa
+    # 1. Typhoon LLM (primary — reference repo uses this, fast + high quality)
+    if settings.typhoon_api_key:
+        result = await _generate_typhoon(prompt, settings, history=history or [])
+        if result.ok:
+            return result
+        logger.warning("Typhoon LLM failed (%s); trying ThaiLLM", result.error)
+
+    # 2. ThaiLLM Playground (secondary)
     if settings.thaillm_api_key:
         result = await _generate_thaillm(prompt, settings, history=history or [])
         if result.ok:
             return result
         logger.warning("ThaiLLM LLM failed (%s); trying TokenMind", result.error)
 
+    # 3. TokenMind (tertiary — hallucinates, has anti-hallucination guards)
     if settings.tokenmind_api_key:
         result = await _generate_tokenmind(prompt, settings, history=history or [])
         if result.ok:
@@ -708,6 +719,94 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None, his
             error="Missing THAILLM_API_KEY / TOKENMIND_API_KEY and AIFORTHAI_API_KEY",
         )
     return await _generate_textqa(prompt, settings)
+
+
+async def _generate_typhoon(prompt: str, settings, history: list | None = None) -> ServiceResult:
+    """OpenAI-compatible /chat/completions call against the Typhoon API (SCB 10X).
+
+    This is the PRIMARY LLM — the reference repo (jaikrajokstudy) uses this
+    model (`typhoon-v2.5-30b-a3b-instruct`) and it gives consistently high-
+    quality Thai physics/math solutions with proper LaTeX output.
+
+    Same API key as Typhoon OCR — no extra credential needed.
+    """
+    base = (settings.typhoon_base_url or "https://api.opentyphoon.ai/v1").rstrip("/")
+    url = f"{base}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings.typhoon_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    # Smart routing: math → MATH_SYSTEM_PROMPT, coding → CODING_SOLVER_PROMPT
+    is_math = bool(_MATH_DETECT_RE.search(prompt))
+    is_problem_solving = bool(_PROBLEM_SOLVING_RE.search(prompt))
+
+    if is_problem_solving:
+        active_system_prompt = CODING_SOLVER_PROMPT
+        temperature = 0.05
+    elif is_math:
+        active_system_prompt = MATH_SYSTEM_PROMPT
+        temperature = 0.05
+    else:
+        active_system_prompt = SYSTEM_PROMPT
+        temperature = 0.3
+
+    extra_instruction = _build_extra_instruction(prompt)
+
+    messages: list[dict] = [{"role": "system", "content": active_system_prompt}]
+    for h in (history or [])[-10:]:
+        role = "assistant" if h.get("role") == "bot" else "user"
+        text = (h.get("text") or "").strip()
+        if text:
+            messages.append({"role": role, "content": text})
+    messages.append({"role": "user", "content": prompt + extra_instruction})
+
+    payload = {
+        "model": settings.typhoon_llm_model,
+        "messages": messages,
+        "max_tokens": 2048,
+        "temperature": temperature,
+    }
+
+    try:
+        verify = not settings.insecure_tls
+        async with httpx.AsyncClient(timeout=60.0, verify=verify) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            try:
+                raw = resp.json()
+            except Exception:
+                raw = {"text": resp.text}
+
+            if resp.status_code >= 400:
+                logger.warning("Typhoon LLM HTTP %s: %s", resp.status_code, resp.text[:300])
+                return ServiceResult(
+                    service="pathumma",
+                    ok=False,
+                    error=f"HTTP {resp.status_code}",
+                    raw=raw if isinstance(raw, dict) else {"body": str(raw)},
+                )
+
+            raw_dict = raw if isinstance(raw, dict) else {}
+            finish_reason = ""
+            choices = raw_dict.get("choices")
+            if isinstance(choices, list) and choices:
+                finish_reason = choices[0].get("finish_reason") or ""
+            if finish_reason == "length":
+                logger.warning("Typhoon LLM: finish_reason=length — response cut at max_tokens")
+
+            text = _strip_emoji(
+                _dedup_lines(_strip_reasoning(_extract_text(raw_dict)))
+            )
+            if not text:
+                return ServiceResult(
+                    service="pathumma", ok=False, error="empty reply from Typhoon LLM"
+                )
+            return ServiceResult(service="pathumma", ok=True, text=text, raw=raw_dict)
+    except httpx.TimeoutException:
+        return ServiceResult(service="pathumma", ok=False, error="timeout")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Typhoon LLM call failed")
+        return ServiceResult(service="pathumma", ok=False, error=str(exc))
 
 
 async def _generate_thaillm(prompt: str, settings, history: list | None = None) -> ServiceResult:
