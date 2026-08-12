@@ -229,7 +229,8 @@ def _dedup_lines(text: str) -> str:
 
     Strategy: split on blank lines (paragraph) and numbered list items.
     If a paragraph body is seen twice, keep only the first occurrence.
-    Similarity threshold: strip whitespace + punctuation before comparing.
+    Also catches repeating bullet-body blocks where only the header differs
+    (e.g. ขั้นตอนที่ 1/2/3/4/5 all with the same bullet content underneath).
     """
     # Normalise: collapse 3+ blank lines → 2
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -239,9 +240,13 @@ def _dedup_lines(text: str) -> str:
     result: list[str] = []
 
     def _normalise(s: str) -> str:
-        # Remove leading numbering like "1.", "2.", "ก)", etc. before comparing
+        # Remove leading numbering/step headers before comparing bodies
         s = re.sub(r"^\s*[\d๑-๙]+[.)]\s*", "", s, flags=re.MULTILINE)
+        s = re.sub(r"^\s*ขั้นตอนที่\s*\d+.*", "", s, flags=re.MULTILINE)
         return re.sub(r"[\s\W]+", "", s).lower()
+
+    # Also track individual bullet lines to catch repeated bullet bodies
+    seen_lines: set[str] = set()
 
     for para in paragraphs:
         key = _normalise(para)
@@ -258,6 +263,18 @@ def _dedup_lines(text: str) -> str:
                     duplicate = True
                     break
         if not duplicate:
+            # Also check if all bullet lines in this paragraph are already seen
+            bullet_lines = [
+                re.sub(r"[\s\W]+", "", ln).lower()
+                for ln in para.split("\n")
+                if ln.strip().startswith(("•", "-", "*")) and len(ln.strip()) > 5
+            ]
+            if len(bullet_lines) >= 2:
+                new_bullets = [bl for bl in bullet_lines if bl not in seen_lines]
+                if len(new_bullets) == 0:
+                    duplicate = True
+                else:
+                    seen_lines.update(bullet_lines)
             seen.append(key)
             result.append(para)
 
