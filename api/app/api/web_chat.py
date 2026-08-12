@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app import store
 from app.services import face, mood as mood_svc, ocr, pathumma, stt, tts
-from app.services.pathumma import _fix_thai_choices, MATH_SYSTEM_PROMPT
+from app.services.pathumma import _fix_thai_choices, _wrap_plain_math, MATH_SYSTEM_PROMPT
 from app.services.sentiment import analyze_sentiment
 from app.utils.security import create_session, enforce_rate_limit, require_session
 
@@ -156,7 +156,7 @@ async def _mood_and_reply(user_id: str, text: str, *, source: str, history: list
 
     llm = await pathumma.generate_reply(text, emotion_hint=mood_svc.MOOD_LABELS_TH.get(detected), history=history)
     if llm.ok and llm.text:
-        reply = llm.text
+        reply = _wrap_plain_math(llm.text)
     else:
         degraded.append("llm")
         reply = (
@@ -455,7 +455,8 @@ async def homework_ocr(
             "⚠️ คำสั่งสำคัญ:\n"
             "ส่วน [คำอธิบายแผนภาพ] ด้านบนคือข้อมูลจากแผนภาพจริงในโจทย์\n"
             "ห้ามบอกว่า 'ขาดข้อมูล' หากข้อมูลนั้นปรากฏในส่วน [คำอธิบายแผนภาพ]\n\n"
-            "ช่วยตอบคำถามนี้อย่างละเอียด แสดงขั้นตอนการคิดและการคำนวณทุกขั้นตอน"
+            "ช่วยตอบคำถามนี้อย่างละเอียด แสดงขั้นตอนการคิดและการคำนวณทุกขั้นตอน\n"
+            "📐 สูตรและสมการทุกอันต้องเขียนด้วย LaTeX: inline ใช้ $...$ และ block ใช้ $$...$$"
         )
     elif has_choices:
         # ── Multiple-choice problem (reference: analyzeHomework lines 800-807) ──
@@ -467,7 +468,8 @@ async def homework_ocr(
             "— ห้ามประดิษฐ์หรือแต่งตัวเลือกใหม่เด็ดขาด\n"
             "3. **วิเคราะห์ตัวเลือก**: อธิบายเหตุผลของแต่ละตัวเลือกว่าถูกหรือผิด\n"
             "4. **สรุปคำตอบ**: ปิดท้ายด้วยบรรทัด **คำตอบที่ถูกต้องคือ: [ก./ข./ค./ง.]** เพียง 1 ครั้งเท่านั้น\n\n"
-            "❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด"
+            "❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด\n"
+            "📐 สูตรและสมการทุกอันต้องเขียนด้วย LaTeX: inline ใช้ $...$ และ block ใช้ $$...$$"
         )
     else:
         # ── Open-ended problem (reference: analyzeHomework lines 810-833) ──
@@ -481,14 +483,15 @@ async def homework_ocr(
             "1. **โจทย์**: สรุปข้อมูลทั้งหมดที่กำหนด รวมมุมและค่าจากแผนภาพ\n"
             "2. **วิเคราะห์และหาคำตอบ**: แสดงขั้นตอนการคำนวณอย่างละเอียด\n"
             "3. **คำตอบสุดท้าย**: ระบุค่าคำตอบชัดเจน\n\n"
-            "❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด เพราะโจทย์นี้ไม่มีตัวเลือก"
+            "❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด เพราะโจทย์นี้ไม่มีตัวเลือก\n"
+            "📐 สูตรและสมการทุกอันต้องเขียนด้วย LaTeX: inline ใช้ $...$ และ block ใช้ $$...$$"
         )
 
     # ── Step 5: Call LLM with MATH_SYSTEM_PROMPT + low temperature ──
     # (reference: analyzeHomework lines 836-841)
     llm = await pathumma.generate_reply(llm_prompt)
     if llm.ok and llm.text:
-        reply = _fix_thai_choices(llm.text, answer)
+        reply = _wrap_plain_math(_fix_thai_choices(llm.text, answer))
         if len(reply) < 30:
             reply = f"## 📝 เฉลยการบ้าน\n\n{answer}"
     else:

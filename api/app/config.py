@@ -123,7 +123,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("THAILLM_BASE_URL", "APP_THAILLM_BASE_URL"),
     )
     thaillm_llm_model: str = Field(
-        default="Pathumma-ThaiLLM-qwen3-8b-think-3.0.0",
+        default="pathumma-thaillm-qwen3-8b-think-3.0.0",
         validation_alias=AliasChoices("THAILLM_LLM_MODEL", "APP_THAILLM_LLM_MODEL"),
     )
 

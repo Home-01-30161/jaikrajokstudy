@@ -592,6 +592,89 @@ def strip_latex_for_line(text: str) -> str:
     return text
 
 
+# ---------------------------------------------------------------------------
+# Plain-text math → LaTeX wrapping (for web frontend KaTeX rendering)
+# ---------------------------------------------------------------------------
+# thaillm-8b and textqa often output equations as plain text like:
+#   y = ut + (1/2)gt^2
+#   H = u^2/(6g)
+# The frontend has KaTeX but needs $...$ delimiters. This function wraps
+# common math patterns so KaTeX can render them.
+
+# Pattern: lines that look like equations (contain = and math-like chars)
+_PLAIN_MATH_LINE_RE = re.compile(
+    r"^\s*(สมการ|สมการ:|สูตร|สูตร:)?\s*"           # optional Thai prefix
+    r"([A-Za-zα-ωΑ-Ω_][A-Za-zα-ωΑ-Ω_0-9]*)"       # variable name
+    r"\s*=\s*"                                        # equals sign
+    r"([A-Za-zα-ωΑ-Ω0-9_()+\-*/^√∞π².·×÷≈≤≥≠∫∑ ]+)" # math expression
+    r"\s*$",
+    re.MULTILINE,
+)
+
+# Patterns for (1/2), sin(...), cos(...), tan(...), sqrt(...) etc.
+_FUNC_PATTERN = re.compile(
+    r"\b(sin|cos|tan|log|ln|exp|sqrt)\s*\("
+)
+
+
+def _wrap_plain_math(text: str) -> str:
+    """Wrap plain-text math equations in $...$ for KaTeX rendering.
+
+    Only wraps lines that look like equations and aren't already in $...$.
+    Conservative: only wraps if the line has = sign and math-like content.
+    """
+    lines = text.split("\n")
+    result = []
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip lines that already have LaTeX delimiters
+        if "$" in line:
+            result.append(line)
+            continue
+
+        # Skip empty or very short lines
+        if len(stripped) < 5:
+            result.append(line)
+            continue
+
+        # Check if line starts with "สมการ:" or "• สมการ:" prefix
+        # Pattern: bullet + optional Thai label + equation
+        m = re.match(
+            r"^(\s*(?:[•\-*]\s*)?(?:สมการ|สูตร)\s*[:：]?\s*)"  # prefix
+            r"([A-Za-zα-ωΑ-Ω_][A-Za-zα-ωΑ-Ω_0-9]*\s*=.+)$",   # equation
+            stripped,
+        )
+        if m:
+            prefix, eq = m.group(1), m.group(2)
+            result.append(f"{prefix}$${eq.strip()}$$")
+            continue
+
+        # Pattern: standalone equation line like "y = ut + (1/2)gt^2"
+        # Also handles bullet-prefixed: "- vy = u * sin(45°)"
+        m2 = re.match(
+            r"^(\s*(?:[•\-*]\s*)?)"                          # optional bullet prefix
+            r"([A-Za-zα-ωΑ-Ω_][A-Za-zα-ωΑ-Ω_0-9]*"         # variable
+            r"(?:_[A-Za-z0-9]+)?)"                            # optional subscript
+            r"\s*=\s*"                                         # =
+            r"(.+)$",                                          # RHS
+            stripped,
+        )
+        if m2:
+            # Verify RHS looks mathematical (has numbers, operators, or functions)
+            rhs = m2.group(3)
+            has_math = bool(re.search(r"[0-9+\-*/^()√πg²³]|sin|cos|tan|sqrt|frac", rhs))
+            if has_math:
+                prefix = m2.group(1)
+                eq_part = m2.group(2) + " = " + rhs.strip()
+                result.append(f"{prefix}$${eq_part}$$")
+                continue
+
+        result.append(line)
+
+    return "\n".join(result)
+
+
 async def generate_reply(user_text: str, *, emotion_hint: str | None = None, history: list | None = None) -> ServiceResult:
     """Generate a reply, preferring the TokenMind gateway (thaillm-8b).
 
@@ -875,7 +958,12 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
 
 
 async def _generate_textqa(prompt: str, settings) -> ServiceResult:
-    """Legacy AI for Thai Text QA fallback."""
+    """Legacy AI for Thai Text QA fallback.
+
+    Uses smart routing: math prompts get MATH_SYSTEM_PROMPT + lower temperature.
+    """
+    is_math = bool(_MATH_DETECT_RE.search(prompt))
+    active_system = MATH_SYSTEM_PROMPT if is_math else SYSTEM_PROMPT
 
     headers = {
         "Apikey": settings.aiforthai_api_key,
@@ -886,9 +974,9 @@ async def _generate_textqa(prompt: str, settings) -> ServiceResult:
     # so fields are passed as multipart parts via `files=` instead.
     form = {
         "instruction": (None, prompt.encode("utf-8"), "text/plain; charset=utf-8"),
-        "system_prompt": (None, SYSTEM_PROMPT.encode("utf-8"), "text/plain; charset=utf-8"),
-        "max_new_tokens": (None, "512"),
-        "temperature": (None, "0.4"),
+        "system_prompt": (None, active_system.encode("utf-8"), "text/plain; charset=utf-8"),
+        "max_new_tokens": (None, "1024"),
+        "temperature": (None, "0.2" if is_math else "0.4"),
     }
 
     url = settings.pathumma_endpoint or PATHUMMA_TEXTQA_URL
