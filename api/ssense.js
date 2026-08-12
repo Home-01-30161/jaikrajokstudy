@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   const response = await fetch("https://api.aiforthai.in.th/ssense", {
     method: "POST",
     headers: {
-      "Apikey": process.env.PATHUMMA_API_KEY,
+      "Apikey": process.env.PATHUMMA_API_KEY ?? process.env.AIFORTHAI_API_KEY,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: params.toString(),

@@ -30,6 +30,9 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/tavily/(.*)", "destination": "/api/tavily" },
+    { "source": "/api/typhoon/(.*)", "destination": "/api/typhoon" },
+    { "source": "/api/ssense/(.*)", "destination": "/api/ssense" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
