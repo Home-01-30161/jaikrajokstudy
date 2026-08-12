@@ -58,20 +58,29 @@ def _strip_cjk_lines(text: str) -> str:
 # CRITICAL: forbid Chinese/Japanese output — typhoon-ocr-preview sometimes
 # emits Chinese characters when the image contains diagrams or equations.
 _SYSTEM_PROMPT = (
-    "You are an OCR engine. Extract ALL text visible in this image exactly as it appears. "
+    "You are an expert OCR engine specialised in Thai physics and mathematics homework. "
+    "Extract ALL text and diagram information visible in this image exactly as it appears. "
     "Output language: Thai and English only. NEVER output Chinese, Japanese, or any other language. "
-    "If the image contains a diagram, figure, or free-body diagram: "
-    "describe all labels, angles, measurements, arrows, and forces in Thai. "
+    "For diagrams, figures, graphs, or free-body diagrams: "
+    "1. List EVERY label, angle measurement, variable name, arrow, and number you see. "
+    "2. Describe the diagram structure briefly (e.g. 'จุด O อยู่ที่จุดกำเนิด, จุด A อยู่บนเส้นทางโพรเจกไทล์'). "
+    "3. State the angle each arrow or vector makes (e.g. 'ความเร็ว u ทำมุม 45° กับแนวดิ่ง, มุมที่จุด A = 60°'). "
+    "4. NEVER confuse the letter g (gravity symbol) with the digit 8. g = ความเร่งโน้มถ่วง. "
+    "5. NEVER output placeholder image tags like ![...] or markdown image syntax. "
+    "6. Do NOT add free-text summaries or commentary — only transcribe what you see. "
     "Format rules: "
     "- Mathematical equations: use $...$ for inline and $$...$$ for block LaTeX. "
-    "- Include ALL text: headings, body, labels, choices (ก. ข. ค. ง.), numbers, units. "
-    "- Do NOT skip, summarize, or add commentary. Transcribe verbatim. "
+    "- Include ALL text: problem statement, sub-questions, diagram labels, choices (ก. ข. ค. ง.), numbers, units. "
+    "- Do NOT skip, summarize, or add commentary beyond diagram description. Transcribe verbatim. "
     "- Do NOT output Chinese or Japanese characters under any circumstances."
 )
 
 _DEFAULT_USER_PROMPT = (
-    "Extract all text from this image exactly as it appears. "
-    "Return clean Markdown only — no explanations, no commentary."
+    "Extract all text and diagram information from this image. "
+    "Include: full problem statement, every question asked, every diagram label, "
+    "every angle (e.g. 45°, 60°), every variable (e.g. u, g, v, A, O), and every measurement. "
+    "Do NOT add image placeholders or free-text summaries. "
+    "Return clean Markdown only."
 )
 
 
@@ -267,6 +276,18 @@ def _parse_chat_response(raw: dict) -> str:
     if not content:
         return ""
 
+    content = content.strip()
+
+    # Strip markdown image placeholders the model sometimes adds (![...](image.png))
+    content = re.sub(r"!\[.*?\]\(.*?\)", "", content)
+    # Strip free-text summary sections like "**Text Recognition:**" or "**Final Summary:**"
+    # that the model adds when it goes beyond pure OCR
+    content = re.sub(
+        r"\*\*(Text Recognition|Final Summary|Image Description|Summary)[:\s*]*\*\*.*",
+        "",
+        content,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
     content = content.strip()
 
     # Try to parse JSON response {"natural_text": "..."}
