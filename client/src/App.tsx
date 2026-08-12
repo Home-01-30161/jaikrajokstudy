@@ -1394,16 +1394,28 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   // Ref so saveWebMessage is always current inside useCallback closures
   const lineUserIdRef = useRef<string | null>(lineUserId);
   lineUserIdRef.current = lineUserId;
+  const activeSessionIdRef = useRef<string>(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
+  const sessionsRef2 = useRef<ChatSession[]>(sessions);
+  sessionsRef2.current = sessions;
 
   const saveWebMessage = (role: "user" | "bot", text: string) => {
     const uid = lineUserIdRef.current;
-    console.log("[saveWebMessage] uid:", uid, "role:", role);
     if (!uid) return;
+    const sid = activeSessionIdRef.current;
+    const sess = sessionsRef2.current.find(s => s.id === sid);
     fetch("/api/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ line_user_id: uid, role, text: text.slice(0, 4000), source: "web" }),
-    }).then(r => r.text().then(t => console.log("[saveWebMessage] response:", r.status, t)))
+      body: JSON.stringify({
+        line_user_id: uid,
+        role,
+        text: text.slice(0, 4000),
+        source: "web",
+        session_id: sid,
+        session_title: sess?.title || "สนทนาใหม่",
+      }),
+    }).then(r => { if (!r.ok) r.text().then(t => console.error("[saveWebMessage] failed:", r.status, t)); })
       .catch(e => console.error("[saveWebMessage] network error:", e));
   };
   const [currentView, setCurrentView] = useState<AppView>("home");
@@ -1668,7 +1680,6 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim()) return;
     if (overrideText === undefined) setInputText("");
-    console.log("[sendMessage] currentUser:", currentUser?.id, "lineUserId:", lineUserIdRef.current);
 
     // Read history from ref — always up-to-date, no closure timing issues
     const currentHistory = messagesRef.current
@@ -3370,26 +3381,27 @@ export default function App() {
             try {
               const histRes = await fetch(`/api/history?line_user_id=${encodeURIComponent(profile.userId)}`);
               if (histRes.ok) {
-                const { messages } = await histRes.json() as { messages: { role: string; text: string; source: string; created_at: string }[] };
-                console.log("[login] history fetched:", messages.length, "last:", messages[messages.length-1]?.created_at, messages[messages.length-1]?.text?.slice(0,40));
-                if (messages.length > 0) {
-                  const chatMsgs: ChatMsg[] = messages.map((m) => ({
-                    id: "line_" + m.created_at + "_" + Math.random().toString(36).slice(2),
-                    role: m.role as "user" | "bot",
-                    text: m.text,
-                    timestamp: new Date(m.created_at).getTime() || Date.now(),
-                    sourceTag: m.source === "line" ? "LINE" : "Web",
-                  }));
-                  // Replace sessions entirely with LINE history — no merge with stale local messages
-                  const lineSession: ChatSession = {
-                    id: `session_${lineUser.id}_1`,
-                    title: "LINE Bot History",
-                    timestamp: Date.now(),
-                    messages: chatMsgs,
+                const { sessions: dbSessions } = await histRes.json() as {
+                  sessions: { session_id: string; session_title: string; messages: { role: string; text: string; source: string; created_at: string }[] }[]
+                };
+                if (dbSessions && dbSessions.length > 0) {
+                  const chatSessions: ChatSession[] = dbSessions.map(ds => ({
+                    id: ds.session_id,
+                    title: ds.session_title || "สนทนา",
+                    timestamp: new Date(ds.messages[ds.messages.length - 1]?.created_at || Date.now()).getTime(),
+                    messages: ds.messages.map(m => ({
+                      id: "db_" + m.created_at + "_" + Math.random().toString(36).slice(2),
+                      role: m.role as "user" | "bot",
+                      text: m.text,
+                      timestamp: new Date(m.created_at).getTime() || Date.now(),
+                      sourceTag: m.source === "line" ? "LINE" : "Web",
+                    })),
                     mood: "calm",
-                  };
-                  localStorage.setItem(`jaikrajok:sessions:${lineUser.id}`, JSON.stringify([lineSession]));
-                  toast.info(`โหลดประวัติสนทนาจาก LINE Bot ${messages.length} ข้อความ`);
+                  }));
+                  // Sort newest session first
+                  chatSessions.sort((a, b) => b.timestamp - a.timestamp);
+                  localStorage.setItem(`jaikrajok:sessions:${lineUser.id}`, JSON.stringify(chatSessions));
+                  toast.info(`โหลดประวัติสนทนา ${dbSessions.length} ช่องแชท`);
                 }
               }
             } catch {
