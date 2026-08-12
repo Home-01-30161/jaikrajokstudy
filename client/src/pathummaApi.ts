@@ -614,7 +614,8 @@ export interface VisionResult {
 export async function callVisionLLM(
   imageBlob: Blob,
   query: string,
-  _filename = "image.jpg"
+  _filename = "image.jpg",
+  model = TYPHOON_OCR_MODEL
 ): Promise<string> {
   const base64Data = await blobToBase64(imageBlob);
   const mimeType = imageBlob.type || "image/jpeg";
@@ -630,7 +631,7 @@ export async function callVisionLLM(
     "- Do NOT skip, summarize, or paraphrase any content. Transcribe verbatim.";
 
   const payload = {
-    model: TYPHOON_OCR_MODEL,
+    model: model,
     messages: [
       { role: "system", content: ocrSystemPrompt },
       {
@@ -762,14 +763,29 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
       "For EVERY labeled point (O, A, B, etc.), state what angle the velocity vector makes at that point and with respect to which axis or line. " +
       "Example format: 'At point O, the projectile is launched at 45 degrees from the vertical axis.' " +
       "'At point A, the velocity vector makes an angle of 60 degrees from the vertical axis.' " +
-      "Be precise and exhaustive about every angle in the diagram."
+      "Be precise and exhaustive about every angle in the diagram.",
+      "image.jpg",
+      THAILLM_MODEL
     ),
   ]);
 
   const ocrText = ocrResult.status === "fulfilled" ? ocrResult.value : "";
-  const diagramText = diagramResult.status === "fulfilled" ? diagramResult.value : "";
+  let diagramText = diagramResult.status === "fulfilled" ? diagramResult.value : "";
   console.debug("[OCR text]", ocrText);
   console.debug("[Diagram description]", diagramText);
+
+  // Discard diagram description that is just raw numbers/coordinates with no meaningful physics content.
+  // This happens when typhoon-ocr dumps grid axis labels (20, 30, ..., 7930) as the "diagram description".
+  if (diagramText) {
+    const words = diagramText.trim().split(/\s+/);
+    const numberTokens = words.filter(w => /^\d+([.,]\d+)?$/.test(w)).length;
+    const meaningfulWords = words.filter(w => /[฀-๿a-zA-Z]/.test(w)).length;
+    // If >60% of tokens are bare numbers and there are fewer than 5 meaningful words, it's noise
+    if (numberTokens / words.length > 0.6 && meaningfulWords < 5) {
+      console.warn("[Diagram description] Discarding likely grid-number noise:", diagramText.slice(0, 100));
+      diagramText = "";
+    }
+  }
 
   let answer: string;
   if (!ocrText && !diagramText) {
