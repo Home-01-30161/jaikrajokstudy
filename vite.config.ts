@@ -377,13 +377,65 @@ function vitePluginSsenseDev(): Plugin {
   };
 }
 
+function vitePluginLineTokenDev(): Plugin {
+  return {
+    name: "line-token-dev-proxy",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api/line-token", async (req, res, next) => {
+        if (req.method !== "POST") return next();
+        let body = "";
+        req.on("data", (chunk) => { body += chunk.toString(); });
+        req.on("end", async () => {
+          try {
+            const { code, redirect_uri } = JSON.parse(body || "{}");
+            if (!code || !redirect_uri) {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Missing code or redirect_uri" }));
+              return;
+            }
+            const clientId = process.env.VITE_LINE_CHANNEL_ID || process.env.LINE_CHANNEL_ID || "";
+            const clientSecret = process.env.LINE_CHANNEL_SECRET || "";
+
+            if (!clientId || !clientSecret) {
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "LINE Channel credentials missing in process.env (.env file)" }));
+              return;
+            }
+
+            const params = new URLSearchParams({
+              grant_type: "authorization_code",
+              code,
+              redirect_uri,
+              client_id: clientId,
+              client_secret: clientSecret,
+            });
+
+            const upstream = await fetch("https://api.line.me/oauth2/v2.1/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: params.toString(),
+            });
+
+            const data = await upstream.json().catch(() => ({}));
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(JSON.stringify(data));
+          } catch (e: any) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // loadEnv with prefix='' loads ALL vars (not just VITE_) into process.env
   const env = loadEnv(mode, path.resolve(import.meta.dirname), '');
   // Explicitly populate process.env so proxy configure callbacks can read them
   Object.assign(process.env, env);
 
-  const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics(), vitePluginCollageBuild(), vitePluginOtpEmail(), vitePluginSsenseDev()];
+  const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics(), vitePluginCollageBuild(), vitePluginOtpEmail(), vitePluginSsenseDev(), vitePluginLineTokenDev()];
 
   return {
     plugins,

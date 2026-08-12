@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
@@ -713,10 +713,99 @@ function GoogleOAuthModal({
   );
 }
 
+/* ============ LINE OAUTH MODAL — Real OAuth 2.1 flow ============ */
+function LineOAuthModal({
+  onClose,
+  onRedirect,
+}: {
+  onClose: () => void;
+  onRedirect: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const channelId = import.meta.env.VITE_LINE_CHANNEL_ID as string;
+
+  const startOAuth = () => {
+    setLoading(true);
+    const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    const nonce = Math.random().toString(36).substring(2);
+    sessionStorage.setItem("jaikrajok:line_state", state);
+    sessionStorage.setItem("jaikrajok:line_nonce", nonce);
+
+    const redirectUri = window.location.origin + "/";
+    console.log("[LINE OAuth] redirect_uri:", redirectUri);
+    const authUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${encodeURIComponent(channelId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=profile%20openid%20email&nonce=${encodeURIComponent(nonce)}&bot_prompt=aggressive`;
+
+    onRedirect();
+    window.location.href = authUrl;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade-in">
+      <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-gray-100 relative text-center">
+        {!loading && (
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl font-bold w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+          >
+            ✕
+          </button>
+        )}
+
+        <div className="w-16 h-16 bg-[#06C755] text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.34 10.34c0-3.87-4.18-7.01-9.34-7.01s-9.34 3.14-9.34 7.01c0 3.47 3.32 6.37 7.8 6.89.3.06.72.2.82.47.09.25.06.64.03.89l-.14.86c-.04.26-.19 1.02.89.56 1.08-.47 5.84-3.44 7.97-5.89 1.55-1.68 1.31-2.91 1.31-3.78zM7.22 12.01H5.78v-3.32h1.44v3.32zm2.84 0h-1.44v-3.32h1.44v3.32zm4.31 0h-1.44v-2.02l-1.35 2.02h-1.12v-3.32h1.44v2.02l1.35-2.02h1.12v3.32zm2.84-2.22h-1.44v-1.1h1.44v3.32h-2.88v-3.32h2.88v1.1z"/>
+          </svg>
+        </div>
+
+        {loading ? (
+          <>
+            <h3 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Noto Sans Thai', sans-serif" }}>
+              กำลังเชื่อมต่อ LINE...
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">กรุณารอสักครู่ กำลังนำท่านไปยังหน้าเข้าสู่ระบบ LINE</p>
+            <div className="flex justify-center">
+              <div className="w-8 h-8 border-4 border-[#06C755] border-t-transparent rounded-full animate-spin" />
+            </div>
+          </>
+        ) : (
+          <>
+            <h3 className="text-xl font-bold text-gray-900 mb-1" style={{ fontFamily: "'Noto Sans Thai', 'Inter', sans-serif" }}>
+              เข้าสู่ระบบด้วย LINE
+            </h3>
+            <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+              ระบบจะนำท่านไปยังหน้าเข้าสู่ระบบ LINE อย่างเป็นทางการ<br />
+              กรุณาล็อกอินด้วยบัญชี LINE ของท่าน
+            </p>
+
+            <button
+              onClick={startOAuth}
+              className="w-full py-3.5 bg-[#06C755] text-white font-bold rounded-xl hover:bg-[#05b34c] active:scale-95 transition-all shadow-sm flex items-center justify-center gap-2.5 cursor-pointer text-sm"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.34 10.34c0-3.87-4.18-7.01-9.34-7.01s-9.34 3.14-9.34 7.01c0 3.47 3.32 6.37 7.8 6.89.3.06.72.2.82.47.09.25.06.64.03.89l-.14.86c-.04.26-.19 1.02.89.56 1.08-.47 5.84-3.44 7.97-5.89 1.55-1.68 1.31-2.91 1.31-3.78z"/>
+              </svg>
+              Continue with LINE
+            </button>
+
+            <div className="mt-4 pt-3 border-t border-gray-100">
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                โดยการเข้าสู่ระบบ LINE ระบบจะขอสิทธิ์เข้าถึง<br />
+                ชื่อ รูปโปรไฟล์ และ LINE User ID ของท่าน
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 /* ============ LOGIN PAGE ============ */
 function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; onLoginSuccess: (user: UserAccount) => void }) {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [showLineModal, setShowLineModal] = useState(false);
   const [pendingRegistration, setPendingRegistration] = useState<{ email: string; passwordHash: string; otpCode: string } | null>(null);
   const [otpPreviewUrl, setOtpPreviewUrl] = useState<string | null>(null);
 
@@ -815,6 +904,10 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
     tokenClient.requestAccessToken({ prompt: "select_account" });
   };
 
+  const handleLineLogin = () => {
+    setShowLineModal(true);
+  };
+
   const handleSelectGoogleAccount = (googleUser: UserAccount) => {
     const users = getUsersList();
     const existingIndex = users.findIndex((u) => u.email === googleUser.email);
@@ -826,7 +919,8 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
       setCurrentUser(googleUser);
     }
     setShowGoogleModal(false);
-    toast(`✓ เข้าสู่ระบบด้วย Google สำเร็จ! (${googleUser.email})`);
+    setShowLineModal(false);
+    toast(`✓ เข้าสู่ระบบสำเร็จ! (${googleUser.name || googleUser.email})`);
     onLoginSuccess(googleUser);
   };
 
@@ -892,7 +986,6 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
             </span>
           </div>
 
-          {/* Header label removed — Google sign-in only */}
           <h1 style={{
             fontFamily: "'Noto Sans Thai', 'Sarabun', sans-serif",
             fontWeight: 800,
@@ -908,44 +1001,72 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
           <div aria-hidden="true" style={{
             height: 2,
             background: T.red,
-            marginBottom: 28,
+            marginBottom: 24,
             width: "72%",
             transform: "rotate(-0.5deg)",
           }} />
 
-          {/* Tabs removed — Google sign-in only */}
+          {/* Social Sign-In Buttons */}
+          <div className="space-y-3 mb-5">
+            {/* Google sign-in */}
+            <button
+              onClick={handleGoogleLogin}
+              style={{
+                width: "100%",
+                padding: "11px 0",
+                background: T.white,
+                color: "#3c4043",
+                fontFamily: "'Noto Sans Thai', 'Roboto', sans-serif",
+                fontSize: 14,
+                fontWeight: 600,
+                border: `1px solid #dadce0`,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#f8f9fa"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = T.white; }}
+            >
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
+                <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
+                <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
+                <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
+              </svg>
+              เข้าสู่ระบบด้วย Google
+            </button>
 
-          {/* Google sign-in — correct branding */}
-          <button
-            onClick={handleGoogleLogin}
-            style={{
-              width: "100%",
-              padding: "11px 0",
-              background: T.white,
-              color: "#3c4043",
-              fontFamily: "'Noto Sans Thai', 'Roboto', sans-serif",
-              fontSize: 14,
-              fontWeight: 600,
-              border: `1px solid #dadce0`,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              transition: "background 0.15s",
-              marginBottom: 20,
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#f8f9fa"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = T.white; }}
-          >
-            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-              <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
-              <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
-              <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
-              <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
-            </svg>
-            เข้าสู่ระบบด้วย Google
-          </button>
+            {/* LINE sign-in — official LINE green branding */}
+            <button
+              onClick={() => handleLineLogin()}
+              style={{
+                width: "100%",
+                padding: "11px 0",
+                background: "#06C755",
+                color: "#FFFFFF",
+                fontFamily: "'Noto Sans Thai', 'Roboto', sans-serif",
+                fontSize: 14,
+                fontWeight: 600,
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#05b34c"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "#06C755"; }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.34 10.34c0-3.87-4.18-7.01-9.34-7.01s-9.34 3.14-9.34 7.01c0 3.47 3.32 6.37 7.8 6.89.3.06.72.2.82.47.09.25.06.64.03.89l-.14.86c-.04.26-.19 1.02.89.56 1.08-.47 5.84-3.44 7.97-5.89 1.55-1.68 1.31-2.91 1.31-3.78zM7.22 12.01H5.78v-3.32h1.44v3.32zm2.84 0h-1.44v-3.32h1.44v3.32zm4.31 0h-1.44v-2.02l-1.35 2.02h-1.12v-3.32h1.44v2.02l1.35-2.02h1.12v3.32zm2.84-2.22h-1.44v-1.1h1.44v3.32h-2.88v-3.32h2.88v1.1z"/>
+              </svg>
+              เข้าสู่ระบบด้วย LINE
+            </button>
+          </div>
 
           {/* Footer note */}
           <p style={{
@@ -985,9 +1106,17 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
           onClose={() => setShowGoogleModal(false)}
         />
       )}
+
+      {showLineModal && (
+        <LineOAuthModal
+          onClose={() => setShowLineModal(false)}
+          onRedirect={() => setShowLineModal(false)}
+        />
+      )}
     </main>
   );
 }
+
 
 function OnbWelcome({ onNext }: { onNext: () => void }) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -3157,6 +3286,120 @@ export default function App() {
     // Store the token so the confirm page can use it
     sessionStorage.setItem("jaikrajok:confirm_token", token);
     setPage("guardian_confirm");
+  }, []);
+
+  // Check for LINE OAuth callback params (code & state) in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    const savedState = sessionStorage.getItem("jaikrajok:line_state");
+
+    if (code) {
+      // Clear query params immediately from URL bar
+      window.history.replaceState({}, "", window.location.pathname);
+
+      if (savedState && state && state !== savedState) {
+        console.warn("LINE login state mismatch:", { state, savedState });
+        toast.error("การยืนยันตัวตน LINE ไม่ถูกต้อง (State Mismatch)");
+        return;
+      }
+      sessionStorage.removeItem("jaikrajok:line_state");
+      sessionStorage.removeItem("jaikrajok:line_nonce");
+
+      const redirectUri = window.location.origin + window.location.pathname;
+      toast("กำลังยืนยันตัวตนด้วย LINE...");
+
+      fetch("/api/line-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, redirect_uri: redirectUri }),
+      })
+        .then((res) => res.json())
+        .then(async (data) => {
+          if (data.error || !data.access_token) {
+            console.error("LINE Token exchange error:", data);
+            toast.error(`เข้าสู่ระบบด้วย LINE ไม่สำเร็จ: ${data.error_description || data.error || "Token error"}`);
+            return;
+          }
+
+          // Fetch user profile from LINE using access_token
+          try {
+            const profileRes = await fetch("https://api.line.me/v2/profile", {
+              headers: { Authorization: `Bearer ${data.access_token}` },
+            });
+            const profile = await profileRes.json();
+            if (!profile.userId) {
+              toast.error("ไม่สามารถดึงข้อมูลโปรไฟล์ LINE ได้");
+              return;
+            }
+
+            const lineUser: UserAccount = {
+              id: "usr_line_" + profile.userId,
+              email: profile.userId + "@line.me",
+              name: profile.displayName || "LINE User",
+              passwordHash: "line_oauth_auth",
+              avatarUrl: profile.pictureUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${profile.userId}`,
+            };
+
+            // Bind backend session to this LINE userId, then fetch shared history
+            const teamApi = import.meta.env.VITE_TEAM_API as string;
+            if (teamApi) {
+              try {
+                await fetch(`${teamApi}/session/line`, {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ line_user_id: profile.userId }),
+                });
+                const histRes = await fetch(`${teamApi}/history`, { credentials: "include" });
+                if (histRes.ok) {
+                  const { messages } = await histRes.json() as { messages: { role: string; text: string; at: string }[] };
+                  if (messages.length > 0) {
+                    const userKey = lineUser.id;
+                    const chatMsgs: ChatMsg[] = messages.map((m) => ({
+                      id: "line_" + m.at + "_" + Math.random().toString(36).slice(2),
+                      role: m.role as "user" | "bot",
+                      text: m.text,
+                      timestamp: new Date(m.at).getTime() || Date.now(),
+                      sourceTag: "LINE",
+                    }));
+                    // Prepend to any existing local session for this user
+                    const existingRaw = localStorage.getItem(`jaikrajok:sessions:${userKey}`);
+                    const existing: ChatSession[] = existingRaw ? JSON.parse(existingRaw) : [];
+                    const session0 = existing[0];
+                    const merged: ChatMsg[] = [
+                      ...chatMsgs,
+                      ...(session0 ? session0.messages.filter((m) => m.id !== "init") : []),
+                    ];
+                    const newSession: ChatSession = {
+                      id: session0?.id || `session_${userKey}_1`,
+                      title: "LINE Bot History",
+                      timestamp: Date.now(),
+                      messages: merged,
+                      mood: session0?.mood || "calm",
+                    };
+                    localStorage.setItem(`jaikrajok:sessions:${userKey}`, JSON.stringify([newSession, ...existing.slice(1)]));
+                    toast.info(`โหลดประวัติสนทนาจาก LINE Bot ${messages.length} ข้อความ`);
+                  }
+                }
+              } catch {
+                // History fetch is best-effort — never block login
+              }
+            }
+
+            handleLoginSuccess(lineUser);
+            toast.success(`✓ เข้าสู่ระบบด้วย LINE สำเร็จ! (ยินดีต้อนรับ ${lineUser.name})`);
+          } catch (err) {
+            console.error("Failed to fetch LINE profile:", err);
+            toast.error("ไม่สามารถเชื่อมต่อโปรไฟล์ LINE ได้");
+          }
+        })
+        .catch((err) => {
+          console.error("LINE OAuth exchange error:", err);
+          toast.error("เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์ LINE");
+        });
+    }
   }, []);
 
   // Cross-tab approval: BroadcastChannel (instant) + localStorage poll (fallback for stale tabs)
