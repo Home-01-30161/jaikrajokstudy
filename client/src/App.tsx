@@ -1391,13 +1391,17 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   // Raw LINE userId (e.g. "Uabc123") — present only for LINE-authenticated users
   const lineUserId = currentUser?.id?.startsWith("usr_line_") ? currentUser.id.replace("usr_line_", "") : null;
 
+  // Ref so saveWebMessage is always current inside useCallback closures
+  const lineUserIdRef = React.useRef<string | null>(lineUserId);
+  lineUserIdRef.current = lineUserId;
+
   const saveWebMessage = (role: "user" | "bot", text: string) => {
-    console.log("[saveWebMessage] lineUserId:", lineUserId, "role:", role);
-    if (!lineUserId) return;
+    const uid = lineUserIdRef.current;
+    if (!uid) return;
     fetch("/api/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ line_user_id: lineUserId, role, text: text.slice(0, 4000), source: "web" }),
+      body: JSON.stringify({ line_user_id: uid, role, text: text.slice(0, 4000), source: "web" }),
     }).then(r => { if (!r.ok) r.text().then(t => console.error("[saveWebMessage] failed:", r.status, t)); })
       .catch(e => console.error("[saveWebMessage] network error:", e));
   };
@@ -1663,7 +1667,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim()) return;
     if (overrideText === undefined) setInputText("");
-    console.log("[sendMessage] currentUser:", currentUser?.id, "lineUserId:", lineUserId);
+    console.log("[sendMessage] currentUser:", currentUser?.id, "lineUserId:", lineUserIdRef.current);
 
     // Read history from ref — always up-to-date, no closure timing issues
     const currentHistory = messagesRef.current
@@ -1891,6 +1895,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์เรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer}"` },
       { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() + 50 },
       ]);
+      saveWebMessage("bot", llmReply);
       pushTrend("neutral", "รูปการบ้าน");
     } catch (err) {
       console.error("Vision LLM homework error:", err);
