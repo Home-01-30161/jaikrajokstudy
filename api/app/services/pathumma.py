@@ -113,7 +113,7 @@ _ENG_HALLUCINATION_RE = re.compile(
     r"Determine[sd]? [Ww]hether|ObjectiveFunction|Imagine Scenario|"
     r"TheirHeightsMust|SimilarTO|SuchAs:|STEPS THREE|ASSUMPTION\(|"
     r"STEP_\d|END OF DRAFT|\[Diagram\]|\[Example\s*Diagram\]|"
-    r"Note:\s*This draft|\\boxed\{)",
+    r"Note:\s*This draft)",
     re.IGNORECASE,
 )
 
@@ -130,8 +130,7 @@ _SCRATCHPAD_LINE_RE = re.compile(
     r"\[Diagram\]|"
     r"\[Example\s*Diagram\]|"
     r"\[END\s+OF\s+DRAFT\]|"
-    r"Note:\s*This\s+draft|"
-    r"\\boxed\{)\s*$",
+    r"Note:\s*This\s+draft)\s*$",
     re.IGNORECASE,
 )
 
@@ -693,7 +692,10 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None, his
 
     # 1. Typhoon LLM (primary — reference repo uses this, fast + high quality)
     if settings.typhoon_api_key:
+        logger.info("Trying Typhoon LLM (model=%s)", settings.typhoon_llm_model)
         result = await _generate_typhoon(prompt, settings, history=history or [])
+        logger.info("Typhoon result: ok=%s error=%s text_len=%d",
+                     result.ok, result.error, len(result.text or ""))
         if result.ok:
             return result
         logger.warning("Typhoon LLM failed (%s); trying ThaiLLM", result.error)

@@ -489,7 +489,12 @@ async def homework_ocr(
 
     # ── Step 5: Call LLM with MATH_SYSTEM_PROMPT + low temperature ──
     # (reference: analyzeHomework lines 836-841)
+    import logging as _logging
+    _hw_log = _logging.getLogger("homework")
+    _hw_log.info("LLM prompt (%d chars): %.200s", len(llm_prompt), llm_prompt)
     llm = await pathumma.generate_reply(llm_prompt)
+    _hw_log.info("LLM result: ok=%s service=%s error=%s text_len=%d",
+                 llm.ok, llm.service, llm.error, len(llm.text or ""))
     if llm.ok and llm.text:
         reply = _wrap_plain_math(_fix_thai_choices(llm.text, answer))
         if len(reply) < 30:
@@ -497,6 +502,7 @@ async def homework_ocr(
     else:
         reply = f"## 📝 โจทย์และเฉลยจากภาพ\n\n{answer}"
 
+    llm_service = llm.service or "unknown"
     store.record_mood(user_id, "neutral", source="homework", channel="image")
     return AnalysisResponse(
         ok=True,
@@ -504,7 +510,7 @@ async def homework_ocr(
         reply=reply,
         detail=answer,
         transcript=ocr_text,
-        service="ocr+llm",
+        service=f"ocr+{llm_service}",
     )
 
 
