@@ -575,9 +575,13 @@ export async function analyzeSentiment(text: string): Promise<string> {
     const tag = tagMatch[1].trim().toLowerCase();
     if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล") ||
         tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
-        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า")) return "negative";
+        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
+        tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
+        tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
+        tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
     if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") ||
-        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย")) return "positive";
+        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
+        tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
   }
 
   // 2. SSense API (primary)
@@ -678,7 +682,7 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
   const visionQuery =
     "ดูใบหน้าของคนในภาพนี้แล้วบรรยายอารมณ์และความรู้สึกที่สังเกตเห็นเป็นภาษาไทย " +
     "สังเกตจากแววตา รอยยิ้ม สีหน้า และท่าทาง ตอบสั้น ๆ 1-2 ประโยค " +
-    "แล้วลงท้ายด้วย: [อารมณ์: <คำเดียว เช่น ยิ้มแย้ม / สดใส / เศร้า / เครียด / เหนื่อย / สงบ>]";
+    "แล้วลงท้ายด้วย: [อารมณ์: <คำเดียว เช่น ยิ้มแย้ม / สดใส / เศร้า / เครียด / เหนื่อย / สงบ / โกรธ / หดหู่ / กังวล / ผ่อนคลาย>]";
 
   let answer: string;
   try {
@@ -982,15 +986,19 @@ export function classifyMoodFromText(text: string): string {
     const tag = tagMatch[1].trim().toLowerCase();
     if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล") ||
         tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
-        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า")) return "negative";
+        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
+        tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
+        tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
+        tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
     if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") ||
-        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย")) return "positive";
+        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
+        tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
   }
 
   const lower = text.toLowerCase();
   const cleaned = lower.replace(/(ไม่มี|ไม่|ไร้|ปราศจาก)\s*(รอยยิ้ม|ยิ้ม|ความสุข|ความสดใส|อารมณ์ดี|ความผ่อนคลาย)/g, "");
 
-  if (/(เครียด|ปวดศีรษะ|หมอง|ตึง|กดดัน|กังวล|กลุ้ม|รับไม่ไหว|stress|เหนื่อย|อ่อนเพลีย|หมดแรง|ไม่มีแรง|เพลีย|นอนไม่หลับ|ล้า|tired|เศร้า|เสียใจ|ท้อแท้|ท้อใจ|สิ้นหวัง|หมดกำลังใจ|เหงา|โดดเดี่ยว|ผิดหวัง|sad)/.test(cleaned)) return "negative";
+  if (/(เครียด|ปวดศีรษะ|หมอง|ตึง|กดดัน|กังวล|กลุ้ม|รับไม่ไหว|stress|เหนื่อย|อ่อนเพลีย|หมดแรง|ไม่มีแรง|เพลีย|นอนไม่หลับ|ล้า|tired|เศร้า|เสียใจ|ท้อแท้|ท้อใจ|สิ้นหวัง|หมดกำลังใจ|เหงา|โดดเดี่ยว|ผิดหวัง|sad|โกรธ|หดหู่|หงุดหงิด|รำคาญ|เบื่อหน่าย|กลัว|วิตก|ขุ่นเคือง|เจ็บปวด|ทุกข์|ทุกข์ใจ|หน่ายใจ|angry|upset|frustrated)/.test(cleaned)) return "negative";
   if (/(ยิ้ม|สดใส|ร่าเริง|มีความสุข|อารมณ์ดี|ดีใจ|สนุก|เยี่ยม|ภูมิใจ|สุขใจ|สำเร็จ|เบิกบาน|เป็นมิตร|หัวเราะ|happy|ผ่อนคลาย|สบายใจ|สงบ|โล่งใจ|ปกติดี|calm|โอเค)/.test(cleaned)) return "positive";
 
   return "neutral";
