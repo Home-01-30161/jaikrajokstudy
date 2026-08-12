@@ -6,9 +6,10 @@
 # ============================================================
 
 variables:
-  TEAM:   "team07"
-  BASE:   "20060"
-  BASE_1: "20061"
+  TEAM:        "team07"
+  BASE:        "20060"
+  BASE_1:      "20061"
+  DOCKER_HOST: ""   # clear any runner-injected DOCKER_HOST (e.g. tcp://docker:2375)
 
 stages: [check, deploy, ops]
 
