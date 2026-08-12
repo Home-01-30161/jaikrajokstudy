@@ -1392,7 +1392,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   const lineUserId = currentUser?.id?.startsWith("usr_line_") ? currentUser.id.replace("usr_line_", "") : null;
 
   // Ref so saveWebMessage is always current inside useCallback closures
-  const lineUserIdRef = React.useRef<string | null>(lineUserId);
+  const lineUserIdRef = useRef<string | null>(lineUserId);
   lineUserIdRef.current = lineUserId;
 
   const saveWebMessage = (role: "user" | "bot", text: string) => {
