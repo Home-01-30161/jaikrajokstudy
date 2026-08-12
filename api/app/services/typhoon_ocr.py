@@ -1,16 +1,12 @@
-"""Typhoon OCR client (SCB 10X) - uses /v1/chat/completions with base64 image.
+"""Typhoon OCR client (SCB 10X) — /v1/ocr multipart (primary) + /v1/chat/completions (fallback).
 
-The /v1/ocr multipart endpoint wraps this internally but adds 100+ second latency
-because it defaults to max_tokens=16384. Calling /v1/chat/completions directly
-with max_tokens=4096 completes in ~1-5 seconds.
+Primary: /v1/ocr multipart endpoint — produces far better OCR with diagram descriptions
+         via <figure> blocks.  Tested: correctly reads 'u', '45°', '60°', full question.
+Fallback: /v1/chat/completions with base64 image — faster (1-5s) but often misses
+          diagram details, angles, and variable names.
 
 Model: typhoon-ocr (v1.5, recommended) with typhoon-ocr-preview (v1, legacy) fallback.
 Rate limit: 2 req/s, 20 req/min.
-
-NOTE: OpenCV has been removed from image_prep.py — all preprocessing now uses
-PIL only. This eliminates the opencv-python-headless dependency which was
-conflicting with the headless container environment and causing import errors
-that silently degraded OCR quality.
 """
 
 from __future__ import annotations
@@ -27,6 +23,7 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+_OCR_URL = "https://api.opentyphoon.ai/v1/ocr"
 _CHAT_URL = "https://api.opentyphoon.ai/v1/chat/completions"
 
 # Supported OCR models — try v1.5 first, fall back to v1 preview if quota exceeded.
@@ -109,16 +106,17 @@ async def extract_text_typhoon(
     filename: str = "image.jpg",
     user_prompt: str | None = None,
 ) -> ServiceResult:
-    """Extract text from image using Typhoon OCR via /v1/chat/completions.
+    """Extract text from image using Typhoon OCR.
 
-    Uses base64-encoded image in a vision message — much faster than the
-    /v1/ocr multipart endpoint (1-5s vs 100+s) because we control max_tokens.
+    Strategy:
+      1. Try /v1/ocr multipart endpoint (best quality, includes <figure> diagram descriptions)
+      2. Fall back to /v1/chat/completions with base64 (faster but lower diagram quality)
 
     Args:
         image_bytes: Raw image bytes (JPEG, PNG, or WebP).
         filename: Original filename (used for MIME type detection).
         user_prompt: Optional custom question about the image. If None, the
-                     default OCR extraction prompt is used as the user turn.
+                     default OCR extraction prompt is used.
     """
     settings = get_settings()
 
@@ -136,6 +134,144 @@ async def extract_text_typhoon(
             error="Empty image bytes",
         )
 
+    # Try /v1/ocr multipart first (much better quality for diagrams)
+    ocr_result = await _extract_via_ocr_endpoint(image_bytes, filename, settings)
+    if ocr_result.ok and (ocr_result.text or "").strip():
+        return ocr_result
+
+    logger.warning(
+        "Typhoon /v1/ocr failed (%s); falling back to /v1/chat/completions",
+        ocr_result.error,
+    )
+
+    # Fallback to /v1/chat/completions with base64
+    return await _extract_via_chat_endpoint(image_bytes, filename, user_prompt, settings)
+
+
+async def _extract_via_ocr_endpoint(
+    image_bytes: bytes,
+    filename: str,
+    settings,
+) -> ServiceResult:
+    """Extract text using /v1/ocr multipart endpoint (primary, best quality).
+
+    Response format:
+    {
+      "results": [
+        {
+          "success": true,
+          "filename": "image.jpg",
+          "message": {
+            "choices": [{"message": {"content": "..."}}]
+          }
+        }
+      ]
+    }
+    """
+    mime = _detect_mime(filename, image_bytes)
+    ext_map = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
+    ext = ext_map.get(mime, ".jpg")
+
+    headers = {
+        "Authorization": f"Bearer {settings.typhoon_api_key}",
+    }
+
+    last_error = "unknown"
+
+    for model in _OCR_MODELS:
+        data = {
+            "model": model,
+            "task_type": "default",
+            "max_tokens": "8192",
+            "temperature": "0.1",
+            "top_p": "0.6",
+            "repetition_penalty": "1.2",
+        }
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=60.0, verify=not settings.insecure_tls
+            ) as client:
+                resp = await client.post(
+                    _OCR_URL,
+                    headers=headers,
+                    data=data,
+                    files={"file": (f"image{ext}", image_bytes, mime)},
+                )
+
+                try:
+                    raw = resp.json()
+                except Exception:
+                    raw = {"text": resp.text}
+
+                if resp.status_code >= 400:
+                    err_msg = ""
+                    if isinstance(raw, dict):
+                        err_obj = raw.get("error") or {}
+                        if isinstance(err_obj, dict):
+                            err_msg = err_obj.get("message", "")
+                        elif isinstance(err_obj, str):
+                            err_msg = err_obj
+                    if not err_msg:
+                        err_msg = f"HTTP {resp.status_code}"
+                    logger.warning(
+                        "Typhoon /v1/ocr [%s] HTTP %s: %s",
+                        model, resp.status_code, str(raw)[:300],
+                    )
+                    last_error = err_msg
+                    if resp.status_code in (404, 422, 429):
+                        continue
+                    return ServiceResult(
+                        service="typhoon-ocr",
+                        ok=False,
+                        error=err_msg,
+                        raw=raw if isinstance(raw, dict) else {},
+                    )
+
+                raw_dict = raw if isinstance(raw, dict) else {}
+                extracted_text = _parse_ocr_response(raw_dict)
+
+                if not extracted_text:
+                    logger.warning("Typhoon /v1/ocr [%s] returned empty text", model)
+                    last_error = "empty response"
+                    continue
+
+                # Clean up: convert <figure> to [คำอธิบายแผนภาพ], strip CJK, etc.
+                extracted_text = _clean_ocr_text(extracted_text)
+                if not extracted_text:
+                    last_error = "empty after cleaning"
+                    continue
+
+                logger.info(
+                    "Typhoon /v1/ocr succeeded with model=%s (%d chars)",
+                    model, len(extracted_text),
+                )
+                return ServiceResult(
+                    service="typhoon-ocr",
+                    ok=True,
+                    text=extracted_text,
+                    raw=raw_dict,
+                )
+
+        except httpx.TimeoutException:
+            logger.warning("Typhoon /v1/ocr [%s] timed out", model)
+            last_error = "timeout"
+            continue
+        except Exception as exc:
+            logger.exception("Typhoon /v1/ocr [%s] call failed", model)
+            last_error = str(exc)
+            continue
+
+    return ServiceResult(service="typhoon-ocr", ok=False, error=last_error)
+
+
+async def _extract_via_chat_endpoint(
+    image_bytes: bytes,
+    filename: str,
+    user_prompt: str | None,
+    settings,
+) -> ServiceResult:
+    """Extract text using /v1/chat/completions with base64 image (fallback)."""
     mime = _detect_mime(filename, image_bytes)
     b64_image = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime};base64,{b64_image}"
@@ -148,11 +284,8 @@ async def extract_text_typhoon(
         "Content-Type": "application/json",
     }
 
-    # Build payload — system + user message with image attachment.
-    # The Typhoon OCR /v1/chat/completions endpoint is OpenAI-vision-compatible:
-    # image_url content blocks are supported in user messages.
     payload = {
-        "model": _OCR_MODELS[0],   # typhoon-ocr (v1.5)
+        "model": _OCR_MODELS[0],
         "messages": [
             {
                 "role": "system",
@@ -180,7 +313,6 @@ async def extract_text_typhoon(
 
     last_error = "unknown"
 
-    # Try primary model, then fall back to preview model on 404/422/quota errors.
     for model in _OCR_MODELS:
         payload["model"] = model
         try:
@@ -205,11 +337,10 @@ async def extract_text_typhoon(
                     if not err_msg:
                         err_msg = f"HTTP {resp.status_code}"
                     logger.warning(
-                        "Typhoon OCR [%s] HTTP %s: %s",
+                        "Typhoon chat [%s] HTTP %s: %s",
                         model, resp.status_code, str(raw)[:300],
                     )
                     last_error = err_msg
-                    # On model-not-found or quota errors, try next model
                     if resp.status_code in (404, 422, 429):
                         continue
                     return ServiceResult(
@@ -225,11 +356,11 @@ async def extract_text_typhoon(
                 )
 
                 if not extracted_text:
-                    logger.warning("Typhoon OCR [%s] returned empty text", model)
+                    logger.warning("Typhoon chat [%s] returned empty text", model)
                     last_error = "empty response"
                     continue
 
-                logger.info("Typhoon OCR succeeded with model=%s", model)
+                logger.info("Typhoon chat succeeded with model=%s", model)
                 return ServiceResult(
                     service="typhoon-ocr",
                     ok=True,
@@ -238,11 +369,11 @@ async def extract_text_typhoon(
                 )
 
         except httpx.TimeoutException:
-            logger.warning("Typhoon OCR [%s] timed out", model)
+            logger.warning("Typhoon chat [%s] timed out", model)
             last_error = "timeout"
             continue
         except Exception as exc:
-            logger.exception("Typhoon OCR [%s] call failed", model)
+            logger.exception("Typhoon chat [%s] call failed", model)
             last_error = str(exc)
             continue
 
@@ -403,6 +534,92 @@ async def describe_diagram_typhoon(
             continue
 
     return ServiceResult(service="typhoon-ocr-diagram", ok=False, error=last_error)
+
+
+def _clean_ocr_text(text: str) -> str:
+    """Clean up OCR output: convert <figure> blocks, strip CJK junk."""
+    # Strip markdown image placeholders
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+
+    # Convert <figure>...</figure> blocks to [คำอธิบายแผนภาพ] sections
+    def _figure_to_section(m: re.Match) -> str:
+        inner = m.group(1).strip()
+        if inner:
+            return f"\n[คำอธิบายแผนภาพ]\n{inner}\n"
+        return ""
+
+    text = re.sub(r"<figure>(.*?)</figure>", _figure_to_section, text, flags=re.DOTALL)
+
+    return _strip_cjk_lines(text.strip())
+
+
+def _parse_ocr_response(raw: dict) -> str:
+    """Parse the /v1/ocr multipart endpoint response.
+
+    Response format:
+    {
+      "results": [
+        {
+          "success": true,
+          "filename": "image.jpg",
+          "message": {
+            "choices": [{"message": {"content": "extracted text or JSON"}}]
+          }
+        }
+      ]
+    }
+    """
+    results = raw.get("results")
+    if not isinstance(results, list) or not results:
+        return ""
+
+    extracted_parts = []
+    for page_result in results:
+        if not isinstance(page_result, dict):
+            continue
+        if not page_result.get("success"):
+            err = page_result.get("error", "unknown")
+            logger.warning("OCR page failed: %s", err)
+            continue
+
+        message = page_result.get("message")
+        if not isinstance(message, dict):
+            continue
+
+        choices = message.get("choices")
+        if not isinstance(choices, list) or not choices:
+            continue
+
+        content = ""
+        first_choice = choices[0]
+        if isinstance(first_choice, dict):
+            msg = first_choice.get("message") or {}
+            if isinstance(msg, dict):
+                content = msg.get("content") or ""
+
+        if not content:
+            continue
+
+        content = content.strip()
+
+        # Try to parse JSON response {"natural_text": "..."}
+        if content.startswith("{"):
+            try:
+                parsed = _json.loads(content)
+                if isinstance(parsed, dict):
+                    for key in ("natural_text", "text", "markdown", "content", "result"):
+                        val = parsed.get(key)
+                        if isinstance(val, str) and val.strip():
+                            content = val.strip()
+                            break
+                    else:
+                        continue  # All keys empty
+            except (_json.JSONDecodeError, ValueError):
+                pass
+
+        extracted_parts.append(content)
+
+    return "\n".join(extracted_parts)
 
 
 def _parse_chat_response(raw: dict) -> str:

@@ -427,9 +427,18 @@ async def homework_ocr(
 
     # ── Step 2: Combine OCR text + diagram description ──
     # (reference: analyzeHomework line 779)
+    # With the /v1/ocr endpoint, the OCR text may already contain
+    # [คำอธิบายแผนภาพ] from <figure> blocks. Only append the separate
+    # diagram description if the OCR text doesn't already include one.
     answer = ocr_text[:_MAX_OCR_CHARS]
-    if diagram_text:
+    has_embedded_diagram = "[คำอธิบายแผนภาพ]" in answer
+    if diagram_text and not has_embedded_diagram:
         answer += f"\n\n[คำอธิบายแผนภาพ]\n{diagram_text[:2000]}"
+    elif diagram_text and has_embedded_diagram:
+        # Append as supplementary info if the embedded one is short
+        embedded_diag_len = len(answer.split("[คำอธิบายแผนภาพ]", 1)[-1])
+        if embedded_diag_len < 100 and len(diagram_text) > embedded_diag_len:
+            answer += f"\n\n[คำอธิบายแผนภาพเพิ่มเติม]\n{diagram_text[:2000]}"
 
     # ── Step 3: Detect multiple-choice vs open-ended ──
     # (reference: analyzeHomework lines 786-792)

@@ -562,10 +562,10 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
     }
     try:
         verify = not settings.insecure_tls
-        # Hard 25s per-request timeout: ThaiLLM is the primary LLM and must
-        # complete well within LINE's ~50s reply window (face+OCR already took ~15s).
-        # If it times out, we fall through to TokenMind → textqa.
-        async with httpx.AsyncClient(timeout=25.0, verify=verify) as client:
+        # 45s per-request timeout: ThaiLLM with Qwen3-8b-think needs time for
+        # reasoning on complex physics/math problems.  For LINE bot, the overall
+        # 45s deadline in web_chat.py guards against exceeding LINE's reply window.
+        async with httpx.AsyncClient(timeout=45.0, verify=verify) as client:
             resp = await client.post(url, headers=headers, json=payload)
             try:
                 raw = resp.json()
@@ -670,10 +670,9 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
     }
     try:
         verify = not settings.insecure_tls
-        # Hard 20s per-request timeout: TokenMind is the fallback after ThaiLLM.
-        # Together with ThaiLLM's 25s, total LLM budget is 45s which still fits
-        # inside LINE's ~50s reply window when face+OCR complete quickly.
-        async with httpx.AsyncClient(timeout=20.0, verify=verify) as client:
+        # 40s per-request timeout: TokenMind fallback also needs time for
+        # Qwen3 reasoning.  Web endpoint has its own overall deadline.
+        async with httpx.AsyncClient(timeout=40.0, verify=verify) as client:
             resp = await client.post(url, headers=headers, json=payload)
             try:
                 raw = resp.json()
@@ -757,7 +756,7 @@ async def _generate_textqa(prompt: str, settings) -> ServiceResult:
     url = settings.pathumma_endpoint or PATHUMMA_TEXTQA_URL
     try:
         async with httpx.AsyncClient(
-            timeout=15.0, verify=not settings.insecure_tls
+            timeout=25.0, verify=not settings.insecure_tls
         ) as client:
             resp = await client.post(url, headers=headers, files=form)
             try:
