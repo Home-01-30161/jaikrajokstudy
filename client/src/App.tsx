@@ -1394,10 +1394,6 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   // Ref so saveWebMessage is always current inside useCallback closures
   const lineUserIdRef = useRef<string | null>(lineUserId);
   lineUserIdRef.current = lineUserId;
-  const activeSessionIdRef = useRef<string>(activeSessionId);
-  activeSessionIdRef.current = activeSessionId;
-  const sessionsRef2 = useRef<ChatSession[]>(sessions);
-  sessionsRef2.current = sessions;
 
   const saveWebMessage = (role: "user" | "bot", text: string) => {
     const uid = lineUserIdRef.current;
@@ -1443,6 +1439,12 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     ];
   });
   const [activeSessionId, setActiveSessionId] = useState<string>(() => sessions[0]?.id || `session_${userKey}_1`);
+
+  // Refs for saveWebMessage — always current, no stale closure issues
+  const activeSessionIdRef = useRef<string>(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
+  const sessionsRef2 = useRef<ChatSession[]>(sessions);
+  sessionsRef2.current = sessions;
 
   useEffect(() => {
     try {
