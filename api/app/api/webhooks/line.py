@@ -1,4 +1,4 @@
-﻿"""LINE Messaging API webhook.
+"""LINE Messaging API webhook.
 
 Supports all four input modes described in the proposal (p.4):
   - Text   -> Sentiment + Pathumma LLM

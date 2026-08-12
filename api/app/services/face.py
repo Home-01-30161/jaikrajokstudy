@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import json as _json
+import re
 
 import httpx
 
@@ -68,15 +70,22 @@ async def _analyze_typhoon(image_bytes: bytes, settings) -> ServiceResult:
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "typhoon-ocr-preview",
+        "model": "typhoon-v1.5-vision-instruct",
         "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are an emotion analysis assistant. "
+                    "Respond ONLY with a valid JSON object — no markdown fences, no extra text."
+                ),
+            },
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": _EMOTION_PROMPT},
                     {"type": "image_url", "image_url": {"url": data_url}},
+                    {"type": "text", "text": _EMOTION_PROMPT},
                 ],
-            }
+            },
         ],
         "max_tokens": 256,
         "temperature": 0.1,
@@ -129,8 +138,6 @@ async def _analyze_typhoon(image_bytes: bytes, settings) -> ServiceResult:
 
 def _parse_typhoon_response(raw: dict) -> dict | None:
     """Extract JSON from Typhoon chat response."""
-    import json as _json
-    import re
 
     choices = raw.get("choices")
     if not isinstance(choices, list) or not choices:

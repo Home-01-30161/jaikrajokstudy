@@ -1,8 +1,9 @@
 """OCR client for JaiKrajok homework photos.
 
-Fallback chain: Typhoon OCR (SCB 10X) → AI for Thai document OCR → AI for Thai VQA.
-
-Typhoon OCR is tried first to avoid AI for Thai /handwritten "roi" errors.
+Fallback chain:
+  1. Typhoon OCR (SCB 10X) — fast, handles complex diagrams and Thai text
+  2. AI for Thai Document OCR (/ocr, /ocr/tocr, /ocr/deepocr)
+  3. AI for Thai VQA — final fallback for images the other services reject
 """
 
 from __future__ import annotations
@@ -61,8 +62,9 @@ async def transcribe_image(image_bytes: bytes, user_prompt: str | None = None) -
         logger.warning("Image preprocessing failed: %s", e)
         # Continue with original image if preprocessing fails
 
-    # Try Typhoon OCR first (avoids AI for Thai "roi" errors)
-    typhoon = await extract_text_typhoon(image_bytes, user_prompt=user_prompt)
+    # Try Typhoon OCR first (avoids AI for Thai "roi" errors).
+    # Pass filename hint so MIME detection works correctly.
+    typhoon = await extract_text_typhoon(image_bytes, filename="image.jpg", user_prompt=user_prompt)
     if typhoon.ok and (typhoon.text or "").strip():
         return typhoon
     errors.append(f"typhoon: {typhoon.error}")
@@ -219,65 +221,6 @@ def _extract_vqa_text(raw: dict) -> str | None:
             if parts:
                 return " ".join(p.strip() for p in parts if p.strip())
     return None
-
-
-async def extract_text(image_bytes: bytes) -> ServiceResult:
-    """Extract text from an image using AI for Thai OCR API.
-
-    Handles both handwritten and printed Thai text.
-    """
-    settings = get_settings()
-    if not settings.aiforthai_api_key:
-        return ServiceResult(service="ocr", ok=False, error="Missing AIFORTHAI_API_KEY")
-
-    url = f"{settings.aiforthai_base_url.rstrip('/')}/handwritten"
-    headers = {"Apikey": settings.aiforthai_api_key, "X-lib": "ai4thai-lib"}
-    files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
-
-    try:
-        async with httpx.AsyncClient(
-            timeout=30.0, verify=not settings.insecure_tls
-        ) as client:
-            resp = await client.post(url, headers=headers, files=files)
-            try:
-                raw = resp.json()
-            except Exception:
-                raw = {"text": resp.text}
-
-            if resp.status_code >= 400:
-                logger.warning("OCR HTTP %s: %s", resp.status_code, resp.text[:300])
-                raw_dict = raw if isinstance(raw, dict) else {}
-                api_msg = raw_dict.get("message") or raw_dict.get("error") or ""
-                return ServiceResult(
-                    service="ocr",
-                    ok=False,
-                    error=f"HTTP {resp.status_code}{': ' + api_msg if api_msg else ''}",
-                    raw=raw_dict,
-                )
-
-            raw_dict = raw if isinstance(raw, dict) else {}
-            if raw_dict.get("errmsg"):
-                err = str(raw_dict["errmsg"])[:300]
-                logger.warning("OCR server error: %s", err)
-                return ServiceResult(
-                    service="ocr",
-                    ok=False,
-                    error=err,
-                    raw=raw_dict,
-                )
-
-            text = _extract_text(raw_dict)
-            return ServiceResult(
-                service="ocr",
-                ok=True,
-                text=text,
-                raw=raw_dict,
-            )
-    except httpx.TimeoutException:
-        return ServiceResult(service="ocr", ok=False, error="timeout")
-    except Exception as exc:
-        logger.exception("OCR call failed")
-        return ServiceResult(service="ocr", ok=False, error=str(exc))
 
 
 def _extract_text(raw: dict) -> str | None:
