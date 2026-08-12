@@ -18,6 +18,8 @@ const WELCOME =
   "สวัสดี เราคือ JaiKrajok (ใจกระจก) เพื่อนช่วยเรียนที่ใส่ใจอารมณ์\n\n" +
   "พิมพ์คำถามเรื่องเรียนหรือบอกความรู้สึกมาได้เลยนะ";
 
+const FALLBACK = "ขออภัยค่ะ ระบบไม่พร้อมตอบขณะนี้ ลองใหม่อีกครั้งนะ";
+
 function getRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -45,16 +47,18 @@ async function llmReply(text) {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: text },
         ],
-        max_tokens: 1024,
+        max_tokens: 512,
         temperature: 0.4,
       }),
-      signal: AbortSignal.timeout(25000),
+      // Stay well within Vercel's 10s hobby limit
+      signal: AbortSignal.timeout(7000),
     });
     if (!res.ok) return null;
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content || "";
     return content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() || null;
-  } catch {
+  } catch (e) {
+    console.error("LLM error:", e?.message);
     return null;
   }
 }
@@ -82,19 +86,22 @@ async function saveToSupabase(lineUserId, role, text, source) {
 
 async function lineReply(replyToken, text) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  if (!token) return;
-  try {
-    await fetch("https://api.line.me/v2/bot/message/reply", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        replyToken,
-        messages: [{ type: "text", text: text.slice(0, 5000) }],
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-  } catch {
-    // best-effort
+  if (!token) {
+    console.error("LINE_CHANNEL_ACCESS_TOKEN not set");
+    return;
+  }
+  const res = await fetch("https://api.line.me/v2/bot/message/reply", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      replyToken,
+      messages: [{ type: "text", text: text.slice(0, 5000) }],
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("LINE reply failed:", res.status, err);
   }
 }
 
@@ -114,12 +121,9 @@ export default async function handler(req, res) {
   const signature = req.headers["x-line-signature"] || "";
 
   if (!verifySignature(rawBody, signature, secret)) {
-    // Log mismatch details to Vercel logs for debugging
-    const expected = "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
-    console.error("Signature mismatch. Got:", signature, "Expected:", expected, "Body length:", rawBody.length);
-    // Return 200 anyway so LINE accepts the webhook URL — fix secret then re-enable
-    // res.status(400).json({ error: "Invalid signature" });
-    // return;
+    console.error("Sig mismatch. body length:", rawBody.length, "sig:", signature);
+    res.status(400).json({ error: "Invalid signature" });
+    return;
   }
 
   let body;
@@ -130,9 +134,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Always 200 first — LINE requires it before the function times out
-  res.status(200).json({ ok: true });
-
+  // Process all events BEFORE sending 200 — after res.end() Vercel kills the function
   for (const event of body.events || []) {
     if (event.type === "follow") {
       await lineReply(event.replyToken, WELCOME);
@@ -142,15 +144,18 @@ export default async function handler(req, res) {
 
     const userId = event.source?.userId || "unknown";
     const text = event.message.text || "";
-    const isCrisis = CRISIS_KEYWORDS.some((k) => text.includes(k));
-    const reply = isCrisis
-      ? CRISIS_REPLY
-      : (await llmReply(text)) || "ขออภัยค่ะ ระบบไม่พร้อมตอบขณะนี้ ลองใหม่อีกครั้งนะ";
 
+    const isCrisis = CRISIS_KEYWORDS.some((k) => text.includes(k));
+    const reply = isCrisis ? CRISIS_REPLY : (await llmReply(text)) || FALLBACK;
+
+    // Save and reply in parallel
     await Promise.all([
       saveToSupabase(userId, "user", text, "line"),
       saveToSupabase(userId, "bot", reply, "line"),
       lineReply(event.replyToken, reply),
     ]);
   }
+
+  // Send 200 AFTER all processing is done
+  res.status(200).json({ ok: true });
 }
