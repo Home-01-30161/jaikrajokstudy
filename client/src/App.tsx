@@ -3371,6 +3371,7 @@ export default function App() {
               const histRes = await fetch(`/api/history?line_user_id=${encodeURIComponent(profile.userId)}`);
               if (histRes.ok) {
                 const { messages } = await histRes.json() as { messages: { role: string; text: string; source: string; created_at: string }[] };
+                console.log("[login] history fetched:", messages.length, "last:", messages[messages.length-1]?.created_at, messages[messages.length-1]?.text?.slice(0,40));
                 if (messages.length > 0) {
                   const chatMsgs: ChatMsg[] = messages.map((m) => ({
                     id: "line_" + m.created_at + "_" + Math.random().toString(36).slice(2),
