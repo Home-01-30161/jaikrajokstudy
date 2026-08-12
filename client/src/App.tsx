@@ -1663,6 +1663,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim()) return;
     if (overrideText === undefined) setInputText("");
+    console.log("[sendMessage] currentUser:", currentUser?.id, "lineUserId:", lineUserId);
 
     // Read history from ref — always up-to-date, no closure timing issues
     const currentHistory = messagesRef.current
