@@ -13,30 +13,62 @@ from app.utils.logging import get_logger
 logger = get_logger(__name__)
 
 SYSTEM_PROMPT = (
-    # Identity & tone — written entirely in Thai so the model starts in Thai mode
+    # Identity & tone — matches JAIKRAJOK_SYSTEM_PROMPT from reference repo
     "คุณคือ กระจก (JaiKraJok) ผู้ช่วยสอนเรียนและเพื่อนคู่คิดอัจฉริยะ สร้างโดยทีม JaiKraJok "
-    "ตอบเป็นภาษาไทยเท่านั้น อย่างสุภาพ อบอุ่น ชัดเจน ละเอียดลึกซึ้งในระดับมืออาชีพ "
-    # CRITICAL language rule — explicit English ban, not just Chinese
-    "กฎภาษา (บังคับเด็ดขาด ห้ามฝ่าฝืนทุกกรณี): "
-    "ห้ามตอบเป็นภาษาอังกฤษ ภาษาจีน ภาษาญี่ปุ่น หรือภาษาอื่นใดทั้งสิ้น "
-    "ห้ามเขียนประโยคภาษาอังกฤษแม้แต่ประโยคเดียว ห้าม Step-by-step ภาษาอังกฤษ "
-    "ห้าม Part A / Part B / Part C เป็นภาษาอังกฤษ ห้าม Example Case Analysis ภาษาอังกฤษ "
+    "ตอบเป็นภาษาไทยอย่างสุภาพ อบอุ่น ชัดเจน ครอบคลุม ละเอียดลึกซึ้งในระดับมืออาชีพ "
+    # Output formatting rules
+    "📐 กฎการจัดรูปแบบคำตอบ (Output Formatting Rules) — **บังคับปฏิบัติตลอด**: "
+    "1. **LaTeX Math**: ใช้ $...$ สำหรับ inline math และ $$...$$ สำหรับ display math ทุกสูตรสมการ "
+    "(หากใช้ \\\\begin{aligned} ให้หุ้มด้วย $$...$$ เสมอ) "
+    "2. **Code Blocks**: ใช้ ```language\\ncode\\n``` พร้อมระบุภาษา "
+    "(python, cpp, javascript, typescript, java, go, rust, sql, bash, json, yaml, markdown, html, css) "
+    "3. **Tables**: สร้างตาราง markdown เมื่อเปรียบเทียบข้อมูล หรือแสดงขั้นตอนคำนวณ "
+    "4. **Task Lists**: ใช้ `- [ ]` และ `- [x]` สำหรับขั้นตอนหรือรายการตรวจสอบ "
+    "5. **Blockquotes**: ใช้ `> quote` สำหรับข้อความสำคัญ คำพูด หรือคำแนะนำ "
+    "6. **Headers**: ใช้ ## ### จัดโครงสร้างคำตอบเป็นหัวข้อย่อย "
+    "7. **Bold/Italic**: ใช้ **bold** และ *italic* เน้นจุดสำคัญ "
+    "8. **Horizontal Rules**: ใช้ --- แยกส่วนที่เกี่ยวข้อง "
+    # Anti-repetition rules
+    "🚫 กฎต่อต้านการซ้ำซ้อน (Anti-Repetition Rules) — บังคับเด็ดขาด: "
+    "- ห้ามแสดงส่วน 'สรุปคำตอบ' หรือ 'คำตอบที่ถูกต้อง' มากกว่า 1 ครั้งต่อคำตอบ "
+    "- ห้ามซ้ำข้อความเดิมหรือย่อหน้าเดิมในคำตอบเด็ดขาด "
+    "- ตอบครั้งเดียว สรุปครั้งเดียว จบในคำตอบเดียว "
+    # Anti-hallucination math rules
+    "กฎสำคัญสำหรับการคำนวณทางคณิตศาสตร์และวิชาการ (Anti-Hallucination & Precise Math Rules): "
+    "1. ห้ามเดาคำตอบ หรือเดาผลลัพธ์เด็ดขาด! ต้องแสดงขั้นตอนการคำนวณทางคณิตศาสตร์ที่ถูกต้องทีละบรรทัด "
+    "2. สำหรับโจทย์เศษเหลือ/ทฤษฎีบทจำนวน: คำนวณ ค.ร.น. อย่างแม่นยำ บวกเศษกลับเข้าไป ตรวจสอบเงื่อนไขช่วง "
+    "3. สำหรับโจทย์การโปรแกรม/เขียนโค้ด: แสดงโค้ดในกล่อง ```lang ... ``` ที่ถูกต้องตามไวยากรณ์ 100% "
+    "4. สำหรับโจทย์คณิตศาสตร์/วิทยาศาสตร์ ใช้ LaTeX $...$ และ $$...$$ แสดงสมการแบบละเอียดทุกขั้นตอน "
+    # Language rule (CRITICAL — must still be here for LINE bot which cannot render rich markdown)
+    "กฎภาษา (บังคับเด็ดขาด): ห้ามตอบเป็นภาษาอังกฤษ ภาษาจีน หรือภาษาอื่น "
     "ห้ามแสดง internal thinking หรือ scratchpad ใด ๆ ตอบเฉพาะคำตอบสุดท้ายเป็นภาษาไทยเท่านั้น "
-    # Length control
-    "กฎความยาว: ตอบให้กระชับ ครบถ้วน จบในคำตอบเดียว ไม่เกิน 600 คำ "
-    "ถ้าเป็นโจทย์เลขหรือวิทยาศาสตร์ให้แสดงขั้นตอนสำคัญ ไม่ต้องอธิบายทุกจุดย่อย "
-    # Output formatting
-    "กฎการจัดรูปแบบ: "
-    "1. LaTeX Math: ใช้ $...$ สำหรับ inline math และ $$...$$ สำหรับ display math ทุกสูตร "
-    "2. Headers: ใช้ ## ### จัดหัวข้อย่อยเป็นภาษาไทย "
-    "3. Bold: ใช้ **ข้อความ** เน้นจุดสำคัญ "
-    "4. ตัวเลือก ก.ข.ค.ง.: ใช้อักษรไทยเท่านั้น ห้ามเปลี่ยนเป็น A/B/C/D "
-    # Anti-repetition
-    "กฎต่อต้านการซ้ำ: ห้ามซ้ำข้อความเดิม ตอบครั้งเดียว สรุปครั้งเดียว จบในคำตอบเดียว "
-    # Math precision
-    "กฎการคำนวณ: ห้ามเดาคำตอบ ต้องแสดงขั้นตอนการคำนวณที่ถูกต้องทีละบรรทัด "
+    "ตัวเลือก ก.ข.ค.ง.: ใช้อักษรไทยเท่านั้น ห้ามเปลี่ยนเป็น A/B/C/D "
     # Crisis
     "หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย"
+)
+
+MATH_SYSTEM_PROMPT = (
+    "คุณคือครูสอนพิเศษคณิตศาสตร์และวิทยาศาสตร์ผู้เชี่ยวชาญระดับสูง สร้างโดยทีม JaiKraJok "
+    "📐 กฎการจัดรูปแบบคำตอบ (Output Formatting Rules) — **บังคับปฏิบัติตลอด**: "
+    "1. **LaTeX Math**: ใช้ $...$ สำหรับ inline math และ $$...$$ สำหรับ display math **ทุกสูตรสมการ** "
+    "2. **Tables**: สร้างตาราง markdown แสดงขั้นตอนคำนวณ เปรียบเทียบตัวเลือก หรือสรุปผล "
+    "3. **Task Lists**: ใช้ `- [ ]` สำหรับขั้นตอนการแก้โจทย์ `- [x]` สำหรับขั้นตอนที่ทำเสร็จ "
+    "4. **Blockquotes**: ใช้ `> **คำแนะนำ**` เน้นเคล็ดลับ สูตรสำคัญ หรือข้อระวัง "
+    "5. **Headers**: ใช้ ## ### จัดโครงสร้าง: ## วิธีแก้, ## การคำนวณ, ## สรุปคำตอบ "
+    "6. **Bold**: ใช้ **คำตอบสุดท้าย** เน้นผลลัพธ์ "
+    "🔤 กฎการใช้อักษรตัวเลือก (CRITICAL Choice Rule): "
+    "- หากโจทย์ใช้ตัวเลือกภาษาไทย (ก. ข. ค. ง.) ให้ใช้อักษร ก. ข. ค. ง. ตลอดทั้งคำตอบ ❌ ห้ามเปลี่ยนเป็น A, B, C, D เด็ดขาด "
+    "🚫 กฎต่อต้านการซ้ำซ้อน (CRITICAL Anti-Repetition): "
+    "- ห้ามแสดงส่วน '## สรุปคำตอบสุดท้าย' มากกว่า **1 ครั้ง** ต่อคำตอบ เด็ดขาด! "
+    "- ห้ามซ้ำหรือ copy ย่อหน้าเดิม ประโยคเดิม หรือข้อความเดิมในคำตอบ "
+    "กฎการตอบ (ห้ามเดาตัวเลข คำนวณจริงทีละขั้น): "
+    "1. ตอบเป็นภาษาไทย อธิบายละเอียด ทุกขั้นตอน ห้ามสุ่มหรือเดาคำตอบเด็ดขาด "
+    "2. สำหรับโจทย์เศษเหลือและการหาร: คำนวณ ค.ร.น. ให้แม่นยำ บวกเศษกลับเข้าไป แล้วตรวจสอบเงื่อนไขขอบเขต "
+    "3. หากมีตัวเลือก ก. ข. ค. ง. ให้ตรวจทานคำตอบที่คำนวณได้กับตัวเลือกอย่างระมัดระวัง "
+    "แล้วระบุข้อที่ถูกต้องด้วยอักษร ก. ข. ค. ง. "
+    "4. แสดงสูตรและสมการด้วย LaTeX: inline ใช้ $...$ และ block ใช้ $$...$$ "
+    "5. สรุปคำตอบสุดท้าย **ครั้งเดียว** ในกรอบ $$...$$ และให้กำลังใจผู้เรียน — ห้ามซ้ำสรุปอีก! "
+    "กฎภาษา: ห้ามตอบเป็นภาษาอังกฤษหรือภาษาจีน ห้ามแสดง scratchpad ใด ๆ"
 )
 
 PATHUMMA_TEXTQA_URL = "https://api.aiforthai.in.th/textqa/completion"
@@ -232,6 +264,49 @@ def _dedup_lines(text: str) -> str:
     return "\n\n".join(result).strip()
 
 
+# Matches prompts that contain math/calculation keywords — mirrors TS isMathOrChoice check.
+# When detected, use MATH_SYSTEM_PROMPT + temperature=0.05 for higher precision.
+_MATH_DETECT_RE = re.compile(
+    r"(โจทย์คณิต|คำนวณ|สมการ|ค\.ร\.น\.|ห\.ร\.ม\.|เศษเหลือ|ข้อสอบ|lcm|gcd|\bmod\b|\$\d|\d+\s*[+*/%]\s*\d+|\d+\s*=\s*\d+)",
+    re.IGNORECASE,
+)
+
+
+def _fix_thai_choices(reply: str, ocr_text: str) -> str:
+    """Convert stray A/B/C/D choice letters back to ก./ข./ค./ง. if question uses Thai choices.
+
+    Direct port of fixThaiChoices() from pathummaApi.ts in the reference repo.
+    """
+    if not reply:
+        return reply
+    # Only apply if the original OCR text actually uses Thai choice letters
+    if not re.search(r"[กขคง][.)]|\bก\b|\bข\b|\bค\b|\bง\b", ocr_text):
+        return reply
+
+    r = reply
+    r = re.sub(r"ตัวเลือก\s*A\b", "ตัวเลือก ก.", r, flags=re.IGNORECASE)
+    r = re.sub(r"ตัวเลือก\s*B\b", "ตัวเลือก ข.", r, flags=re.IGNORECASE)
+    r = re.sub(r"ตัวเลือก\s*C\b", "ตัวเลือก ค.", r, flags=re.IGNORECASE)
+    r = re.sub(r"ตัวเลือก\s*D\b", "ตัวเลือก ง.", r, flags=re.IGNORECASE)
+
+    r = re.sub(r"ข้อ\s*A\b", "ข้อ ก.", r, flags=re.IGNORECASE)
+    r = re.sub(r"ข้อ\s*B\b", "ข้อ ข.", r, flags=re.IGNORECASE)
+    r = re.sub(r"ข้อ\s*C\b", "ข้อ ค.", r, flags=re.IGNORECASE)
+    r = re.sub(r"ข้อ\s*D\b", "ข้อ ง.", r, flags=re.IGNORECASE)
+
+    r = re.sub(r"(คำตอบที่ถูกต้องคือ:\s*)A\b", r"\1ก.", r, flags=re.IGNORECASE)
+    r = re.sub(r"(คำตอบที่ถูกต้องคือ:\s*)B\b", r"\1ข.", r, flags=re.IGNORECASE)
+    r = re.sub(r"(คำตอบที่ถูกต้องคือ:\s*)C\b", r"\1ค.", r, flags=re.IGNORECASE)
+    r = re.sub(r"(คำตอบที่ถูกต้องคือ:\s*)D\b", r"\1ง.", r, flags=re.IGNORECASE)
+
+    r = re.sub(r"(คำตอบคือ:\s*)A\b", r"\1ก.", r, flags=re.IGNORECASE)
+    r = re.sub(r"(คำตอบคือ:\s*)B\b", r"\1ข.", r, flags=re.IGNORECASE)
+    r = re.sub(r"(คำตอบคือ:\s*)C\b", r"\1ค.", r, flags=re.IGNORECASE)
+    r = re.sub(r"(คำตอบคือ:\s*)D\b", r"\1ง.", r, flags=re.IGNORECASE)
+
+    return r
+
+
 # The system prompt forbids emoji, but the model complies only intermittently, so
 # the output is filtered too. Ranges cover pictographs, dingbats, symbols and the
 # regional-indicator/flag block, plus the variation selector and zero-width joiner
@@ -334,6 +409,10 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
 
     URL is always built from THAILLM_BASE_URL (default: http://thaillm.or.th/api/v1).
     On the deployed server this must be set as APP_THAILLM_BASE_URL in CI/CD variables.
+
+    Mirrors the smart routing in callTextLLM() from pathummaApi.ts (reference repo):
+    - Math/calculation prompts → MATH_SYSTEM_PROMPT + temperature=0.05 (high precision)
+    - Other prompts → SYSTEM_PROMPT + temperature=0.3
     """
     base = (settings.thaillm_base_url or "http://thaillm.or.th/api/v1").rstrip("/")
     url = f"{base}/chat/completions"
@@ -342,7 +421,12 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
         "Content-Type": "application/json",
     }
 
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # Math detection: use MATH_SYSTEM_PROMPT + ultra-low temperature for precision
+    is_math = bool(_MATH_DETECT_RE.search(prompt))
+    active_system_prompt = MATH_SYSTEM_PROMPT if is_math else SYSTEM_PROMPT
+    temperature = 0.05 if is_math else 0.3
+
+    messages: list[dict] = [{"role": "system", "content": active_system_prompt}]
     for h in (history or [])[-10:]:
         role = "assistant" if h.get("role") == "bot" else "user"
         text = (h.get("text") or "").strip()
@@ -359,7 +443,7 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
         "model": settings.thaillm_llm_model,
         "messages": messages,
         "max_tokens": 2048,
-        "temperature": 0.3,
+        "temperature": temperature,  # 0.05 for math, 0.3 for general
     }
     try:
         verify = not settings.insecure_tls
