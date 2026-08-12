@@ -271,12 +271,14 @@ _OCR_PROMPT = (
     "---\n"
     "{text}\n"
     "---\n\n"
-    "กฎสำคัญ:\n"
-    "1. ตอบเป็นภาษาไทยเท่านั้น ห้ามตอบเป็นภาษาจีน ภาษาญี่ปุ่น หรือภาษาอังกฤษล้วน\n"
-    "2. อธิบายเฉพาะโจทย์ที่อ่านได้จากข้อความด้านบนเท่านั้น ห้ามคิดเรื่องอื่น\n"
-    "3. อธิบายแนวคิดและวิธีคิดเป็นขั้นตอน ไม่เฉลยคำตอบตรง ๆ\n"
-    "4. ถ้าข้อความที่อ่านได้ไม่ชัดเจน ให้บอกว่าอ่านได้อะไรบ้างและถามนักเรียนให้ชัดขึ้น\n"
-    "5. ตอบกระชับ ไม่เกิน 400 คำ"
+    "คำสั่ง: อธิบายโจทย์ที่อ่านได้ด้านบนเป็น**ภาษาไทยเท่านั้น**\n"
+    "กฎเด็ดขาด:\n"
+    "1. ตอบเป็นภาษาไทยเท่านั้น ห้ามตอบเป็นภาษาอังกฤษ ภาษาจีน หรือภาษาอื่น\n"
+    "2. ห้าม Step-by-step ภาษาอังกฤษ ห้าม Part A/B/C ห้าม EXAMPLE CASE\n"
+    "3. อธิบายเฉพาะโจทย์ที่อ่านได้จากข้อความด้านบนเท่านั้น ห้ามคิดเรื่องอื่น\n"
+    "4. อธิบายแนวคิดและวิธีคิดเป็นขั้นตอนภาษาไทย ไม่เฉลยคำตอบตรง ๆ\n"
+    "5. ถ้าข้อความไม่ชัดเจน ให้บอกว่าอ่านได้อะไรบ้างและถามนักเรียนเพิ่มเติม\n"
+    "6. ตอบกระชับ ไม่เกิน 400 คำ"
 )
 _NO_FACE_PHRASE = (
     "กระจกยังไม่เห็นใบหน้าในภาพนี้ ลองถ่ายให้เห็นหน้าชัด ๆ "
@@ -368,16 +370,31 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
         llm = await pathumma.generate_reply(_OCR_PROMPT.format(text=extracted))
         if llm.ok and llm.text:
             reply_text = strip_latex_for_line(llm.text)
-            # Sanity check: reject hallucinated replies that contain Chinese/Japanese
-            # characters or have no Thai content — fall back to raw OCR text instead
+            # Reject hallucinated replies: Chinese/Japanese, no Thai, OR English-dominant.
+            # The xcv.jpg screenshot showed a 100%-English hallucination ("Step-by-step",
+            # "Part B", "EXAMPLE CASE") that slipped through the old Chinese-only guard.
             import re as _re
             has_chinese = bool(_re.search(r"[一-鿿぀-ヿ]", reply_text))
             has_thai = bool(_re.search(r"[฀-๿]", reply_text))
-            if has_chinese or not has_thai:
+            # English-dominant: hard markers OR latin >> thai ratio
+            _eng_markers = bool(_re.search(
+                r"(Step-by-step|Part [A-Z][\s：:]|EXAMPLE CASE|Suppose\s+\w+|"
+                r"Determine[sd]? [Ww]hether|ObjectiveFunction|Imagine Scenario|"
+                r"TheirHeightsMust|STEPS THREE)",
+                reply_text, _re.IGNORECASE,
+            ))
+            _latin = len(_re.findall(r"[A-Za-z]", reply_text))
+            _thai_cnt = len(_re.findall(r"[฀-๿]", reply_text))
+            _english_dominant = (
+                _eng_markers
+                or (not has_thai)
+                or (len(reply_text) > 200 and _thai_cnt > 0 and _latin > _thai_cnt * 3)
+            )
+            if has_chinese or _english_dominant:
                 logger.warning(
-                    "LLM reply for OCR prompt contained hallucination "
-                    "(chinese=%s, has_thai=%s) — showing raw OCR text",
-                    has_chinese, has_thai,
+                    "LLM reply for OCR prompt is hallucinated "
+                    "(chinese=%s english_dominant=%s has_thai=%s) — showing raw OCR text",
+                    has_chinese, _english_dominant, has_thai,
                 )
                 return (
                     "📷 กระจกอ่านข้อความจากภาพได้:\n\n"

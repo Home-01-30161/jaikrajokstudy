@@ -13,41 +13,30 @@ from app.utils.logging import get_logger
 logger = get_logger(__name__)
 
 SYSTEM_PROMPT = (
-    # Identity & tone
+    # Identity & tone — written entirely in Thai so the model starts in Thai mode
     "คุณคือ กระจก (JaiKraJok) ผู้ช่วยสอนเรียนและเพื่อนคู่คิดอัจฉริยะ สร้างโดยทีม JaiKraJok "
     "ตอบเป็นภาษาไทยเท่านั้น อย่างสุภาพ อบอุ่น ชัดเจน ละเอียดลึกซึ้งในระดับมืออาชีพ "
-    # CRITICAL language rule — prevents Qwen3 from outputting Chinese
-    "❌ ห้ามตอบเป็นภาษาจีน ภาษาญี่ปุ่น หรือภาษาอื่นที่ไม่ใช่ภาษาไทย เด็ดขาด "
-    "❌ ห้ามแสดง internal thinking หรือ scratchpad ใด ๆ ทั้งสิ้น ตอบเฉพาะคำตอบสุดท้ายเท่านั้น "
-    # Length control — prevents too-long responses that get cut off
-    "📏 กฎความยาว: ตอบให้กระชับ ครบถ้วน จบในคำตอบเดียว ไม่เกิน 600 คำ "
+    # CRITICAL language rule — explicit English ban, not just Chinese
+    "กฎภาษา (บังคับเด็ดขาด ห้ามฝ่าฝืนทุกกรณี): "
+    "ห้ามตอบเป็นภาษาอังกฤษ ภาษาจีน ภาษาญี่ปุ่น หรือภาษาอื่นใดทั้งสิ้น "
+    "ห้ามเขียนประโยคภาษาอังกฤษแม้แต่ประโยคเดียว ห้าม Step-by-step ภาษาอังกฤษ "
+    "ห้าม Part A / Part B / Part C เป็นภาษาอังกฤษ ห้าม Example Case Analysis ภาษาอังกฤษ "
+    "ห้ามแสดง internal thinking หรือ scratchpad ใด ๆ ตอบเฉพาะคำตอบสุดท้ายเป็นภาษาไทยเท่านั้น "
+    # Length control
+    "กฎความยาว: ตอบให้กระชับ ครบถ้วน จบในคำตอบเดียว ไม่เกิน 600 คำ "
     "ถ้าเป็นโจทย์เลขหรือวิทยาศาสตร์ให้แสดงขั้นตอนสำคัญ ไม่ต้องอธิบายทุกจุดย่อย "
-    # Output formatting rules
-    "📐 กฎการจัดรูปแบบคำตอบ (Output Formatting Rules) — **บังคับปฏิบัติตลอด**: "
-    "1. **LaTeX Math**: ใช้ `$...$` สำหรับ inline math และ `$$...$$` สำหรับ display math ทุกสูตรสมการ "
-    "(หากใช้ `\\\\begin{aligned}` ให้หุ้มด้วย `$$...$$` เสมอ) "
-    "2. **Code Blocks**: ใช้ ```language\\ncode\\n``` พร้อมระบุภาษา "
-    "(python, cpp, javascript, typescript, java, go, rust, sql, bash, json, yaml, markdown, html, css) "
-    "3. **Tables**: สร้างตาราง markdown เมื่อเปรียบเทียบข้อมูล หรือแสดงขั้นตอนคำนวณ "
-    "4. **Task Lists**: ใช้ `- [ ]` และ `- [x]` สำหรับขั้นตอนหรือรายการตรวจสอบ "
-    "5. **Blockquotes**: ใช้ `> quote` สำหรับข้อความสำคัญ คำพูด หรือคำแนะนำ "
-    "6. **Headers**: ใช้ `##` `###` จัดโครงสร้างคำตอบเป็นหัวข้อย่อย "
-    "7. **Bold/Italic**: ใช้ `**bold**` และ `*italic*` เน้นจุดสำคัญ "
-    "8. **Horizontal Rules**: ใช้ `---` แยกส่วนที่เกี่ยวข้อง "
-    "9. **Mermaid**: ใช้ ```mermaid\\n...``` สำหรับแผนภาพ กราฟ หรือลำดับขั้นตอน "
-    # Anti-repetition rules
-    "🚫 กฎต่อต้านการซ้ำซ้อน (Anti-Repetition Rules) — บังคับเด็ดขาด: "
-    "- ห้ามแสดงส่วน 'สรุปคำตอบ' หรือ 'คำตอบที่ถูกต้อง' มากกว่า 1 ครั้งต่อคำตอบ "
-    "- ห้ามซ้ำข้อความเดิมหรือย่อหน้าเดิมในคำตอบเด็ดขาด "
-    "- ตอบครั้งเดียว สรุปครั้งเดียว จบในคำตอบเดียว "
-    # Precise math & anti-hallucination
-    "กฎสำคัญสำหรับการคำนวณ (Anti-Hallucination & Precise Math Rules): "
-    "1. ห้ามเดาคำตอบหรือเดาผลลัพธ์เด็ดขาด! ต้องแสดงขั้นตอนการคำนวณที่ถูกต้องทีละบรรทัด "
-    "2. สำหรับโจทย์เศษเหลือ/LCM/ค.ร.น.: คำนวณให้แม่นยำ บวกเศษกลับ ตรวจสอบช่วง "
-    "3. ตัวเลือก ก.ข.ค.ง.: ใช้อักษรไทยเท่านั้น ห้ามเปลี่ยนเป็น A/B/C/D "
-    "4. แสดงสูตรด้วย LaTeX: inline $...$ และ block $$...$$ "
-    # Crisis safety
-    "5. หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย"
+    # Output formatting
+    "กฎการจัดรูปแบบ: "
+    "1. LaTeX Math: ใช้ $...$ สำหรับ inline math และ $$...$$ สำหรับ display math ทุกสูตร "
+    "2. Headers: ใช้ ## ### จัดหัวข้อย่อยเป็นภาษาไทย "
+    "3. Bold: ใช้ **ข้อความ** เน้นจุดสำคัญ "
+    "4. ตัวเลือก ก.ข.ค.ง.: ใช้อักษรไทยเท่านั้น ห้ามเปลี่ยนเป็น A/B/C/D "
+    # Anti-repetition
+    "กฎต่อต้านการซ้ำ: ห้ามซ้ำข้อความเดิม ตอบครั้งเดียว สรุปครั้งเดียว จบในคำตอบเดียว "
+    # Math precision
+    "กฎการคำนวณ: ห้ามเดาคำตอบ ต้องแสดงขั้นตอนการคำนวณที่ถูกต้องทีละบรรทัด "
+    # Crisis
+    "หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย"
 )
 
 PATHUMMA_TEXTQA_URL = "https://api.aiforthai.in.th/textqa/completion"
@@ -72,6 +61,38 @@ _ENG_REASONING_RE = re.compile(
     r"We need|Check|Note|Based on|Given|Since|Actually|However|Therefore|Thus|Finally),?\s)",
     re.IGNORECASE,
 )
+
+# English-dominant hallucination markers seen in real bad responses:
+# "Step-by-step", "Part A/B/C", "EXAMPLE CASE", "Suppose", "Determine Whether"
+_ENG_HALLUCINATION_RE = re.compile(
+    r"(Step-by-step|Part [A-Z][\s：:]|EXAMPLE CASE|Suppose\s+\w+|"
+    r"Determine[sd]? [Ww]hether|ObjectiveFunction|Imagine Scenario|"
+    r"TheirHeightsMust|SimilarTO|SuchAs:|STEPS THREE|ASSUMPTION\()",
+    re.IGNORECASE,
+)
+
+
+def _is_english_dominant(text: str) -> bool:
+    """Return True if the reply is English-dominant (hallucination).
+
+    Uses two signals:
+    1. Hard markers: known English hallucination phrases from real bad responses
+    2. Character ratio: if Latin chars outnumber Thai chars 3:1 and text is long
+       (>200 chars), it's English-dominant.
+    """
+    # Hard marker — any occurrence means it's a hallucination
+    if _ENG_HALLUCINATION_RE.search(text):
+        return True
+    # Character-ratio guard for long replies
+    if len(text) > 200:
+        latin_chars = len(re.findall(r"[A-Za-z]", text))
+        thai_chars = len(re.findall(r"[฀-๿]", text))
+        # English-dominant: lots of Latin, very few Thai
+        if thai_chars == 0:
+            return True
+        if latin_chars > 0 and latin_chars > thai_chars * 3:
+            return True
+    return False
 
 
 def _strip_reasoning(text: str) -> str:
@@ -331,6 +352,19 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
                 return ServiceResult(
                     service="pathumma", ok=False, error="empty reply after stripping reasoning"
                 )
+            # English-dominant guard: ThaiLLM-qwen3 sometimes ignores the Thai-only
+            # system prompt and responds entirely in English (seen in xcv.jpg screenshot).
+            # Reject those replies so the caller can fall through to the next service.
+            if _is_english_dominant(text):
+                logger.warning(
+                    "ThaiLLM reply is English-dominant (hallucination) — "
+                    "marking as failed. Preview: %r", text[:120]
+                )
+                return ServiceResult(
+                    service="pathumma",
+                    ok=False,
+                    error="English-dominant reply (hallucination)",
+                )
             return ServiceResult(service="pathumma", ok=True, text=text, raw=raw_dict)
     except httpx.TimeoutException:
         return ServiceResult(service="pathumma", ok=False, error="timeout")
@@ -410,21 +444,21 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
                     service="pathumma", ok=False, error="empty reply after stripping reasoning"
                 )
 
-            # Hallucination guard: reject TokenMind replies that still contain Chinese
-            # characters or have no Thai characters — these are the garbage responses
-            # seen in answer.txt (mixed Chinese + English tornado/cactus hallucination).
+            # Hallucination guard: reject TokenMind replies that contain Chinese,
+            # have no Thai, or are English-dominant (all observed failure modes).
             _chinese_in_reply = len(re.findall(r"[一-鿿]", text))
             _thai_in_reply = len(re.findall(r"[฀-๿]", text))
-            if _chinese_in_reply > 0 or _thai_in_reply == 0:
+            if _chinese_in_reply > 0 or _thai_in_reply == 0 or _is_english_dominant(text):
                 logger.warning(
                     "TokenMind reply failed hallucination guard "
-                    "(chinese=%d thai=%d) — marking as failed to trigger textqa fallback",
-                    _chinese_in_reply, _thai_in_reply,
+                    "(chinese=%d thai=%d english_dominant=%s) — triggering textqa fallback. "
+                    "Preview: %r",
+                    _chinese_in_reply, _thai_in_reply, _is_english_dominant(text), text[:120],
                 )
                 return ServiceResult(
                     service="pathumma",
                     ok=False,
-                    error="hallucinated reply (Chinese characters or no Thai content)",
+                    error="hallucinated reply (Chinese / no Thai / English-dominant)",
                 )
 
             return ServiceResult(
