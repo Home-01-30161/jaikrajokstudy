@@ -18,15 +18,23 @@ const WELCOME =
   "สวัสดี เราคือ JaiKrajok (ใจกระจก) เพื่อนช่วยเรียนที่ใส่ใจอารมณ์\n\n" +
   "พิมพ์คำถามเรื่องเรียนหรือบอกความรู้สึกมาได้เลยนะ";
 
-function verifySignature(body, signature, secret) {
-  const expected = "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
+function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+function verifySignature(rawBody, signature, secret) {
+  const expected = "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
   return signature === expected;
 }
 
 async function llmReply(text) {
   const apiKey = process.env.THAILLM_API_KEY;
   if (!apiKey) return null;
-
   try {
     const res = await fetch("http://thaillm.or.th/api/v1/chat/completions", {
       method: "POST",
@@ -45,7 +53,6 @@ async function llmReply(text) {
     if (!res.ok) return null;
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content || "";
-    // Strip <think>...</think> reasoning blocks
     return content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() || null;
   } catch {
     return null;
@@ -76,15 +83,19 @@ async function saveToSupabase(lineUserId, role, text, source) {
 async function lineReply(replyToken, text) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token) return;
-  await fetch("https://api.line.me/v2/bot/message/reply", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      replyToken,
-      messages: [{ type: "text", text: text.slice(0, 5000) }],
-    }),
-    signal: AbortSignal.timeout(10000),
-  });
+  try {
+    await fetch("https://api.line.me/v2/bot/message/reply", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        replyToken,
+        messages: [{ type: "text", text: text.slice(0, 5000) }],
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    // best-effort
+  }
 }
 
 export default async function handler(req, res) {
@@ -95,16 +106,13 @@ export default async function handler(req, res) {
 
   const secret = process.env.LINE_BOT_CHANNEL_SECRET;
   if (!secret) {
-    res.status(500).json({ error: "LINE_CHANNEL_SECRET not set" });
+    res.status(500).json({ error: "LINE_BOT_CHANNEL_SECRET not set" });
     return;
   }
 
-  // Read raw body
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const rawBody = Buffer.concat(chunks).toString("utf8");
-
+  const rawBody = await getRawBody(req);
   const signature = req.headers["x-line-signature"] || "";
+
   if (!verifySignature(rawBody, signature, secret)) {
     res.status(400).json({ error: "Invalid signature" });
     return;
@@ -112,13 +120,13 @@ export default async function handler(req, res) {
 
   let body;
   try {
-    body = JSON.parse(rawBody);
+    body = JSON.parse(rawBody.toString("utf8"));
   } catch {
     res.status(400).json({ error: "Invalid JSON" });
     return;
   }
 
-  // Respond to LINE immediately — process events async
+  // Always 200 first — LINE requires it before the function times out
   res.status(200).json({ ok: true });
 
   for (const event of body.events || []) {
@@ -126,15 +134,14 @@ export default async function handler(req, res) {
       await lineReply(event.replyToken, WELCOME);
       continue;
     }
-
     if (event.type !== "message" || event.message?.type !== "text") continue;
 
     const userId = event.source?.userId || "unknown";
     const text = event.message.text || "";
-
     const isCrisis = CRISIS_KEYWORDS.some((k) => text.includes(k));
-    const reply = isCrisis ? CRISIS_REPLY : (await llmReply(text)) ||
-      "ขออภัยค่ะ ระบบไม่พร้อมตอบขณะนี้ ลองใหม่อีกครั้งนะ";
+    const reply = isCrisis
+      ? CRISIS_REPLY
+      : (await llmReply(text)) || "ขออภัยค่ะ ระบบไม่พร้อมตอบขณะนี้ ลองใหม่อีกครั้งนะ";
 
     await Promise.all([
       saveToSupabase(userId, "user", text, "line"),
