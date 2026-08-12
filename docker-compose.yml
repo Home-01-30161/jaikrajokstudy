@@ -49,14 +49,38 @@ services:
     environment:
       ROOT_PATH: /api
       NODE_ENV: production
+      DATABASE_URL: postgresql://app:${TEAM:-team07}pass@db:5432/app
     volumes:
-      - /data/hack/${TEAM}/uploads:/app/uploads
+      - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 40s
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+  db:
+    <<: *common
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${TEAM:-team07}pass
+      POSTGRES_DB: app
+    volumes:
+      - /data/hack/${TEAM:-team07}/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     deploy:
       resources:
         limits:

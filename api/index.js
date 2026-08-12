@@ -12,7 +12,7 @@ import sendOtpHandler from "./send-otp.js";
 import guardianEmailHandler from "./guardian-email.js";
 
 // Strip APP_ prefix injected by CI so handlers read env vars normally
-// e.g. APP_SUPABASE_URL → SUPABASE_URL
+// e.g. APP_DATABASE_URL → DATABASE_URL
 for (const [key, value] of Object.entries(process.env)) {
   if (key.startsWith("APP_")) {
     const unprefixed = key.slice(4);

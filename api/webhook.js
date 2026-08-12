@@ -61,24 +61,40 @@ async function llmReply(text) {
   }
 }
 
-async function saveToSupabase(lineUserId, role, text, source) {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY;
-  if (!url || !key) return;
+import pg from "pg";
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+let tableReady = false;
+async function ensureTable() {
+  if (tableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id           SERIAL PRIMARY KEY,
+      line_user_id TEXT        NOT NULL,
+      role         TEXT        NOT NULL,
+      text         TEXT        NOT NULL,
+      source       TEXT        NOT NULL DEFAULT 'web',
+      session_id   TEXT,
+      session_title TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages (line_user_id, created_at ASC);
+  `);
+  tableReady = true;
+}
+
+async function saveToDB(lineUserId, role, text, source) {
+  if (!process.env.DATABASE_URL) return;
   try {
-    await fetch(`${url}/rest/v1/chat_messages`, {
-      method: "POST",
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify({ line_user_id: lineUserId, role, text: text.slice(0, 4000), source }),
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    // best-effort
+    await ensureTable();
+    await pool.query(
+      `INSERT INTO chat_messages (line_user_id, role, text, source)
+       VALUES ($1, $2, $3, $4)`,
+      [lineUserId, role, text.slice(0, 4000), source]
+    );
+  } catch (err) {
+    console.error("DB save error:", err?.message);
   }
 }
 
@@ -135,8 +151,8 @@ export default async function handler(req, res) {
 
     // Save and reply in parallel
     await Promise.all([
-      saveToSupabase(userId, "user", text, "line"),
-      saveToSupabase(userId, "bot", reply, "line"),
+      saveToDB(userId, "user", text, "line"),
+      saveToDB(userId, "bot", reply, "line"),
       lineReply(event.replyToken, reply),
     ]);
   }

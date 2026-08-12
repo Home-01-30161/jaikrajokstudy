@@ -3449,7 +3449,7 @@ export default function App() {
               avatarUrl: profile.pictureUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${profile.userId}`,
             };
 
-            // Fetch shared LINE+Web history via Vercel serverless function (uses service key server-side)
+            // Fetch shared LINE+Web history from PostgreSQL via /api/history
             try {
               const histRes = await fetch(`/api/history?line_user_id=${encodeURIComponent(profile.userId)}`);
               if (histRes.ok) {
