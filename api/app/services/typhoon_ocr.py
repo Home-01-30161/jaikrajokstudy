@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import json as _json
+import re
 
 import httpx
 
@@ -23,13 +24,40 @@ logger = get_logger(__name__)
 
 _CHAT_URL = "https://api.opentyphoon.ai/v1/chat/completions"
 
-# Default OCR prompt — instructs the model to extract text.
-# The web_chat endpoint can pass a custom user_prompt to ask a specific question
-# about the image content (e.g. "explain step 2" or "solve this problem").
+# Chinese/Japanese character range — must not appear in OCR output for Thai homework
+_CJK_RE = re.compile(r"[一-鿿㐀-䶿぀-ヿ]")
+
+
+def _strip_cjk_lines(text: str) -> str:
+    """Remove lines that are entirely CJK characters (leaked model scratchpad)."""
+    lines = text.split("\n")
+    clean = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            clean.append(line)
+            continue
+        # If the line is >50% CJK and has no Thai, drop it
+        cjk_count = len(_CJK_RE.findall(stripped))
+        thai_count = len(re.findall(r"[฀-๿]", stripped))
+        if cjk_count > 0 and thai_count == 0 and cjk_count / max(len(stripped), 1) > 0.4:
+            continue
+        clean.append(line)
+    return "\n".join(clean).strip()
+
+# Default OCR prompt — instructs the model to extract text only.
+# CRITICAL: must forbid Chinese/Japanese output — typhoon-ocr-preview
+# sometimes emits Chinese characters when the image has diagrams.
 _DEFAULT_PROMPT = (
-    "อ่านข้อความทั้งหมดในภาพนี้ให้ครบถ้วน "
-    "ถ้ามีสมการหรือสูตรคณิตศาสตร์ให้แสดงให้ชัดเจน "
-    "ตอบเป็นข้อความล้วน ไม่ต้องใส่คำอธิบายเพิ่มเติม"
+    "You are an OCR engine. Extract ALL text visible in this image exactly as it appears. "
+    "Output language: Thai and English only. NEVER output Chinese, Japanese, or any other language. "
+    "If the image contains a diagram, figure, or free-body diagram: "
+    "describe all labels, angles, measurements, arrows, and forces in Thai. "
+    "Format rules: "
+    "- Mathematical equations: use $...$ for inline and $$...$$ for block LaTeX. "
+    "- Include ALL text: headings, body, labels, choices (ก. ข. ค. ง.), numbers, units. "
+    "- Do NOT skip, summarize, or add commentary. Transcribe verbatim. "
+    "- Do NOT output Chinese or Japanese characters under any circumstances."
 )
 
 
@@ -112,7 +140,7 @@ async def extract_text_typhoon(
                     raw=raw if isinstance(raw, dict) else {},
                 )
 
-            extracted_text = _parse_chat_response(raw if isinstance(raw, dict) else {})
+            extracted_text = _strip_cjk_lines(_parse_chat_response(raw if isinstance(raw, dict) else {}))
 
             if not extracted_text:
                 logger.warning("Typhoon OCR returned empty text")

@@ -264,24 +264,27 @@ async def api_client_reply_flex_then_text(
 # ---------------------------------------------------------------------------
 # Image handler -- detect intent from content
 # ---------------------------------------------------------------------------
-_SELFIE_PHRASE = (
-    "กระจกเห็นใบหน้าของคุณแล้ว ตรวจพบ {count} ใบหน้า\n\n"
-    "กระจกอ่านได้แค่ว่ามีใบหน้าในภาพนะ ยังอ่านอารมณ์จากสีหน้าไม่ได้\n"
-    "ถ้าอยากให้เข้าใจความรู้สึกจริง ๆ พิมพ์หรือพูดมาได้เลย"
-)
-_NO_FACE_PHRASE = (
-    "กระจกยังไม่เห็นใบหน้าในภาพนี้ ลองถ่ายให้เห็นหน้าชัด ๆ "
-    "ในที่สว่างอีกครั้งนะ หรือส่งรูปการบ้านถ้าอยากให้ช่วยอ่าน"
-)
 _OCR_PROMPT = (
     "นักเรียนส่งรูปการบ้านมาทาง LINE "
     "ข้อความที่อ่านได้จากภาพคือ:\n{text}\n\n"
     "ช่วยอธิบายหรือแนะนำวิธีทำอย่างเป็นขั้นตอน โดยไม่เฉลยคำตอบตรง ๆ ทันที"
 )
+_NO_FACE_PHRASE = (
+    "กระจกยังไม่เห็นใบหน้าในภาพนี้ ลองถ่ายให้เห็นหน้าชัด ๆ "
+    "ในที่สว่างอีกครั้งนะ หรือส่งรูปการบ้านถ้าอยากให้ช่วยอ่าน"
+)
+
+# Emotion → empathetic LLM prompt template
+_EMOTION_LLM_PROMPT = (
+    "ผู้ใช้ส่งรูปเซลฟี่มา จากการวิเคราะห์ใบหน้าพบว่าดูรู้สึก {emotion_th} "
+    "({description}) ความมั่นใจ {pct:.0%}\n\n"
+    "ตอบสนองด้วยความเห็นอกเห็นใจ อบอุ่น สั้น ๆ 2-3 ประโยคภาษาไทย "
+    "สอบถามความรู้สึกและให้กำลังใจ ห้ามใส่ Task List หรือ Mermaid"
+)
 
 
 async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
-    """Download image from LINE, try face detection first then OCR."""
+    """Download image from LINE, detect faces/emotion first then OCR."""
     try:
         data: bytearray = await blob.get_message_content(message_id)
         image_bytes = bytes(data)
@@ -289,14 +292,54 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
         logger.warning("Failed to download LINE image %s: %s", message_id, exc)
         return "กระจกดาวน์โหลดรูปภาพไม่ได้ ลองส่งใหม่อีกครั้งนะ"
 
-    # Try face detection first
+    # Try face/emotion detection first (Typhoon Vision primary, AI for Thai fallback)
     face_result = await face.analyze_image(image_bytes)
+
     if face_result.ok:
-        objects = face_result.raw.get("objects") or []
-        count = len(objects) if isinstance(objects, list) else 0
-        if count > 0:
-            return _SELFIE_PHRASE.format(count=count)
-        # Face API OK but no faces -> likely a homework photo, fall through to OCR
+        # --- Typhoon Vision path: real emotion data ---
+        if face_result.service == "face-typhoon":
+            raw = face_result.raw
+            face_count = raw.get("face_count", 0)
+            if face_count > 0:
+                emotion_th = raw.get("emotion_th", "ปกติ")
+                description = raw.get("description", "")
+                confidence = face_result.score or 0.5
+
+                llm_prompt = _EMOTION_LLM_PROMPT.format(
+                    emotion_th=emotion_th,
+                    description=description,
+                    pct=confidence,
+                )
+                llm = await pathumma.generate_reply(llm_prompt)
+                if llm.ok and llm.text:
+                    from app.services.pathumma import strip_latex_for_line
+                    return strip_latex_for_line(llm.text)
+                # Fallback if LLM fails
+                return (
+                    f"กระจกเห็นใบหน้าของคุณแล้ว ดูเหมือนรู้สึก {emotion_th} นะ\n\n"
+                    f"{description}\n\n"
+                    "ถ้าอยากคุยเรื่องนี้เพิ่มเติม พิมพ์มาได้เลย"
+                )
+            # face_count == 0 from Typhoon → likely homework photo, fall through
+
+        # --- AI for Thai fallback path: presence only ---
+        elif face_result.service == "face":
+            objects = face_result.raw.get("objects") or []
+            count = len(objects) if isinstance(objects, list) else 0
+            if count > 0:
+                # Has faces but no emotion data — use LLM to generate warm response
+                llm = await pathumma.generate_reply(
+                    "ผู้ใช้ส่งเซลฟี่มา กระจกตรวจพบใบหน้าในภาพ "
+                    "ตอบทักทายอบอุ่น สอบถามความรู้สึกวันนี้ 2-3 ประโยคภาษาไทย"
+                )
+                if llm.ok and llm.text:
+                    from app.services.pathumma import strip_latex_for_line
+                    return strip_latex_for_line(llm.text)
+                return (
+                    f"กระจกเห็นใบหน้าของคุณแล้ว ({count} ใบหน้า) 😊\n\n"
+                    "วันนี้รู้สึกเป็นยังไงบ้าง? พิมพ์มาเล่าให้ฟังได้นะ"
+                )
+            # No faces → fall through to OCR
 
     # OCR for homework/document images
     ocr_result = await ocr.transcribe_image(image_bytes)
@@ -304,7 +347,8 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
         extracted = ocr_result.text.strip()[:3000]
         llm = await pathumma.generate_reply(_OCR_PROMPT.format(text=extracted))
         if llm.ok and llm.text:
-            return llm.text
+            from app.services.pathumma import strip_latex_for_line
+            return strip_latex_for_line(llm.text)
         return f"อ่านข้อความจากภาพได้แล้ว:\n\n{extracted}\n\n(ระบบ AI ยังตอบไม่ได้ตอนนี้ ลองอีกครั้งนะ)"
 
     return _NO_FACE_PHRASE

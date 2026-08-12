@@ -15,7 +15,13 @@ logger = get_logger(__name__)
 SYSTEM_PROMPT = (
     # Identity & tone
     "คุณคือ กระจก (JaiKraJok) ผู้ช่วยสอนเรียนและเพื่อนคู่คิดอัจฉริยะ สร้างโดยทีม JaiKraJok "
-    "ตอบเป็นภาษาไทยอย่างสุภาพ อบอุ่น ชัดเจน ครอบคลุม ละเอียดลึกซึ้งในระดับมืออาชีพ "
+    "ตอบเป็นภาษาไทยเท่านั้น อย่างสุภาพ อบอุ่น ชัดเจน ละเอียดลึกซึ้งในระดับมืออาชีพ "
+    # CRITICAL language rule — prevents Qwen3 from outputting Chinese
+    "❌ ห้ามตอบเป็นภาษาจีน ภาษาญี่ปุ่น หรือภาษาอื่นที่ไม่ใช่ภาษาไทย เด็ดขาด "
+    "❌ ห้ามแสดง internal thinking หรือ scratchpad ใด ๆ ทั้งสิ้น ตอบเฉพาะคำตอบสุดท้ายเท่านั้น "
+    # Length control — prevents too-long responses that get cut off
+    "📏 กฎความยาว: ตอบให้กระชับ ครบถ้วน จบในคำตอบเดียว ไม่เกิน 600 คำ "
+    "ถ้าเป็นโจทย์เลขหรือวิทยาศาสตร์ให้แสดงขั้นตอนสำคัญ ไม่ต้องอธิบายทุกจุดย่อย "
     # Output formatting rules
     "📐 กฎการจัดรูปแบบคำตอบ (Output Formatting Rules) — **บังคับปฏิบัติตลอด**: "
     "1. **LaTeX Math**: ใช้ `$...$` สำหรับ inline math และ `$$...$$` สำหรับ display math ทุกสูตรสมการ "
@@ -23,7 +29,6 @@ SYSTEM_PROMPT = (
     "2. **Code Blocks**: ใช้ ```language\\ncode\\n``` พร้อมระบุภาษา "
     "(python, cpp, javascript, typescript, java, go, rust, sql, bash, json, yaml, markdown, html, css) "
     "3. **Tables**: สร้างตาราง markdown เมื่อเปรียบเทียบข้อมูล หรือแสดงขั้นตอนคำนวณ "
-    "`| Header1 | Header2 |\\n|---|---|\\n| A | B |` "
     "4. **Task Lists**: ใช้ `- [ ]` และ `- [x]` สำหรับขั้นตอนหรือรายการตรวจสอบ "
     "5. **Blockquotes**: ใช้ `> quote` สำหรับข้อความสำคัญ คำพูด หรือคำแนะนำ "
     "6. **Headers**: ใช้ `##` `###` จัดโครงสร้างคำตอบเป็นหัวข้อย่อย "
@@ -36,16 +41,11 @@ SYSTEM_PROMPT = (
     "- ห้ามซ้ำข้อความเดิมหรือย่อหน้าเดิมในคำตอบเด็ดขาด "
     "- ตอบครั้งเดียว สรุปครั้งเดียว จบในคำตอบเดียว "
     # Precise math & anti-hallucination
-    "กฎสำคัญสำหรับการคำนวณทางคณิตศาสตร์และวิชาการ (Anti-Hallucination & Precise Math Rules): "
-    "1. ห้ามเดาคำตอบ หรือเดาผลลัพธ์เด็ดขาด! ต้องแสดงขั้นตอนการคำนวณทางคณิตศาสตร์ที่ถูกต้องทีละบรรทัด "
-    "2. สำหรับโจทย์เศษเหลือ/ทฤษฎีบทจำนวน/ทฤษฎีเศษเหลือ (Remainder / Modular Arithmetic / LCM / ค.ร.น.): "
-    "   - คำนวณ ค.ร.น. ของตัวหารอย่างแม่นยำ "
-    "   - บวกเศษกลับเข้าไป ตรวจสอบเงื่อนไขช่วง "
-    "   - ตรวจสอบกับตัวเลือก ก. ข. ค. ง. ให้ตรงกับข้อที่คำนวณได้ถูกต้อง 100% "
-    "3. สำหรับโจทย์การโปรแกรม/เขียนโค้ด (C, C++, Python, Java, JS ฯลฯ): "
-    "   - สอน 5 หัวข้อหลักพร้อมกล่องโค้ด ```lang ... ``` แยกแต่ละหัวข้อ "
-    "   - โค้ดต้องถูกต้องตามไวยากรณ์ภาษา 100% "
-    "4. สำหรับโจทย์คณิตศาสตร์/วิทยาศาสตร์ ใช้ LaTeX $...$ และ $$...$$ แสดงสมการแบบละเอียดทุกขั้นตอน "
+    "กฎสำคัญสำหรับการคำนวณ (Anti-Hallucination & Precise Math Rules): "
+    "1. ห้ามเดาคำตอบหรือเดาผลลัพธ์เด็ดขาด! ต้องแสดงขั้นตอนการคำนวณที่ถูกต้องทีละบรรทัด "
+    "2. สำหรับโจทย์เศษเหลือ/LCM/ค.ร.น.: คำนวณให้แม่นยำ บวกเศษกลับ ตรวจสอบช่วง "
+    "3. ตัวเลือก ก.ข.ค.ง.: ใช้อักษรไทยเท่านั้น ห้ามเปลี่ยนเป็น A/B/C/D "
+    "4. แสดงสูตรด้วย LaTeX: inline $...$ และ block $$...$$ "
     # Crisis safety
     "5. หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย"
 )
@@ -57,12 +57,60 @@ PATHUMMA_TEXTQA_URL = "https://api.aiforthai.in.th/textqa/completion"
 # means the token budget ran out mid-thought, leaving no answer at all.
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
+# Matches lines that are pure Chinese (no Thai, no Latin content) — leaked Qwen3 scratchpad
+_CHINESE_LINE_RE = re.compile(
+    r"^[一-鿿㐀-䶿＀-￯　-〿，。！？：；「」『』【】\s]+$"
+)
+# Leaked English internal reasoning patterns from Qwen3-Think
+_ENG_REASONING_RE = re.compile(
+    r"^(The (task|user|question|problem|answer|key|goal|request|response|instruction|content|text|image|context)|"
+    r"(First|Now|Next|Then|So|Also|Wait|Okay|Alright|Let|Looking|To|Because|In|Hmm|I need|"
+    r"We need|Check|Note|Based on|Given|Since|Actually|However|Therefore|Thus|Finally),?\s)",
+    re.IGNORECASE,
+)
+
 
 def _strip_reasoning(text: str) -> str:
-    text = _THINK_RE.sub("", text)
-    # Unclosed <think> (hit max_tokens): nothing usable follows, so drop it.
-    if "<think>" in text.lower():
-        text = re.split(r"<think>", text, flags=re.IGNORECASE)[0]
+    """Strip <think>...</think> blocks and any leaked Chinese/English scratchpad."""
+    # 1. Proper closed <think>...</think> — extract everything AFTER </think>
+    if "</think>" in text.lower():
+        after = re.split(r"</think>", text, flags=re.IGNORECASE, maxsplit=1)[-1].strip()
+        if after:
+            text = after
+        else:
+            # </think> at end of string — drop the whole block
+            text = _THINK_RE.sub("", text).strip()
+    else:
+        # 2. Unclosed <think> — drop from the tag onwards (token budget hit)
+        if "<think>" in text.lower():
+            text = re.split(r"<think>", text, flags=re.IGNORECASE)[0].strip()
+        else:
+            text = _THINK_RE.sub("", text).strip()
+
+    # 3. Strip any leading/trailing Chinese-only lines (leaked Qwen3 scratchpad)
+    lines = text.split("\n")
+    # Drop leading Chinese-only lines
+    while lines and _CHINESE_LINE_RE.match(lines[0].strip()):
+        lines.pop(0)
+    # Drop trailing Chinese-only lines
+    while lines and _CHINESE_LINE_RE.match(lines[-1].strip()):
+        lines.pop()
+    text = "\n".join(lines).strip()
+
+    # 4. If the whole text is still majority Chinese (no Thai at all), it's a
+    #    leaked reasoning block — return empty so the caller triggers fallback.
+    thai_chars = len(re.findall(r"[฀-๿]", text))
+    chinese_chars = len(re.findall(r"[一-鿿]", text))
+    if chinese_chars > 0 and thai_chars == 0:
+        return ""
+
+    # 5. Strip leading English reasoning paragraphs that precede Thai content
+    first_thai = text.find("฀")  # first Thai character
+    if first_thai > 50:
+        preamble = text[:first_thai]
+        if _ENG_REASONING_RE.search(preamble):
+            text = text[first_thai:].strip()
+
     return text.strip()
 
 
@@ -221,8 +269,9 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
 
     # Pathumma-ThaiLLM-qwen3-8b-think-3.0.0 is a Qwen3 reasoning model:
     # it emits <think>...</think> before the real answer — stripped below.
-    # max_tokens=2048 matches the playground default.
-    # Note: repetition_penalty is NOT supported by this gateway.
+    # We budget 1200 tokens for the visible answer (the <think> block consumes
+    # its own quota before the answer starts). 2048 total keeps latency sane.
+    # Note: repetition_penalty is NOT supported by this gateway (returns 400).
     payload = {
         "model": settings.thaillm_llm_model,
         "messages": messages,
@@ -254,6 +303,9 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
                 finish_reason = choices[0].get("finish_reason") or ""
             if finish_reason == "length":
                 logger.warning("ThaiLLM: finish_reason=length — response cut at max_tokens")
+                # Still try to use the partial answer — it may be complete enough
+                # after stripping the <think> block. If stripping leaves nothing,
+                # the empty-text guard below will trigger a fallback.
 
             text = _strip_emoji(
                 _dedup_lines(_strip_reasoning(_extract_text(raw_dict)))

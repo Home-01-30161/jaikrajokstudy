@@ -247,7 +247,9 @@ async def analyze_selfie(
     file: UploadFile = File(...),
     user_id: str = Depends(require_session),
 ) -> AnalysisResponse:
-    """Selfie mode: emotion analysis via Typhoon Vision, fallback to AI for Thai face detection."""
+    """Selfie mode: emotion analysis via Typhoon Vision (primary) with LLM empathetic reply.
+    Falls back to AI for Thai face detection (presence + LLM greeting) if Typhoon unavailable.
+    """
     data = await _read_upload(file, "image/")
     result = await face.analyze_image(data)
 
@@ -269,18 +271,31 @@ async def analyze_selfie(
             service="face",
         )
 
-    # Typhoon Vision path — has emotion data
+    # Typhoon Vision path — has real emotion data, generate LLM empathetic reply
     if result.service == "face-typhoon":
         emotion_th = result.raw.get("emotion_th", "ปกติ")
         description = result.raw.get("description", "")
         confidence = result.score or 0.0
-        mood = result.label or "neutral"  # already mapped to UI mood by face.py
+        mood = result.label or "neutral"
 
         detail = f"ตรวจพบใบหน้า {count} ใบหน้า · อารมณ์: {emotion_th} ({confidence:.0%})"
+
+        # Ask LLM to generate a warm empathetic reply based on detected emotion
+        llm_prompt = (
+            f"ผู้ใช้ส่งรูปเซลฟี่มา จากการวิเคราะห์ใบหน้าพบว่าดูรู้สึก {emotion_th} "
+            f"({description}) ความมั่นใจ {confidence:.0%}\n\n"
+            "ตอบสนองด้วยความเห็นอกเห็นใจ อบอุ่น 2-3 ประโยคภาษาไทย "
+            "สอบถามความรู้สึกและให้กำลังใจ ห้ามใส่ Task List หรือ Mermaid"
+        )
+        llm = await pathumma.generate_reply(llm_prompt)
         reply = (
-            f"{description}\n\n"
-            f"กระจกอ่านจากสีหน้าว่าคุณดูรู้สึก {emotion_th} นะ "
-            f"ถ้าอยากคุยเรื่องนี้เพิ่มเติม พิมพ์มาได้เลย"
+            llm.text
+            if llm.ok and llm.text
+            else (
+                f"{description}\n\n"
+                f"กระจกอ่านจากสีหน้าว่าคุณดูรู้สึก {emotion_th} นะ "
+                f"ถ้าอยากคุยเรื่องนี้เพิ่มเติม พิมพ์มาได้เลย"
+            )
         )
 
         store.record_mood(
@@ -291,7 +306,7 @@ async def analyze_selfie(
             ok=True, mood=mood, reply=reply, detail=detail, service="face-typhoon"
         )
 
-    # AI for Thai fallback — no emotion, just presence
+    # AI for Thai fallback — no emotion, generate a warm greeting via LLM
     scores = []
     for o in objects if isinstance(objects, list) else []:
         if isinstance(o, dict):
@@ -304,13 +319,23 @@ async def analyze_selfie(
     if best is not None:
         detail += f" (ความมั่นใจ {best:.0%})"
 
-    return AnalysisResponse(
-        ok=True,
-        reply=(
+    llm = await pathumma.generate_reply(
+        "ผู้ใช้ส่งเซลฟี่มา กระจกตรวจพบใบหน้าในภาพ "
+        "ตอบทักทายอบอุ่น สอบถามความรู้สึกวันนี้ 2-3 ประโยคภาษาไทย"
+    )
+    reply = (
+        llm.text
+        if llm.ok and llm.text
+        else (
             f"{detail}\n\n"
             "กระจกอ่านได้แค่ว่ามีใบหน้าอยู่ในภาพนะ ยังอ่านอารมณ์จากสีหน้าไม่ได้ "
             "ถ้าอยากให้เข้าใจความรู้สึกจริง ๆ เล่าเป็นข้อความหรือพูดมาได้เลย"
-        ),
+        )
+    )
+    store.record_mood(user_id, "neutral", source="selfie", channel="image")
+    return AnalysisResponse(
+        ok=True,
+        reply=reply,
         detail=detail,
         service="face",
     )
