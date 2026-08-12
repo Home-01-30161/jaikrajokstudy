@@ -481,7 +481,7 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None, his
     if emotion_hint and emotion_hint != "ปกติ":
         prompt = f"(อารมณ์โดยประมาณ: {emotion_hint})\nคำถาม/ข้อความของผู้เรียน: {user_text}"
 
-    # Prefer ThaiLLM Playground API (dedicated LLM key) → fall back to TokenMind → textqa
+    # Prefer ThaiLLM (Qwen3-8b-think, best quality) → fall back to TokenMind (thaillm-8b) → textqa
     if settings.thaillm_api_key:
         result = await _generate_thaillm(prompt, settings, history=history or [])
         if result.ok:
@@ -565,7 +565,7 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
         # 45s per-request timeout: ThaiLLM with Qwen3-8b-think needs time for
         # reasoning on complex physics/math problems.  For LINE bot, the overall
         # 45s deadline in web_chat.py guards against exceeding LINE's reply window.
-        async with httpx.AsyncClient(timeout=45.0, verify=verify) as client:
+        async with httpx.AsyncClient(timeout=60.0, verify=verify) as client:
             resp = await client.post(url, headers=headers, json=payload)
             try:
                 raw = resp.json()
@@ -664,15 +664,14 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
     payload = {
         "model": settings.tokenmind_llm_model,
         "messages": messages,
-        "max_tokens": 8192,
+        "max_tokens": 2048,
         "temperature": temperature,
         "repetition_penalty": 1.15,
     }
     try:
         verify = not settings.insecure_tls
-        # 40s per-request timeout: TokenMind fallback also needs time for
-        # Qwen3 reasoning.  Web endpoint has its own overall deadline.
-        async with httpx.AsyncClient(timeout=40.0, verify=verify) as client:
+        # 60s timeout: TokenMind is now primary LLM (thaillm-8b).
+        async with httpx.AsyncClient(timeout=60.0, verify=verify) as client:
             resp = await client.post(url, headers=headers, json=payload)
             try:
                 raw = resp.json()
