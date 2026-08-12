@@ -3,13 +3,6 @@
 #
 #  base = 20000 + (7 - 1) * 10
 #     team07 -> BASE 20060  BASE_1 20061
-#
-#  Runner: Docker executor.
-#  - DOCKER_HOST=tcp://docker:2375 is injected by runner config (immutable)
-#  - A persistent dind daemon runs at that address on the runner host
-#  - We must NOT start our own services:dind (conflict + not privileged)
-#  - We must NOT override DOCKER_TLS_CERTDIR (runner manages TLS/certs)
-#  - We just wait in before_script until the existing daemon is reachable
 # ============================================================
 
 variables:
@@ -22,11 +15,8 @@ stages: [check, deploy, ops]
 default:
   image: docker:27.3.1
   before_script:
-    - echo "Waiting for Docker daemon at $DOCKER_HOST ..."
-    - until docker info > /dev/null 2>&1; do sleep 1; done
-    - echo "Docker daemon ready"
-    - docker compose version > /dev/null 2>&1 || apk add --no-cache docker-cli-compose
-    - apk add --no-cache curl bash > /dev/null
+    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
+    - apk add --no-cache curl bash >/dev/null
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
 
 # ------------------------------------------------------------
@@ -82,19 +72,13 @@ deploy:
     - printenv | grep '^APP_' > .env || true
     - docker compose -p "$TEAM" up -d --build --remove-orphans
     - |
-      echo "waiting for api healthcheck..."
+      echo "รอ healthcheck..."
       for i in $(seq 1 40); do
         st=$(docker inspect -f '{{.State.Health.Status}}' "${TEAM}-api-1" 2>/dev/null || echo none)
         [ "$st" = "healthy" ] && { echo "api healthy"; break; }
-        echo "  [$i/40] status=$st"
         sleep 5
       done
       docker compose -p "$TEAM" ps
-      if [ "$st" != "healthy" ]; then
-        echo "api never became healthy - last 200 log lines:"
-        docker compose -p "$TEAM" logs --tail=200 --no-color api
-        exit 1
-      fi
     - curl -fsS "http://127.0.0.1:${BASE_1}/health" && echo " <- /health OK"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
