@@ -4,24 +4,36 @@
 #  base = 20000 + (7 - 1) * 10
 #     team07 -> BASE 20060  BASE_1 20061
 #
-#  EXACT guide template (sasdasdasd.txt section 4.1)
-#  Only TEAM / BASE / BASE_1 changed for team07.
-#  Runner mounts /var/run/docker.sock into docker:27.3.1 job container.
-#  Do NOT add services/DOCKER_HOST/DOCKER_TLS_CERTDIR — breaks the socket.
+#  Runner config.toml permanently injects DOCKER_HOST=tcp://docker:2375
+#  into every job. We cannot override it. The ONLY fix is to start a
+#  dind daemon that actually listens at that address.
+#
+#  Required trio (standard GitLab dind without TLS):
+#    image: docker:27.3.1          — provides the docker CLI
+#    services: docker:27.3.1-dind  — starts the daemon at tcp://docker:2375
+#    DOCKER_TLS_CERTDIR: ""        — disables TLS so daemon uses port 2375
+#
+#  before_script waits with `docker info` until dind is ready before any
+#  build step runs — without this the build starts before the daemon is up.
 # ============================================================
 
 variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
+  DOCKER_TLS_CERTDIR: ""
 
 stages: [check, deploy, ops]
 
 default:
   image: docker:27.3.1
+  services:
+    - name: docker:27.3.1-dind
+      alias: docker
   before_script:
-    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
-    - apk add --no-cache curl bash >/dev/null
+    - until docker info > /dev/null 2>&1; do echo "waiting for docker daemon..."; sleep 2; done
+    - docker compose version > /dev/null 2>&1 || apk add --no-cache docker-cli-compose
+    - apk add --no-cache curl bash > /dev/null
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
 
 # ------------------------------------------------------------
