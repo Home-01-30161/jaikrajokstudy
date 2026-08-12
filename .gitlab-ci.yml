@@ -4,30 +4,21 @@
 #  base = 20000 + (7 - 1) * 10
 #     team07 -> BASE 20060  BASE_1 20061
 #
-#  Runner: Docker executor with dind sidecar.
-#  DOCKER_TLS_CERTDIR: ""  -> dind daemon listens on tcp://docker:2375 (no TLS)
-#  DOCKER_HOST: tcp://docker:2375 -> client explicitly connects via TCP
-#  Both variables are required together; client defaults to unix socket otherwise.
+#  Runner: shell executor — Docker is installed on the host.
+#  Jobs run directly on the host shell; no image/dind needed.
+#  Docker daemon is at /var/run/docker.sock (host socket).
 # ============================================================
 
 variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
-  # Required for dind: disable TLS on daemon AND point client at TCP endpoint
-  DOCKER_TLS_CERTDIR: ""
-  DOCKER_HOST: "tcp://docker:2375"
 
 stages: [check, deploy, ops]
 
 default:
-  image: docker:27.3.1
-  services:
-    - docker:27.3.1-dind
   before_script:
-    # image บางเวอร์ชันไม่มี compose plugin
-    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
-    - apk add --no-cache curl bash >/dev/null
+    - docker compose version >/dev/null 2>&1 || apt-get install -y docker-compose-plugin >/dev/null
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
 
 # ------------------------------------------------------------
