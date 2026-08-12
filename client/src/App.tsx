@@ -1393,7 +1393,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
 
   const saveWebMessage = (role: "user" | "bot", text: string) => {
     if (!lineUserId) return;
-    fetch("/api/save-message", {
+    fetch("/api/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ line_user_id: lineUserId, role, text: text.slice(0, 4000), source: "web" }),
