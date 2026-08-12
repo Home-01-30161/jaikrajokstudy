@@ -801,6 +801,31 @@ async def _generate_typhoon(prompt: str, settings, history: list | None = None) 
                 return ServiceResult(
                     service="pathumma", ok=False, error="empty reply from Typhoon LLM"
                 )
+            # English-dominant guard: Typhoon sometimes ignores the Thai-only
+            # system prompt. Reject those replies so ThaiLLM/TokenMind can try.
+            if _is_english_dominant(text):
+                logger.warning(
+                    "Typhoon LLM reply is English-dominant — marking as failed. "
+                    "Preview: %r", text[:120]
+                )
+                return ServiceResult(
+                    service="pathumma",
+                    ok=False,
+                    error="English-dominant reply (hallucination)",
+                )
+            # Hallucination guard (same as TokenMind): catches repetition loops,
+            # off-topic rambling, CJK punctuation leaks, etc.
+            hallucination_reason = _detect_hallucination(text)
+            if hallucination_reason:
+                logger.warning(
+                    "Typhoon LLM hallucination detected (%s) — falling back. "
+                    "Preview: %r", hallucination_reason, text[:120]
+                )
+                return ServiceResult(
+                    service="pathumma",
+                    ok=False,
+                    error=f"hallucination: {hallucination_reason}",
+                )
             return ServiceResult(service="pathumma", ok=True, text=text, raw=raw_dict)
     except httpx.TimeoutException:
         return ServiceResult(service="pathumma", ok=False, error="timeout")
