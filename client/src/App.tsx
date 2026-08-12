@@ -1420,6 +1420,25 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     } catch { /* storage unavailable */ }
   }, [sessions, userKey]);
 
+  // Reload sessions from localStorage when another part of the app writes them
+  // (e.g. LINE OAuth callback writes history then fires this event)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent | CustomEvent) => {
+      const key = (e as StorageEvent).key ?? (e as CustomEvent).detail?.key;
+      if (key !== `jaikrajok:sessions:${userKey}`) return;
+      try {
+        const saved = JSON.parse(localStorage.getItem(`jaikrajok:sessions:${userKey}`) || "null");
+        if (Array.isArray(saved) && saved.length > 0) setSessions(saved);
+      } catch { /* ignore */ }
+    };
+    window.addEventListener("storage", onStorage as EventListener);
+    window.addEventListener("jaikrajok:sessions-updated", onStorage as EventListener);
+    return () => {
+      window.removeEventListener("storage", onStorage as EventListener);
+      window.removeEventListener("jaikrajok:sessions-updated", onStorage as EventListener);
+    };
+  }, [userKey]);
+
   // Derived current active session state
   const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
   const messages = activeSession ? activeSession.messages : [];
@@ -3371,6 +3390,7 @@ export default function App() {
                     mood: session0?.mood || "calm",
                   };
                   localStorage.setItem(`jaikrajok:sessions:${userKey}`, JSON.stringify([newSession, ...existing.slice(1)]));
+                  window.dispatchEvent(new CustomEvent("jaikrajok:sessions-updated", { detail: { key: `jaikrajok:sessions:${userKey}` } }));
                   toast.info(`โหลดประวัติสนทนาจาก LINE Bot ${messages.length} ข้อความ`);
                 }
               }
