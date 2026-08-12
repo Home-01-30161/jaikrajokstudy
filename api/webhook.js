@@ -111,20 +111,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const secret = process.env.LINE_BOT_CHANNEL_SECRET;
-  if (!secret) {
-    res.status(500).json({ error: "LINE_BOT_CHANNEL_SECRET not set" });
-    return;
-  }
-
   const rawBody = await getRawBody(req);
-  const signature = req.headers["x-line-signature"] || "";
-
-  if (!verifySignature(rawBody, signature, secret)) {
-    console.error("Sig mismatch. body length:", rawBody.length, "sig:", signature);
-    res.status(400).json({ error: "Invalid signature" });
-    return;
-  }
 
   let body;
   try {
