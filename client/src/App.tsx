@@ -1391,18 +1391,11 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   // Raw LINE userId (e.g. "Uabc123") — present only for LINE-authenticated users
   const lineUserId = currentUser?.id?.startsWith("usr_line_") ? currentUser.id.replace("usr_line_", "") : null;
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-  const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
   const saveWebMessage = (role: "user" | "bot", text: string) => {
-    if (!lineUserId || !supabaseUrl || !supabaseAnon) return;
-    fetch(`${supabaseUrl}/rest/v1/chat_messages`, {
+    if (!lineUserId) return;
+    fetch("/api/save-message", {
       method: "POST",
-      headers: {
-        apikey: supabaseAnon,
-        Authorization: `Bearer ${supabaseAnon}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ line_user_id: lineUserId, role, text: text.slice(0, 4000), source: "web" }),
     }).catch(() => {/* best-effort */});
   };

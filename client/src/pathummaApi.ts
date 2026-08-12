@@ -615,12 +615,13 @@ export async function callVisionLLM(
   imageBlob: Blob,
   query: string,
   _filename = "image.jpg",
-  model = TYPHOON_OCR_MODEL
+  model = TYPHOON_OCR_MODEL,
+  systemPromptOverride?: string
 ): Promise<string> {
   const base64Data = await blobToBase64(imageBlob);
   const mimeType = imageBlob.type || "image/jpeg";
 
-  const ocrSystemPrompt =
+  const ocrSystemPrompt = systemPromptOverride ??
     "You are an OCR engine. Extract ALL text from the image exactly as it appears. " +
     "Return clean Markdown only — no explanations, no commentary, no extra text. " +
     "Format rules: " +
@@ -748,57 +749,43 @@ function fixThaiChoices(reply: string, ocrText: string): string {
   return result;
 }
 
+// System prompt for the unified vision+reasoning call on homework images
+const HOMEWORK_VISION_SYSTEM =
+  "You are a physics and mathematics expert who can both read Thai text from images and reason about diagrams. " +
+  "When given an image containing a problem: " +
+  "1. Transcribe ALL Thai text exactly as written (problem statement, variable names, units). " +
+  "2. For any diagram/figure: identify every labeled point (O, A, B, ...), every angle arc with its exact degree value, " +
+  "every vector/arrow with its direction description, every axis label, and every annotated quantity. " +
+  "State each diagram fact as a complete sentence: 'The projectile is launched from point O at 45 degrees from the vertical axis (Y-axis).' " +
+  "'At point A, the velocity vector makes 60 degrees from the vertical (Y-axis), i.e., 30 degrees above horizontal.' " +
+  "3. List ALL given quantities with their symbols and values. " +
+  "4. State what the problem is asking to find. " +
+  "Do NOT solve — only extract and describe. Be exhaustive and precise about angles; never describe grid coordinates as physics data.";
+
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
-  // Call 1: OCR the prose text (Thai problem statement, numbers, variable names)
-  // Call 2: Describe the diagram in structured natural language sentences
-  const [ocrResult, diagramResult] = await Promise.allSettled([
-    callVisionLLM(
-      imageBlob,
-      "Transcribe all text visible in this image exactly as written. Include Thai text, numbers, variable names, choice labels (ก. ข. ค. ง.), and axis labels."
-    ),
-    callVisionLLM(
-      imageBlob,
-      "Describe the diagram in this image using complete sentences. " +
-      "For EVERY angle arc shown, state exactly which two lines it is between and its numerical value. " +
-      "For EVERY labeled point (O, A, B, etc.), state what angle the velocity vector makes at that point and with respect to which axis or line. " +
-      "Example format: 'At point O, the projectile is launched at 45 degrees from the vertical axis.' " +
-      "'At point A, the velocity vector makes an angle of 60 degrees from the vertical axis.' " +
-      "Be precise and exhaustive about every angle in the diagram.",
-      "image.jpg",
-      THAILLM_MODEL
-    ),
-  ]);
-
-  const ocrText = ocrResult.status === "fulfilled" ? ocrResult.value : "";
-  let diagramText = diagramResult.status === "fulfilled" ? diagramResult.value : "";
-  console.debug("[OCR text]", ocrText);
-  console.debug("[Diagram description]", diagramText);
-
-  // Discard diagram description that is just raw numbers/coordinates with no meaningful physics content.
-  // This happens when typhoon-ocr dumps grid axis labels (20, 30, ..., 7930) as the "diagram description".
-  if (diagramText) {
-    const words = diagramText.trim().split(/\s+/);
-    const numberTokens = words.filter(w => /^\d+([.,]\d+)?$/.test(w)).length;
-    const meaningfulWords = words.filter(w => /[฀-๿a-zA-Z]/.test(w)).length;
-    // If >60% of tokens are bare numbers and there are fewer than 5 meaningful words, it's noise
-    if (numberTokens / words.length > 0.6 && meaningfulWords < 5) {
-      console.warn("[Diagram description] Discarding likely grid-number noise:", diagramText.slice(0, 100));
-      diagramText = "";
-    }
-  }
-
+  // Single vision call: unified OCR + diagram description with physics-aware system prompt
   let answer: string;
-  if (!ocrText && !diagramText) {
-    console.warn("Vision LLM homework: both calls empty");
+  try {
+    answer = await callVisionLLM(
+      imageBlob,
+      "Read this image. Transcribe all Thai text exactly. For each diagram element (points, angles, vectors, axes), " +
+      "write one sentence per element stating exactly what it shows with its precise numerical value. " +
+      "List all given quantities. State what the problem asks to find. Do not solve.",
+      "image.jpg",
+      THAILLM_MODEL,
+      HOMEWORK_VISION_SYSTEM
+    );
+    console.debug("[Homework vision]", answer);
+  } catch (e) {
+    console.warn("Homework vision failed:", e);
     answer = "ไม่สามารถอ่านโจทย์จากภาพได้ในขณะนี้";
-  } else {
-    answer = ocrText + (diagramText ? `\n\n[คำอธิบายแผนภาพ]\n${diagramText}` : "");
   }
-  // Step 2: Detect whether OCR actually found real multiple-choice items.
-  // Require choice labels (ก. / ข. / ค. / ง.) to appear at the START of a line
-  // (list items), NOT just anywhere in the text (avoids matching disclaimer notes
-  // like "*(หมายเหตุ: ในภาพไม่มีตัวเลือก ก. ข. ค. ง.)*").
-  // Also require at least 2 distinct labels to confirm it's truly multiple-choice.
+
+  if (!answer || answer.length < 10) {
+    return { answer: "ไม่สามารถอ่านโจทย์จากภาพได้ในขณะนี้", llmReply: "ไม่สามารถอ่านโจทย์จากภาพได้ในขณะนี้" };
+  }
+
+  // Detect multiple-choice: require choice labels (ก./ข./ค./ง.) at line start, at least 2 distinct
   const lineStartChoiceRe = /(?:^|\n)\s*([กขคง])\.\s/g;
   const choiceLettersFound = new Set<string>();
   let _cm: RegExpExecArray | null;
@@ -812,7 +799,6 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
     let solvePrompt: string;
 
     if (hasChoices) {
-      // Multiple-choice problem — use the choices extracted from OCR, never invent new ones
       solvePrompt =
         `ข้อมูลโจทย์และตัวเลือกที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
         `คำสั่งเรียบเรียงเฉลย:\n` +
@@ -822,46 +808,26 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `4. **สรุปคำตอบ**: ปิดท้ายด้วยบรรทัด **คำตอบที่ถูกต้องคือ: [ก./ข./ค./ง.]** เพียง 1 ครั้งเท่านั้น\n\n` +
         `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
     } else {
-      // Open-ended / individual problem — no choices, just solve step-by-step
       solvePrompt =
-        `โจทย์ที่อ่านได้จากภาพ (รวมคำอธิบายแผนภาพ):
-${answer.slice(0, 4000)}
-
-` +
-        `⚠️ คำสั่งสำคัญ:
-` +
-        `ส่วน [คำอธิบายแผนภาพ] ด้านบนคือข้อมูลจากแผนภาพจริงในโจทย์ ไม่ใช่คำอธิบายทั่วไป
-` +
-        `ทุกมุมที่ระบุในแผนภาพ เช่น 'มุม 60° ที่จุด A จากแนวดิ่ง' คือ ข้อมูลทางฟิสิกส์ที่ต้องใช้คำนวณโดยตรง
-` +
-        `ห้ามบอกว่า 'ขาดข้อมูล' หากข้อมูลนั้นปรากฏในส่วน [คำอธิบายแผนภาพ]
-
-` +
-        `คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์
-` +
-        `1. **โจทย์**: สรุปข้อมูลทั้งหมดที่กำหนด รวมมุมและค่าจากแผนภาพ
-` +
-        `2. **วิเคราะห์และหาคำตอบ**: แสดงขั้นตอนการคำนวณอย่างละเอียด
-` +
-        `3. **คำตอบสุดท้าย**: ระบุค่าคำตอบชัดเจน
-
-` +
-        `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด เพราะโจทย์นี้ไม่มีตัวเลือก`;
+        `ข้อมูลทั้งหมดที่อ่านได้จากภาพโจทย์ (รวมมุม จุด เวกเตอร์ ค่าที่กำหนด และสิ่งที่โจทย์ถาม):\n` +
+        `${answer.slice(0, 4000)}\n\n` +
+        `⚠️ คำสั่งสำคัญ: ข้อมูลด้านบนมาจากการอ่านภาพโจทย์จริง รวมถึงมุมและค่าต่าง ๆ จากแผนภาพ\n` +
+        `ทุกมุม ทุกจุด และทุกค่าที่ระบุด้านบน คือข้อมูลฟิสิกส์ที่ต้องใช้คำนวณโดยตรง ห้ามบอกว่า 'ขาดข้อมูล'\n\n` +
+        `คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์\n` +
+        `1. **ข้อมูลที่กำหนด**: รวบรวมค่า สัญลักษณ์ มุม และสิ่งที่โจทย์ถามหา\n` +
+        `2. **วิธีคำนวณ**: แสดงสมการและขั้นตอนทีละบรรทัด\n` +
+        `3. **คำตอบสุดท้าย**: ระบุค่าพร้อมหน่วย\n\n` +
+        `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด`;
     }
 
-    const rawReply = await callTextLLM(
-      solvePrompt,
-      MATH_SYSTEM_PROMPT,
-      6144,
-      0.1
-    );
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 6144, 0.05);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
-      llmReply = `## 📝 เฉลยการบ้าน\n\n${answer}`;
+      llmReply = `## เฉลยการบ้าน\n\n${answer}`;
     }
   } catch (err) {
     console.error("Homework text LLM failed:", err);
-    llmReply = `## 📝 โจทย์และเฉลยจากภาพ\n\n${answer}`;
+    llmReply = `## โจทย์และเฉลยจากภาพ\n\n${answer}`;
   }
 
   return { answer, llmReply };
