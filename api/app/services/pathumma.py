@@ -283,10 +283,82 @@ def _dedup_lines(text: str) -> str:
 
 # Matches prompts that contain math/calculation keywords — mirrors TS isMathOrChoice check.
 # When detected, use MATH_SYSTEM_PROMPT + temperature=0.05 for higher precision.
+# Extended with homework-pipeline keywords (โจทย์ที่อ่านได้, คำอธิบายแผนภาพ, ข้อมูลโจทย์)
+# that appear in dual-OCR solve prompts so they always route through math mode.
 _MATH_DETECT_RE = re.compile(
-    r"(โจทย์คณิต|คำนวณ|สมการ|ค\.ร\.น\.|ห\.ร\.ม\.|เศษเหลือ|ข้อสอบ|lcm|gcd|\bmod\b|\$\d|\d+\s*[+*/%]\s*\d+|\d+\s*=\s*\d+)",
+    r"(โจทย์คณิต|คำนวณ|สมการ|ค\.ร\.น\.|ห\.ร\.ม\.|เศษเหลือ|ข้อสอบ|lcm|gcd|\bmod\b|\$\d|\d+\s*[+*/%]\s*\d+|\d+\s*=\s*\d+|โจทย์ที่อ่านได้|คำอธิบายแผนภาพ|ข้อมูลโจทย์)",
     re.IGNORECASE,
 )
+
+# Matches prompts that are competitive-programming / problem-solving requests.
+# Ported from isProblemSolving in pathummaApi.ts reference repo.
+_PROBLEM_SOLVING_RE = re.compile(
+    r"(solve|แก้โจทย์|คำตอบ|ส่งผ่าน|pass|tasks/|problem/|contest/|toi\d|codecube|leetcode|hackerrank)",
+    re.IGNORECASE,
+)
+
+# Matches explicit programming tutorial requests (teach/learn, NOT problem solving).
+# Ported from isExplicitTutorial in pathummaApi.ts reference repo.
+_TUTORIAL_RE = re.compile(
+    r"(สอน|tutorial|คู่มือ|เรียนรู้|overview|เรียนเขียน)",
+    re.IGNORECASE,
+)
+
+CODING_SOLVER_PROMPT = (
+    "คุณคือ กระจก (JaiKraJok) ผู้เชี่ยวชาญการแก้โจทย์โปรแกรมมิ่งและการแข่งขันอัลกอริทึม (Competitive Programming) "
+    "🎯 กฎเหล็กในการตอบโจทย์โปรแกรมมิ่ง (ห้ามละเมิดเด็ดขาด):\n"
+    "1. ❌ CRITICAL: Do NOT write any English thinking, reasoning, or scratchpad text. "
+    "Begin directly with Thai explanations and the ```cpp ... ``` code block.\n"
+    "2. **อ่าน Output Format ของโจทย์ให้ครบ 100% ก่อนเขียนโค้ด** — "
+    "ดูตัวอย่าง Input/Output ในโจทย์แล้วตรวจว่าต้อง output กี่บรรทัด อะไรบ้าง\n"
+    "3. **Trace ผ่าน Example ก่อนส่ง** — รัน logic ในหัวกับ example ที่โจทย์ให้ "
+    "ตรวจว่า output ตรงกับ expected output ทุกบรรทัดทุกช่องว่าง\n"
+    "4. ตอบตรงประเด็นด้วยโค้ดฉบับเต็มภาษา C++ (หรือภาษาที่ขอ) พร้อมใช้งาน 100% — "
+    "ต้องครอบคลุมทุก output field ที่โจทย์กำหนด\n"
+    "5. อธิบายแนวคิดหลัก (Algorithm & Time Complexity) อย่างกระชับชัดเจน\n"
+    "6. ❌ ห้าม output น้อยกว่าหรือผิดรูปแบบที่โจทย์กำหนด "
+    "(เช่น ถ้าโจทย์ต้องการ 2 บรรทัด ต้องแสดง 2 บรรทัดตามตัวอย่างอย่างถูกต้อง)"
+)
+
+
+def _build_extra_instruction(prompt: str) -> str:
+    """Build extra instruction suffix based on prompt content.
+
+    Ported from callTextLLM() in pathummaApi.ts reference repo.
+    Returns a string to append to the user message for better formatting.
+    """
+    is_math = bool(_MATH_DETECT_RE.search(prompt))
+    is_problem_solving = bool(_PROBLEM_SOLVING_RE.search(prompt))
+    is_tutorial = bool(_TUTORIAL_RE.search(prompt))
+
+    if is_problem_solving:
+        return (
+            "\n\n[ข้อบังคับในการตอบโจทย์โปรแกรมมิ่ง]: "
+            "1. ตอบตรงจุดทันทีด้วยโค้ดภาษาที่ระบุ (เช่น C++) "
+            "2. อธิบายแนวคิด/อัลกอริทึม (Algorithm & Complexity) อย่างกระชับ "
+            "3. แสดงกล่องโค้ด ```cpp ... ``` ฉบับสมบูรณ์ที่พร้อมนำไปคอมไพล์และรันส่งผ่าน 100% "
+            "4. ❌ ห้ามเขียนบทเรียน Hello World หรือบทเรียนพื้นฐานเด็ดขาด ให้แก้โจทย์ที่ระบุทันที"
+        )
+
+    if is_math:
+        return (
+            "\n\n[หากมีโจทย์คณิตศาสตร์ในคำขอ: แสดงขั้นตอนการคำนวณอย่างแม่นยำทีละบรรทัด ห้ามเดาตัวเลข "
+            "จัดรูปแบบด้วย $$...$$ สำหรับทุกสูตรสมการ และ **Bold** เน้นคำตอบสุดท้าย]"
+        )
+
+    if is_tutorial:
+        return (
+            "\n\n[คำขอสอนโปรแกรมมิ่ง: เขียนบทเรียน 5 หัวข้อ: "
+            "1. โครงสร้างหลัก & Hello World, 2. Variables & Data Types, "
+            "3. Input & Output, 4. Conditionals & Loops, 5. Functions "
+            "โดยมีกล่องโค้ด ```lang...```]"
+        )
+
+    # General formatting boost for all responses — encourage rich markdown
+    return (
+        "\n\n[จัดรูปแบบ: ใช้ markdown ให้ครบถ้วน — **Bold** เน้นจุดสำคัญ | `code` inline | "
+        "```code blocks``` | $$LaTeX$$ สูตร | ตาราง | `- [ ]` task list | `> quote` | `---` แยกส่วน]"
+    )
 
 
 def _fix_thai_choices(reply: str, ocr_text: str) -> str:
@@ -440,8 +512,24 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
 
     # Math detection: use MATH_SYSTEM_PROMPT + ultra-low temperature for precision
     is_math = bool(_MATH_DETECT_RE.search(prompt))
-    active_system_prompt = MATH_SYSTEM_PROMPT if is_math else SYSTEM_PROMPT
-    temperature = 0.05 if is_math else 0.3
+    is_problem_solving = bool(_PROBLEM_SOLVING_RE.search(prompt))
+
+    # Smart system prompt routing (mirrors callTextLLM from reference repo):
+    # 1. Competitive programming → CODING_SOLVER_PROMPT
+    # 2. Math/science → MATH_SYSTEM_PROMPT
+    # 3. General → SYSTEM_PROMPT
+    if is_problem_solving:
+        active_system_prompt = CODING_SOLVER_PROMPT
+        temperature = 0.05
+    elif is_math:
+        active_system_prompt = MATH_SYSTEM_PROMPT
+        temperature = 0.05
+    else:
+        active_system_prompt = SYSTEM_PROMPT
+        temperature = 0.3
+
+    # Build extra instruction suffix (formatting hints based on prompt type)
+    extra_instruction = _build_extra_instruction(prompt)
 
     messages: list[dict] = [{"role": "system", "content": active_system_prompt}]
     for h in (history or [])[-10:]:
@@ -449,7 +537,7 @@ async def _generate_thaillm(prompt: str, settings, history: list | None = None) 
         text = (h.get("text") or "").strip()
         if text:
             messages.append({"role": role, "content": text})
-    messages.append({"role": "user", "content": prompt})
+    messages.append({"role": "user", "content": prompt + extra_instruction})
 
     # Pathumma-ThaiLLM-qwen3-8b-think-3.0.0 is a Qwen3 reasoning model:
     # it emits <think>...</think> before the real answer — stripped below.
@@ -537,8 +625,20 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
         "Content-Type": "application/json",
     }
 
-    # Build messages with conversation history
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # Build messages with conversation history — apply same smart routing as ThaiLLM
+    is_math = bool(_MATH_DETECT_RE.search(prompt))
+    is_problem_solving = bool(_PROBLEM_SOLVING_RE.search(prompt))
+
+    if is_problem_solving:
+        active_system_prompt = CODING_SOLVER_PROMPT
+    elif is_math:
+        active_system_prompt = MATH_SYSTEM_PROMPT
+    else:
+        active_system_prompt = SYSTEM_PROMPT
+
+    extra_instruction = _build_extra_instruction(prompt)
+
+    messages: list[dict] = [{"role": "system", "content": active_system_prompt}]
 
     # Append up to last 10 turns of history (user+bot pairs)
     for h in (history or [])[-10:]:
@@ -548,13 +648,14 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
             messages.append({"role": role, "content": text})
 
     # Append current user message
-    messages.append({"role": "user", "content": prompt})
+    messages.append({"role": "user", "content": prompt + extra_instruction})
 
+    temperature = 0.05 if (is_math or is_problem_solving) else 0.3
     payload = {
         "model": settings.tokenmind_llm_model,
         "messages": messages,
         "max_tokens": 8192,
-        "temperature": 0.3,
+        "temperature": temperature,
         "repetition_penalty": 1.15,
     }
     try:

@@ -13,7 +13,7 @@ import httpx
 from app.config import get_settings
 from app.services.base import ServiceResult
 from app.services.image_prep import prepare_for_ocr
-from app.services.typhoon_ocr import extract_text_typhoon
+from app.services.typhoon_ocr import describe_diagram_typhoon, extract_text_typhoon
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -270,3 +270,27 @@ def _extract_text(raw: dict) -> str | None:
         text = "\n".join(out).strip()
         return text or None
     return None
+
+
+async def describe_diagram(image_bytes: bytes) -> ServiceResult:
+    """Describe diagrams/figures in an image (second call in dual-call homework pattern).
+
+    Uses Typhoon OCR vision model with a diagram-specific prompt.
+    Returns a ServiceResult with the diagram description text.
+    This is a best-effort call — if it fails, the homework pipeline
+    continues with OCR text only (degraded but still functional).
+    """
+    # Preprocess image for better diagram analysis
+    try:
+        image_bytes = prepare_for_ocr(image_bytes, enhance="auto")
+    except Exception as e:
+        logger.warning("Image preprocessing for diagram failed: %s", e)
+
+    result = await describe_diagram_typhoon(image_bytes, filename="image.jpg")
+    if result.ok and (result.text or "").strip():
+        return result
+
+    logger.warning("Diagram description failed (%s); proceeding without diagram context", result.error)
+    return ServiceResult(
+        service="ocr-diagram", ok=False, error=result.error or "no diagram description"
+    )

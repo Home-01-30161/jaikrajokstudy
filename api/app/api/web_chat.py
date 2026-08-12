@@ -7,11 +7,15 @@ mood label the UI can render and an LLM reply written for that mood.
 
 from __future__ import annotations
 
+import asyncio
+import re
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from app import store
 from app.services import face, mood as mood_svc, ocr, pathumma, stt, tts
+from app.services.pathumma import _fix_thai_choices, MATH_SYSTEM_PROMPT
 from app.services.sentiment import analyze_sentiment
 from app.utils.security import create_session, enforce_rate_limit, require_session
 
@@ -381,60 +385,113 @@ async def homework_ocr(
     caption: str | None = None,
     user_id: str = Depends(require_session),
 ) -> AnalysisResponse:
-    """Homework mode: OCR the photo, then let the LLM help with what it read.
+    """Homework mode: dual-call OCR (text + diagram), then LLM solve.
+
+    Ported from analyzeHomework() in pathummaApi.ts (reference repo):
+    1. Two parallel Typhoon OCR calls: text extraction + diagram description
+    2. Combine into a rich prompt with [คำอธิบายแผนภาพ] section
+    3. Detect multiple-choice vs open-ended problems
+    4. Route to appropriate solve prompt (choice analysis vs step-by-step)
+    5. Use MATH_SYSTEM_PROMPT + low temperature for high precision
 
     Args:
         file: Image file to OCR.
-        caption: Optional user question typed alongside the image
-                 (e.g. "อธิบายข้อ 2" / "solve this problem").
-                 When provided, Typhoon OCR is asked the question directly.
-                 When omitted, default text-extraction + LLM explain is used.
+        caption: Optional user question typed alongside the image.
     """
     data = await _read_upload(file, "image/")
 
-    # ocr.transcribe_image() runs prepare_for_ocr() internally (resize + CLAHE
-    # + denoising + shadow removal) — no pre-processing needed here.
-    result = await ocr.transcribe_image(data, user_prompt=caption or None)
+    # Preprocess image once for both calls
+    from app.services.image_prep import prepare_for_ocr
+    try:
+        prepared = prepare_for_ocr(data, enhance="auto")
+    except Exception:
+        prepared = data
 
-    if not result.ok or not (result.text or "").strip():
+    # ── Step 1: Dual parallel vision calls (reference: analyzeHomework lines 753-767) ──
+    # Call 1: OCR the prose text (Thai problem statement, numbers, variable names)
+    # Call 2: Describe the diagram in structured natural language sentences
+    ocr_task = ocr.transcribe_image(data, user_prompt=caption or None)
+    diagram_task = ocr.describe_diagram(data)
+    ocr_result, diagram_result = await asyncio.gather(ocr_task, diagram_task)
+
+    ocr_text = (ocr_result.text or "").strip() if ocr_result.ok else ""
+    diagram_text = (diagram_result.text or "").strip() if diagram_result.ok else ""
+
+    if not ocr_text and not diagram_text:
         return AnalysisResponse(
             ok=False,
             reply="กระจกยังอ่านตัวหนังสือในภาพนี้ไม่ออก ลองถ่ายให้ชัดและตรงขึ้นอีกครั้งนะ",
             service="ocr",
-            error=result.error or "no text found",
+            error=ocr_result.error or "no text found",
         )
 
-    extracted = result.text.strip()[:_MAX_OCR_CHARS]
+    # ── Step 2: Combine OCR text + diagram description ──
+    # (reference: analyzeHomework line 779)
+    answer = ocr_text[:_MAX_OCR_CHARS]
+    if diagram_text:
+        answer += f"\n\n[คำอธิบายแผนภาพ]\n{diagram_text[:2000]}"
 
-    # If user typed a caption, Typhoon already answered the question in `extracted`.
-    # Pass to LLM only to structure/prettify the answer.
-    # If no caption, run the standard homework-explain prompt.
+    # ── Step 3: Detect multiple-choice vs open-ended ──
+    # (reference: analyzeHomework lines 786-792)
+    # Require choice labels at line start, at least 2 distinct labels
+    line_start_choice_re = re.compile(r"(?:^|\n)\s*([กขคง])\.\s")
+    choice_letters_found = set(m.group(1) for m in line_start_choice_re.finditer(answer))
+    has_choices = len(choice_letters_found) >= 2
+
+    # ── Step 4: If user typed a caption, use it as the solve prompt ──
     if caption and caption.strip():
         llm_prompt = (
             "นักเรียนส่งรูปการบ้านมาพร้อมคำถามว่า: \"" + caption.strip() + "\"\n"
-            "ผลการวิเคราะห์ภาพ/คำตอบเบื้องต้น:\n" + extracted + "\n\n"
-            "ช่วยอธิบายหรือเรียบเรียงคำตอบให้ชัดเจนขึ้นสำหรับนักเรียนมัธยม "
-            "ถ้าเป็นโจทย์คณิตศาสตร์หรือวิทยาศาสตร์ให้แสดงขั้นตอนการคิดด้วย"
+            "ข้อมูลโจทย์ที่อ่านและวิเคราะห์ได้จากภาพ:\n" + answer + "\n\n"
+            "⚠️ คำสั่งสำคัญ:\n"
+            "ส่วน [คำอธิบายแผนภาพ] ด้านบนคือข้อมูลจากแผนภาพจริงในโจทย์\n"
+            "ห้ามบอกว่า 'ขาดข้อมูล' หากข้อมูลนั้นปรากฏในส่วน [คำอธิบายแผนภาพ]\n\n"
+            "ช่วยตอบคำถามนี้อย่างละเอียด แสดงขั้นตอนการคิดและการคำนวณทุกขั้นตอน"
+        )
+    elif has_choices:
+        # ── Multiple-choice problem (reference: analyzeHomework lines 800-807) ──
+        llm_prompt = (
+            f"ข้อมูลโจทย์และตัวเลือกที่อ่านและวิเคราะห์ได้จากภาพ:\n{answer[:3000]}\n\n"
+            "คำสั่งเรียบเรียงเฉลย:\n"
+            "1. **โจทย์และข้อมูลในภาพ**: สรุปโจทย์และรายละเอียดสั้น ๆ\n"
+            "2. **ตัวเลือกทั้งหมด**: แสดงตัวเลือก ก., ข., ค., ง. ที่ **ถอดความได้จากภาพข้างต้นเท่านั้น** "
+            "— ห้ามประดิษฐ์หรือแต่งตัวเลือกใหม่เด็ดขาด\n"
+            "3. **วิเคราะห์ตัวเลือก**: อธิบายเหตุผลของแต่ละตัวเลือกว่าถูกหรือผิด\n"
+            "4. **สรุปคำตอบ**: ปิดท้ายด้วยบรรทัด **คำตอบที่ถูกต้องคือ: [ก./ข./ค./ง.]** เพียง 1 ครั้งเท่านั้น\n\n"
+            "❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด"
         )
     else:
+        # ── Open-ended problem (reference: analyzeHomework lines 810-833) ──
         llm_prompt = (
-            "นักเรียนส่งรูปการบ้านมา ข้อความที่อ่านได้จากภาพคือ:\n" + extracted + "\n\n"
-            "ช่วยอธิบายหรือแนะนำวิธีทำอย่างเป็นขั้นตอน โดยไม่เฉลยคำตอบตรง ๆ ทันที"
+            f"โจทย์ที่อ่านได้จากภาพ (รวมคำอธิบายแผนภาพ):\n{answer[:4000]}\n\n"
+            "⚠️ คำสั่งสำคัญ:\n"
+            "ส่วน [คำอธิบายแผนภาพ] ด้านบนคือข้อมูลจากแผนภาพจริงในโจทย์ ไม่ใช่คำอธิบายทั่วไป\n"
+            "ทุกมุมที่ระบุในแผนภาพ เช่น 'มุม 60° ที่จุด A จากแนวดิ่ง' คือ ข้อมูลทางฟิสิกส์ที่ต้องใช้คำนวณโดยตรง\n"
+            "ห้ามบอกว่า 'ขาดข้อมูล' หากข้อมูลนั้นปรากฏในส่วน [คำอธิบายแผนภาพ]\n\n"
+            "คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์\n"
+            "1. **โจทย์**: สรุปข้อมูลทั้งหมดที่กำหนด รวมมุมและค่าจากแผนภาพ\n"
+            "2. **วิเคราะห์และหาคำตอบ**: แสดงขั้นตอนการคำนวณอย่างละเอียด\n"
+            "3. **คำตอบสุดท้าย**: ระบุค่าคำตอบชัดเจน\n\n"
+            "❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด เพราะโจทย์นี้ไม่มีตัวเลือก"
         )
+
+    # ── Step 5: Call LLM with MATH_SYSTEM_PROMPT + low temperature ──
+    # (reference: analyzeHomework lines 836-841)
     llm = await pathumma.generate_reply(llm_prompt)
-    reply = (
-        llm.text
-        if llm.ok and llm.text
-        else "กระจกอ่านข้อความจากภาพได้แล้ว แต่ระบบ AI ยังตอบไม่ได้ตอนนี้ ลองอีกครั้งนะ"
-    )
+    if llm.ok and llm.text:
+        reply = _fix_thai_choices(llm.text, answer)
+        if len(reply) < 30:
+            reply = f"## 📝 เฉลยการบ้าน\n\n{answer}"
+    else:
+        reply = f"## 📝 โจทย์และเฉลยจากภาพ\n\n{answer}"
 
     store.record_mood(user_id, "neutral", source="homework", channel="image")
     return AnalysisResponse(
         ok=True,
         mood="neutral",
         reply=reply,
-        detail=extracted,
-        transcript=extracted,
+        detail=answer,
+        transcript=ocr_text,
         service="ocr+llm",
     )
 

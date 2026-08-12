@@ -249,6 +249,162 @@ async def extract_text_typhoon(
     return ServiceResult(service="typhoon-ocr", ok=False, error=last_error)
 
 
+# ---------------------------------------------------------------------------
+# Diagram description (second vision call in dual-call homework pattern)
+# ---------------------------------------------------------------------------
+
+_DIAGRAM_SYSTEM_PROMPT = (
+    "You are a diagram analysis engine specialised in Thai physics and mathematics homework. "
+    "Describe the diagram in this image using complete sentences. "
+    "Output language: Thai and English only. NEVER output Chinese or Japanese. "
+    "For EVERY angle arc shown, state exactly which two lines it is between and its numerical value. "
+    "For EVERY labeled point (O, A, B, etc.), state what angle the velocity vector makes at that "
+    "point and with respect to which axis or line. "
+    "Example format: 'At point O, the projectile is launched at 45 degrees from the vertical axis.' "
+    "'At point A, the velocity vector makes an angle of 60 degrees from the vertical axis.' "
+    "Be precise and exhaustive about every angle, vector, label, and measurement in the diagram. "
+    "Do NOT output Chinese or Japanese characters under any circumstances."
+)
+
+_DIAGRAM_USER_PROMPT = (
+    "Describe the diagram in this image using complete sentences. "
+    "For EVERY angle arc shown, state exactly which two lines it is between and its numerical value. "
+    "For EVERY labeled point (O, A, B, etc.), state what angle the velocity vector makes at that "
+    "point and with respect to which axis or line. "
+    "Be precise and exhaustive about every angle in the diagram."
+)
+
+
+async def describe_diagram_typhoon(
+    image_bytes: bytes,
+    filename: str = "image.jpg",
+) -> ServiceResult:
+    """Describe diagrams/figures in an image using Typhoon OCR vision model.
+
+    This is the second vision call in the dual-call pattern from the reference repo's
+    analyzeHomework() — one call for text OCR, one call for diagram description.
+    """
+    settings = get_settings()
+
+    if not settings.typhoon_api_key:
+        return ServiceResult(
+            service="typhoon-ocr-diagram",
+            ok=False,
+            error="Missing TYPHOON_API_KEY",
+        )
+
+    if not image_bytes:
+        return ServiceResult(
+            service="typhoon-ocr-diagram",
+            ok=False,
+            error="Empty image bytes",
+        )
+
+    mime = _detect_mime(filename, image_bytes)
+    b64_image = base64.b64encode(image_bytes).decode("ascii")
+    data_url = f"data:{mime};base64,{b64_image}"
+
+    headers = {
+        "Authorization": f"Bearer {settings.typhoon_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": _OCR_MODELS[0],
+        "messages": [
+            {
+                "role": "system",
+                "content": _DIAGRAM_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": data_url},
+                    },
+                    {
+                        "type": "text",
+                        "text": _DIAGRAM_USER_PROMPT,
+                    },
+                ],
+            },
+        ],
+        "max_tokens": 4096,
+        "temperature": 0.1,
+        "top_p": 0.6,
+        "repetition_penalty": 1.2,
+    }
+
+    last_error = "unknown"
+
+    for model in _OCR_MODELS:
+        payload["model"] = model
+        try:
+            async with httpx.AsyncClient(
+                timeout=35.0, verify=not settings.insecure_tls
+            ) as client:
+                resp = await client.post(_CHAT_URL, headers=headers, json=payload)
+
+                try:
+                    raw = resp.json()
+                except Exception:
+                    raw = {"text": resp.text}
+
+                if resp.status_code >= 400:
+                    err_msg = ""
+                    if isinstance(raw, dict):
+                        err_obj = raw.get("error") or {}
+                        if isinstance(err_obj, dict):
+                            err_msg = err_obj.get("message", "")
+                        elif isinstance(err_obj, str):
+                            err_msg = err_obj
+                    if not err_msg:
+                        err_msg = f"HTTP {resp.status_code}"
+                    logger.warning(
+                        "Typhoon diagram [%s] HTTP %s: %s",
+                        model, resp.status_code, str(raw)[:300],
+                    )
+                    last_error = err_msg
+                    if resp.status_code in (404, 422, 429):
+                        continue
+                    return ServiceResult(
+                        service="typhoon-ocr-diagram",
+                        ok=False,
+                        error=err_msg,
+                        raw=raw if isinstance(raw, dict) else {},
+                    )
+
+                raw_dict = raw if isinstance(raw, dict) else {}
+                extracted_text = _strip_cjk_lines(
+                    _parse_chat_response(raw_dict)
+                )
+
+                if not extracted_text:
+                    logger.warning("Typhoon diagram [%s] returned empty text", model)
+                    last_error = "empty response"
+                    continue
+
+                logger.info("Typhoon diagram succeeded with model=%s", model)
+                return ServiceResult(
+                    service="typhoon-ocr-diagram",
+                    ok=True,
+                    text=extracted_text,
+                    raw=raw_dict,
+                )
+
+        except httpx.TimeoutException:
+            logger.warning("Typhoon diagram [%s] timed out", model)
+            last_error = "timeout"
+            continue
+        except Exception as exc:
+            logger.exception("Typhoon diagram [%s] call failed", model)
+            last_error = str(exc)
+            continue
+
+    return ServiceResult(service="typhoon-ocr-diagram", ok=False, error=last_error)
+
+
 def _parse_chat_response(raw: dict) -> str:
     """Extract text from /v1/chat/completions response.
 
