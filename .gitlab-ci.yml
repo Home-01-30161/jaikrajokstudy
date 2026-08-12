@@ -3,20 +3,26 @@
 #
 #  base = 20000 + (7 - 1) * 10
 #     team07 -> BASE 20060  BASE_1 20061
+#
+#  The GitLab runner is a SHELL executor with Docker installed on the
+#  host — NOT Docker-in-Docker. The `image:` key is ignored by shell
+#  runners; Docker commands use the host daemon via /var/run/docker.sock.
+#  DOCKER_HOST is explicitly cleared so no stale tcp://docker:2375 leaks in.
 # ============================================================
 
 variables:
-  TEAM:   "team07"
-  BASE:   "20060"
-  BASE_1: "20061"
+  TEAM:     "team07"
+  BASE:     "20060"
+  BASE_1:   "20061"
+  # Force shell runner to use the host Docker socket, never tcp://docker:2375
+  DOCKER_HOST: ""
 
 stages: [check, deploy, ops]
 
 default:
-  image: docker:27.3.1
   before_script:
-    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
-    - apk add --no-cache curl bash >/dev/null
+    - docker compose version >/dev/null 2>&1 || (apk add --no-cache docker-cli-compose 2>/dev/null || apt-get install -y docker-compose-plugin 2>/dev/null || true)
+    - docker version
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
 
 # ------------------------------------------------------------
