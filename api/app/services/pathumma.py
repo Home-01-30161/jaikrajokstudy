@@ -64,10 +64,32 @@ _ENG_REASONING_RE = re.compile(
 
 # English-dominant hallucination markers seen in real bad responses:
 # "Step-by-step", "Part A/B/C", "EXAMPLE CASE", "Suppose", "Determine Whether"
+# Also catches un-tagged Qwen3-Think scratchpad leaks (screenshot 2):
+# STEP_1, [Diagram], [END OF DRAFT], Note: This draft, [Example Diagram], \boxed
 _ENG_HALLUCINATION_RE = re.compile(
     r"(Step-by-step|Part [A-Z][\s：:]|EXAMPLE CASE|Suppose\s+\w+|"
     r"Determine[sd]? [Ww]hether|ObjectiveFunction|Imagine Scenario|"
-    r"TheirHeightsMust|SimilarTO|SuchAs:|STEPS THREE|ASSUMPTION\()",
+    r"TheirHeightsMust|SimilarTO|SuchAs:|STEPS THREE|ASSUMPTION\(|"
+    r"STEP_\d|END OF DRAFT|\[Diagram\]|\[Example\s*Diagram\]|"
+    r"Note:\s*This draft|\\boxed\{)",
+    re.IGNORECASE,
+)
+
+# Matches "Note: This draft..." or "[END OF DRAFT]" — marks the end of leaked scratchpad section.
+# Everything AFTER this marker is the real answer.
+_SCRATCHPAD_SECTION_RE = re.compile(
+    r"(\[END\s+OF\s+DRAFT\]|Note:\s*This\s+draft)",
+    re.IGNORECASE,
+)
+
+# Matches a full line that is ONLY a scratchpad marker (dropped entirely).
+_SCRATCHPAD_LINE_RE = re.compile(
+    r"^\s*(STEP_\d+\s*:|"
+    r"\[Diagram\]|"
+    r"\[Example\s*Diagram\]|"
+    r"\[END\s+OF\s+DRAFT\]|"
+    r"Note:\s*This\s+draft|"
+    r"\\boxed\{)\s*$",
     re.IGNORECASE,
 )
 
@@ -96,7 +118,30 @@ def _is_english_dominant(text: str) -> bool:
 
 
 def _strip_reasoning(text: str) -> str:
-    """Strip <think>...</think> blocks and any leaked Chinese/English scratchpad."""
+    """Strip <think>...</think> blocks and any leaked Chinese/English scratchpad.
+
+    Also handles the Qwen3-Think scratchpad that leaks WITHOUT <think> tags —
+    seen in screenshot 2: STEP_1, [Diagram], [END OF DRAFT], Note: This draft,
+    [Example Diagram], \\boxed{} — these are internal draft markers that the
+    model emits when it ignores the \"no scratchpad\" instruction.
+    """
+    # 0. Strip un-tagged scratchpad line markers BEFORE any other processing.
+    #    These leak when Qwen3-8b-think outputs its draft without <think> wrapping.
+    #    Strategy: drop any line that IS a scratchpad marker, and also drop everything
+    #    from "[END OF DRAFT]" or "Note: This draft" onwards (they mark end of fake draft).
+
+    # If a section-end marker exists, keep only text AFTER it (the actual answer)
+    section_match = _SCRATCHPAD_SECTION_RE.search(text)
+    if section_match:
+        after_section = text[section_match.end():].strip()
+        if after_section:
+            text = after_section
+        # else the whole thing was scratchpad — fall through, other guards will catch it
+
+    # Drop individual scratchpad marker lines
+    lines = text.split("\n")
+    text = "\n".join(line for line in lines if not _SCRATCHPAD_LINE_RE.match(line))
+
     # 1. Proper closed <think>...</think> — extract everything AFTER </think>
     if "</think>" in text.lower():
         after = re.split(r"</think>", text, flags=re.IGNORECASE, maxsplit=1)[-1].strip()

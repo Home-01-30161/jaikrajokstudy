@@ -276,7 +276,7 @@ _OCR_PROMPT = (
     "1. ตอบเป็นภาษาไทยเท่านั้น ห้ามตอบเป็นภาษาอังกฤษ ภาษาจีน หรือภาษาอื่น\n"
     "2. ห้าม Step-by-step ภาษาอังกฤษ ห้าม Part A/B/C ห้าม EXAMPLE CASE\n"
     "3. อธิบายเฉพาะโจทย์ที่อ่านได้จากข้อความด้านบนเท่านั้น ห้ามคิดเรื่องอื่น\n"
-    "4. อธิบายแนวคิดและวิธีคิดเป็นขั้นตอนภาษาไทย ไม่เฉลยคำตอบตรง ๆ\n"
+    "4. อธิบายและแสดงวิธีคิดทีละขั้นตอนเป็นภาษาไทย พร้อมเฉลยคำตอบให้ครบถ้วน\n"
     "5. ถ้าข้อความไม่ชัดเจน ให้บอกว่าอ่านได้อะไรบ้างและถามนักเรียนเพิ่มเติม\n"
     "6. ตอบกระชับ ไม่เกิน 400 คำ"
 )
@@ -380,7 +380,9 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
             _eng_markers = bool(_re.search(
                 r"(Step-by-step|Part [A-Z][\s：:]|EXAMPLE CASE|Suppose\s+\w+|"
                 r"Determine[sd]? [Ww]hether|ObjectiveFunction|Imagine Scenario|"
-                r"TheirHeightsMust|STEPS THREE)",
+                r"TheirHeightsMust|STEPS THREE|"
+                r"STEP_\d|END OF DRAFT|\[Diagram\]|\[Example\s*Diagram\]|"
+                r"Note:\s*This draft|\\boxed\{)",
                 reply_text, _re.IGNORECASE,
             ))
             _latin = len(_re.findall(r"[A-Za-z]", reply_text))
