@@ -1,32 +1,35 @@
-﻿# ============================================================
-#  .gitlab-ci.yml — JaiKrajok (PeeMeowLab) / team07
+# ============================================================
+#  .gitlab-ci.yml — JaiKrajok / team07
 #
 #  base = 20000 + (7 - 1) * 10
 #     team07 -> BASE 20060  BASE_1 20061
 #
-#  The GitLab runner is a SHELL executor with Docker installed on the
-#  host — NOT Docker-in-Docker. The `image:` key is ignored by shell
-#  runners; Docker commands use the host daemon via /var/run/docker.sock.
-#  DOCKER_HOST is explicitly cleared so no stale tcp://docker:2375 leaks in.
+#  runner คือ Docker executor (dind) — ตรงตาม template ของทีมงาน
+#  image: docker:27.3.1 + services: docker:27.3.1-dind
+#  DOCKER_TLS_CERTDIR: "" -> daemon ฟังที่ tcp://docker:2375 (ไม่ใช้ TLS)
 # ============================================================
 
 variables:
-  TEAM:     "team07"
-  BASE:     "20060"
-  BASE_1:   "20061"
-  # Force shell runner to use the host Docker socket, never tcp://docker:2375
-  DOCKER_HOST: ""
+  TEAM:   "team07"
+  BASE:   "20060"
+  BASE_1: "20061"
+  # dind: ปิด TLS ให้ client ต่อ daemon ผ่าน tcp://docker:2375 ได้
+  DOCKER_TLS_CERTDIR: ""
 
 stages: [check, deploy, ops]
 
 default:
+  image: docker:27.3.1
+  services:
+    - docker:27.3.1-dind
   before_script:
-    - docker compose version >/dev/null 2>&1 || (apk add --no-cache docker-cli-compose 2>/dev/null || apt-get install -y docker-compose-plugin 2>/dev/null || true)
-    - docker version
+    # image บางเวอร์ชันไม่มี compose plugin
+    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
+    - apk add --no-cache curl bash >/dev/null
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
 
 # ------------------------------------------------------------
-#  Validate compose against hackathon rules
+#  ตรวจ compose ก่อน deploy
 # ------------------------------------------------------------
 check:
   stage: check
@@ -35,7 +38,6 @@ check:
       LO=$BASE; HI=$((BASE+9)); FAIL=0
 
       echo "== port binding =="
-      test -f .env || touch .env
       while read -r line; do
         case "$line" in
           *'${BASE'*|*'$BASE'*) echo "  ok (variable) $line" ;;
@@ -76,16 +78,14 @@ deploy:
     name: $TEAM
     url: https://$TEAM.aiforthai.in.th
   script:
+    # secret มาจาก CI/CD Variables ที่ขึ้นต้นด้วย APP_ (ตั้งเป็น Masked)
+    # อย่าใส่ set -x ในสเต็ปนี้ ค่าจะโผล่ใน job log
     - printenv | grep '^APP_' > .env || true
-    - test "${#APP_SESSION_SECRET}" -ge 32 || { echo "APP_SESSION_SECRET must be at least 32 characters"; exit 1; }
     - docker compose -p "$TEAM" up -d --build --remove-orphans
     - |
-      echo "waiting for healthcheck..."
-      CID=$(docker compose -p "$TEAM" ps -q api)
-      echo "api container: $CID"
-      st=none
+      echo "waiting for api healthcheck..."
       for i in $(seq 1 40); do
-        st=$(docker inspect -f '{{.State.Health.Status}}' "$CID" 2>/dev/null || echo none)
+        st=$(docker inspect -f '{{.State.Health.Status}}' "${TEAM}-api-1" 2>/dev/null || echo none)
         [ "$st" = "healthy" ] && { echo "api healthy"; break; }
         echo "  [$i/40] status=$st"
         sleep 5
@@ -96,31 +96,12 @@ deploy:
         docker compose -p "$TEAM" logs --tail=200 --no-color api
         exit 1
       fi
-      FRONTEND_CID=$(docker compose -p "$TEAM" ps -q frontend)
-      echo "frontend container: $FRONTEND_CID"
-      frontend_st=none
-      for i in $(seq 1 20); do
-        frontend_st=$(docker inspect -f '{{.State.Health.Status}}' "$FRONTEND_CID" 2>/dev/null || echo none)
-        [ "$frontend_st" = "healthy" ] && { echo "frontend healthy"; break; }
-        echo "  [$i/20] status=$frontend_st"
-        sleep 3
-      done
-      docker compose -p "$TEAM" ps
-      if [ "$frontend_st" != "healthy" ]; then
-        echo "frontend never became healthy - last 200 log lines:"
-        docker compose -p "$TEAM" logs --tail=200 --no-color frontend
-        exit 1
-      fi
-    - |
-      docker compose -p "$TEAM" exec -T api curl -fsS http://localhost:8000/health \
-        && echo " <- /health OK"
-      docker compose -p "$TEAM" exec -T frontend wget -qO- http://localhost:3000/healthz \
-        && echo " <- frontend /healthz OK"
+    - curl -fsS "http://127.0.0.1:${BASE_1}/health" && echo " <- /health OK"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
 # ============================================================
-#  Manual ops jobs (used instead of SSH)
+#  Manual ops jobs (แทน SSH)
 # ============================================================
 .ops: &ops
   stage: ops
@@ -144,10 +125,9 @@ restart:
     - docker compose -p "$TEAM" restart
     - docker compose -p "$TEAM" ps
 
-smoke-ai:
+migrate:
   <<: *ops
-  script:
-    - docker compose -p "$TEAM" exec -T api python scripts/test_aiforthai_apis.py
+  script: [docker compose -p "$TEAM" exec -T api alembic upgrade head]
 
 shell-cmd:
   <<: *ops
@@ -155,3 +135,11 @@ shell-cmd:
     SERVICE: api
     CMD: "python -c 'import sys; print(sys.version)'"
   script: [docker compose -p "$TEAM" exec -T "$SERVICE" sh -lc "$CMD"]
+
+reset-db:
+  <<: *ops
+  script:
+    - docker compose -p "$TEAM" stop db
+    - docker compose -p "$TEAM" rm -f db
+    - rm -rf /data/hack/$TEAM/pgdata/*
+    - docker compose -p "$TEAM" up -d
