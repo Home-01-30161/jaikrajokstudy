@@ -3348,7 +3348,6 @@ export default function App() {
               if (histRes.ok) {
                 const { messages } = await histRes.json() as { messages: { role: string; text: string; source: string; created_at: string }[] };
                 if (messages.length > 0) {
-                  const userKey = lineUser.id;
                   const chatMsgs: ChatMsg[] = messages.map((m) => ({
                     id: "line_" + m.created_at + "_" + Math.random().toString(36).slice(2),
                     role: m.role as "user" | "bot",
@@ -3356,22 +3355,15 @@ export default function App() {
                     timestamp: new Date(m.created_at).getTime() || Date.now(),
                     sourceTag: m.source === "line" ? "LINE" : "Web",
                   }));
-                  const existingRaw = localStorage.getItem(`jaikrajok:sessions:${userKey}`);
-                  const existing: ChatSession[] = existingRaw ? JSON.parse(existingRaw) : [];
-                  const session0 = existing[0];
-                  const merged: ChatMsg[] = [
-                    ...chatMsgs,
-                    ...(session0 ? session0.messages.filter((m) => m.id !== "init") : []),
-                  ];
-                  const newSession: ChatSession = {
-                    id: session0?.id || `session_${userKey}_1`,
+                  // Replace sessions entirely with LINE history — no merge with stale local messages
+                  const lineSession: ChatSession = {
+                    id: `session_${lineUser.id}_1`,
                     title: "LINE Bot History",
                     timestamp: Date.now(),
-                    messages: merged,
-                    mood: session0?.mood || "calm",
+                    messages: chatMsgs,
+                    mood: "calm",
                   };
-                  localStorage.setItem(`jaikrajok:sessions:${userKey}`, JSON.stringify([newSession, ...existing.slice(1)]));
-                  window.dispatchEvent(new CustomEvent("jaikrajok:sessions-updated", { detail: { key: `jaikrajok:sessions:${userKey}` } }));
+                  localStorage.setItem(`jaikrajok:sessions:${lineUser.id}`, JSON.stringify([lineSession]));
                   toast.info(`โหลดประวัติสนทนาจาก LINE Bot ${messages.length} ข้อความ`);
                 }
               }
