@@ -1388,6 +1388,24 @@ export interface ChatSession {
 /* ============ MAIN APP SHELL ============ */
 function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser: UserAccount | null; onLogout?: () => void; age: string; guardianConsent: boolean }) {
   const userKey = currentUser ? currentUser.id : "guest";
+  // Raw LINE userId (e.g. "Uabc123") — present only for LINE-authenticated users
+  const lineUserId = currentUser?.id?.startsWith("usr_line_") ? currentUser.id.replace("usr_line_", "") : null;
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  const saveWebMessage = (role: "user" | "bot", text: string) => {
+    if (!lineUserId || !supabaseUrl || !supabaseAnon) return;
+    fetch(`${supabaseUrl}/rest/v1/chat_messages`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseAnon,
+        Authorization: `Bearer ${supabaseAnon}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ line_user_id: lineUserId, role, text: text.slice(0, 4000), source: "web" }),
+    }).catch(() => {/* best-effort */});
+  };
   const [currentView, setCurrentView] = useState<AppView>("home");
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
@@ -1658,6 +1676,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       .map((m) => ({ role: m.role, text: m.text }));
 
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
+    saveWebMessage("user", textToSend);
     noteMultimodal(sourceLabel);
     setIsAnalyzing(true);
 
@@ -1669,6 +1688,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
           toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ (Tavily Search)");
         }
         setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: reply, timestamp: Date.now() }]);
+        saveWebMessage("bot", reply);
         pushTrend(emotionKey, sourceLabel);
       } catch (err) {
         console.error("Pathumma Text LLM error:", err);
@@ -1676,7 +1696,9 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
         // Fallback to local mock
         const key = detectEmotion(textToSend);
         const list = RESPONSES[key] || RESPONSES.neutral;
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: list[Math.floor(Math.random() * list.length)], timestamp: Date.now() }]);
+        const fallbackReply = list[Math.floor(Math.random() * list.length)];
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: fallbackReply, timestamp: Date.now() }]);
+        saveWebMessage("bot", fallbackReply);
         pushTrend(key, sourceLabel);
       } finally {
         setIsAnalyzing(false);
