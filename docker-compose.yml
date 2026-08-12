@@ -1,12 +1,4 @@
-# JaiKrajok — team07
-#
-# base = 20000 + (7 - 1) * 10 = 20060
-#   20060 -> frontend  (V3 React application on container port 3000)
-#   20061 -> api       (FastAPI on container port 8000)
-#   db    -> PostgreSQL (internal only, no host port)
-#
-# TEAM / BASE / BASE_1 are injected by GitLab CI variables.
-name: ${TEAM:-team07}
+name: ${TEAM}
 
 x-logging: &logging
   driver: json-file
@@ -22,18 +14,25 @@ x-common: &common
 services:
   frontend:
     <<: *common
-    build: ./web
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      args:
+        VITE_LINE_CHANNEL_ID:          "${APP_VITE_LINE_CHANNEL_ID:-}"
+        VITE_GOOGLE_CLIENT_ID:         "${APP_VITE_GOOGLE_CLIENT_ID:-}"
+        VITE_APP_ID:                   "${APP_VITE_APP_ID:-}"
+        VITE_OAUTH_PORTAL_URL:         "${APP_VITE_OAUTH_PORTAL_URL:-}"
+        VITE_PATHUMMA_API_KEY:         "${APP_VITE_PATHUMMA_API_KEY:-}"
+        VITE_THAILLM_API_KEY:          "${APP_VITE_THAILLM_API_KEY:-}"
+        VITE_FRONTEND_FORGE_API_URL:   "${APP_VITE_FRONTEND_FORGE_API_URL:-}"
+        VITE_FRONTEND_FORGE_API_KEY:   "${APP_VITE_FRONTEND_FORGE_API_KEY:-}"
     ports:
-      - "127.0.0.1:${BASE:-20060}:3000"
+      - "127.0.0.1:${BASE}:3000"
+    environment:
+      NODE_ENV: production
     depends_on:
       api:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
     deploy:
       resources:
         limits:
@@ -44,51 +43,20 @@ services:
     <<: *common
     build: ./api
     ports:
-      - "127.0.0.1:${BASE_1:-20061}:8000"
+      - "127.0.0.1:${BASE_1}:8000"
     env_file:
       - .env
     environment:
       ROOT_PATH: /api
-      APP_ENV: production
-      LOG_LEVEL: INFO
-      TEAM: ${TEAM:-team07}
-      CORS_ORIGINS: https://${TEAM:-team07}.aiforthai.in.th
-      DATABASE_URL: postgresql+psycopg://app:${TEAM:-team07}pass@db:5432/app
-      # Production must never inherit local TLS-debug overrides from .env.
-      INSECURE_TLS: "0"
-      PYTHONHTTPSVERIFY: "1"
-      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      NODE_ENV: production
     volumes:
-      - /data/hack/${TEAM:-team07}/uploads:/app/uploads
+      - /data/hack/${TEAM}/uploads:/app/uploads
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 40s
-    depends_on:
-      db:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: "4.0"
-
-  db:
-    <<: *common
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: ${TEAM:-team07}pass
-      POSTGRES_DB: app
-    volumes:
-      - /data/hack/${TEAM:-team07}/pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d app"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
     deploy:
       resources:
         limits:

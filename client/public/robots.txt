@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jaikrajokstudy.vercel.app/sitemap.xml
