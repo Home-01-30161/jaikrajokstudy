@@ -35,14 +35,14 @@ function verifySignature(rawBody, signature, secret) {
 }
 
 async function llmReply(text) {
-  const apiKey = process.env.THAILLM_API_KEY;
+  const apiKey = process.env.TYPHOON_API_KEY || process.env.TYPHOON_ASR_KEY;
   if (!apiKey) return null;
   try {
-    const res = await fetch("http://thaillm.or.th/api/v1/chat/completions", {
+    const res = await fetch("https://api.opentyphoon.ai/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "pathumma-thaillm-qwen3-8b-think-3.0.0",
+        model: "typhoon-v2-70b-instruct",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: text },
@@ -50,13 +50,11 @@ async function llmReply(text) {
         max_tokens: 512,
         temperature: 0.4,
       }),
-      // Stay well within Vercel's 10s hobby limit
-      signal: AbortSignal.timeout(7000),
+      signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
     const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content || "";
-    return content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() || null;
+    return data?.choices?.[0]?.message?.content?.trim() || null;
   } catch (e) {
     console.error("LLM error:", e?.message);
     return null;
