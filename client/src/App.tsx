@@ -163,6 +163,41 @@ const SELFIE_NOTES: Record<string, string> = {
   calm: "สีหน้าดูผ่อนคลาย แววตาสดใส",
 };
 
+const EMO_REASONS: Record<string, string[]> = {
+  negative: [
+    "ความเครียดจากงานหรือการเรียน",
+    "ความสัมพันธ์ที่ไม่ราบรื่น",
+    "ความรู้สึกโดดเดี่ยว หรือขาดการสนับสนุน",
+    "ความคาดหวังที่สูงเกินไปต่อตนเอง",
+    "หรือแค่ \"วันนี้มันไม่ใช่วันดี\" จริงๆ",
+  ],
+  neutral: [
+    "รู้สึกเฉยๆ ยังไม่แน่ใจ",
+    "มีเรื่องค้างคาในใจ",
+    "ต้องการพื้นที่ระบาย",
+    "อยากคุยเรื่องทั่วไป",
+  ],
+  calm: [
+    "ได้พักผ่อนเพียงพอ",
+    "ทำสิ่งที่ชอบมา",
+    "มีคนช่วยแบ่งเบาภาระ",
+    "วันนี้สิ่งต่างๆ ดำเนินไปได้ดี",
+  ],
+  positive: [
+    "ประสบความสำเร็จในบางเรื่อง",
+    "ใช้เวลาอยู่กับคนที่ชอบ",
+    "ได้ทำสิ่งที่มีความหมาย",
+    "รู้สึกขอบคุณในสิ่งรอบข้าง",
+  ],
+};
+
+const EMO_HEADER: Record<string, string> = {
+  negative: "รู้สึกเศร้า อาจเป็นเพราะอะไร?",
+  neutral:  "วันนี้เป็นยังไงบ้าง?",
+  calm:     "ที่รู้สึกผ่อนคลายอาจเป็นเพราะ?",
+  positive: "วันนี้ดีเพราะอะไรนะ?",
+};
+
 type Page = "login" | "onb1" | "onb2" | "guardian" | "guardian_confirm" | "privacy" | "app";
 type AppView = "home" | "chat" | "trend" | "safety";
 
@@ -172,7 +207,7 @@ interface ChatMsg {
   text: string;
   timestamp: number;
   cardType?: "emotion" | "ocr";
-  emotionData?: { label: string; note: string; color: string; bg: string; text: string };
+  emotionData?: { label: string; note: string; color: string; bg: string; text: string; emotionKey?: string };
   ocrText?: string;
   sourceTag?: string;
 }
@@ -1742,7 +1777,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
         const key = SELFIE_RESULTS[Math.floor(Math.random() * SELFIE_RESULTS.length)];
         const info = EMO[key];
         const note = SELFIE_NOTES[key];
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: note, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note, color: info.color, bg: info.bg, text: info.text } }]);
+        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: note, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note, color: info.color, bg: info.bg, text: info.text, emotionKey: key } }]);
         setIsAnalyzing(false);
         pushTrend(key, "เซลฟี่");
         setTimeout(() => {
@@ -1765,7 +1800,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       // Classify emotion from returned key or robust fallback
       const emotionKey = returnedKey || classifyMoodFromText(answer) || "positive";
       const info = EMO[emotionKey] || EMO.positive;
-      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: answer, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note: answer, color: info.color, bg: info.bg, text: info.text } }]);
+      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: answer, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note: answer, color: info.color, bg: info.bg, text: info.text, emotionKey } }]);
       setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() }]);
       pushTrend(emotionKey, "เซลฟี่");
     } catch (err) {
@@ -2818,17 +2853,52 @@ function ChatView({
                   <div className="w-full px-4 py-2 text-xs font-mono text-center" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F", borderRadius: 0, border: "1px solid #C4B88A55" }}>
                     {msg.text}
                   </div>
-                ) : msg.cardType === "emotion" && msg.emotionData ? (
-                  <div
-                    className="max-w-[85%] p-4 text-sm leading-relaxed"
-                    style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text, fontFamily: "'Noto Sans Thai', sans-serif", borderRadius: 0 }}
-                  >
-                    <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75" style={{ fontFamily: "monospace" }}>
-                      ผลการประเมินเบื้องต้นจากใบหน้า · {msg.emotionData.label}
-                    </p>
-                    <p>{msg.emotionData.note}</p>
-                  </div>
-                ) : msg.cardType === "ocr" ? (
+                ) : msg.cardType === "emotion" && msg.emotionData ? (() => {
+                  const eKey = msg.emotionData.emotionKey || "neutral";
+                  const isConcern = EMO[eKey]?.concern ?? false;
+                  const reasons = EMO_REASONS[eKey] || EMO_REASONS.neutral;
+                  const header = EMO_HEADER[eKey] || "วันนี้เป็นยังไงบ้าง?";
+                  return (
+                    <div
+                      className="max-w-[88%] text-sm leading-relaxed"
+                      style={{ fontFamily: "'Noto Sans Thai', sans-serif", borderRadius: 0 }}
+                    >
+                      {/* Top badge */}
+                      <div
+                        className="px-4 py-3"
+                        style={{ backgroundColor: msg.emotionData.bg, border: `1.5px solid ${msg.emotionData.color}`, color: msg.emotionData.text }}
+                      >
+                        <p className="font-bold text-xs uppercase tracking-wider mb-1 opacity-75" style={{ fontFamily: "monospace" }}>
+                          ผลการประเมินเบื้องต้น · {msg.emotionData.label}
+                        </p>
+                        <p>{msg.emotionData.note}</p>
+                      </div>
+
+                      {/* Dynamic reasons card */}
+                      <div
+                        className="px-4 py-3 mt-0.5"
+                        style={{ backgroundColor: "#FDFBF7", border: `1.5px solid ${msg.emotionData.color}44`, borderTop: "none", color: "#3A3530" }}
+                      >
+                        {isConcern && (
+                          <p className="text-xs font-semibold mb-2 opacity-60" style={{ fontFamily: "monospace", letterSpacing: "0.06em" }}>
+                            ฉันอยู่ตรงนี้เพื่อคุณเสมอ
+                          </p>
+                        )}
+                        <p className="font-semibold text-[13px] mb-2" style={{ color: msg.emotionData.text }}>
+                          {header}
+                        </p>
+                        <ul className="space-y-1">
+                          {reasons.map((r, i) => (
+                            <li key={i} className="flex items-start gap-2 text-[12px] opacity-80">
+                              <span style={{ marginTop: 1, color: msg.emotionData!.color }}>[ ]</span>
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  );
+                })() : msg.cardType === "ocr" ? (
                   <div className="max-w-[85%] p-4 text-sm" style={{ backgroundColor: T.cream, border: "1.5px dashed #C4B88A", borderRadius: 0 }}>
                     <p className="font-bold text-xs mb-1" style={{ fontFamily: "monospace", color: T.khaki, letterSpacing: "0.08em" }}>OCR OUTPUT</p>
                     <p className="text-xs italic border-l-2 pl-3 py-1 my-1" style={{ borderColor: T.red, color: `${T.ink}99` }}>{msg.ocrText}</p>
