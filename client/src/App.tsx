@@ -1392,6 +1392,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   const lineUserId = currentUser?.id?.startsWith("usr_line_") ? currentUser.id.replace("usr_line_", "") : null;
 
   const saveWebMessage = (role: "user" | "bot", text: string) => {
+    console.debug("[saveWebMessage] lineUserId:", lineUserId, "role:", role);
     if (!lineUserId) return;
     fetch("/api/history", {
       method: "POST",
