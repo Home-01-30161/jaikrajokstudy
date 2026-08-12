@@ -4,17 +4,19 @@
 #  base = 20000 + (7 - 1) * 10
 #     team07 -> BASE 20060  BASE_1 20061
 #
-#  runner คือ Docker executor (dind) — ตรงตาม template ของทีมงาน
-#  image: docker:27.3.1 + services: docker:27.3.1-dind
-#  DOCKER_TLS_CERTDIR: "" -> daemon ฟังที่ tcp://docker:2375 (ไม่ใช้ TLS)
+#  Runner: Docker executor with dind sidecar.
+#  DOCKER_TLS_CERTDIR: ""  -> dind daemon listens on tcp://docker:2375 (no TLS)
+#  DOCKER_HOST: tcp://docker:2375 -> client explicitly connects via TCP
+#  Both variables are required together; client defaults to unix socket otherwise.
 # ============================================================
 
 variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
-  # dind: ปิด TLS ให้ client ต่อ daemon ผ่าน tcp://docker:2375 ได้
+  # Required for dind: disable TLS on daemon AND point client at TCP endpoint
   DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: "tcp://docker:2375"
 
 stages: [check, deploy, ops]
 
