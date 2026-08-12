@@ -176,7 +176,7 @@ async def extract_text_typhoon(
         payload["model"] = model
         try:
             async with httpx.AsyncClient(
-                timeout=90.0, verify=not settings.insecure_tls
+                timeout=35.0, verify=not settings.insecure_tls
             ) as client:
                 resp = await client.post(_CHAT_URL, headers=headers, json=payload)
 

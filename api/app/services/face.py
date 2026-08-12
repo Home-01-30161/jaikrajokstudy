@@ -146,7 +146,7 @@ async def _analyze_typhoon(image_bytes: bytes, settings) -> ServiceResult:
 
     try:
         async with httpx.AsyncClient(
-            timeout=30.0, verify=not settings.insecure_tls
+            timeout=15.0, verify=not settings.insecure_tls
         ) as client:
             resp = await client.post(_CHAT_URL, headers=headers, json=payload)
             try:
@@ -264,7 +264,7 @@ async def _analyze_aiforthai(image_bytes: bytes, settings) -> ServiceResult:
     files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
 
     try:
-        async with httpx.AsyncClient(timeout=30.0, verify=not settings.insecure_tls) as client:
+        async with httpx.AsyncClient(timeout=15.0, verify=not settings.insecure_tls) as client:
             resp = await client.post(url, headers=headers, files=files)
             try:
                 raw = resp.json()

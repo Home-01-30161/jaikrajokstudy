@@ -9,6 +9,7 @@ Supports all four input modes described in the proposal (p.4):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import ssl
 
@@ -308,6 +309,13 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
          - service="face" (AI for Thai fallback), face_count=0 → fall through to OCR
       2. ocr.transcribe_image() → homework/document photo → LLM explains content
       3. Neither succeeds → generic error message
+
+    KEY OPTIMISATION: face detection and OCR now run IN PARALLEL via asyncio.gather
+    so we don't pay the Typhoon face timeout (30s) before starting OCR (90s).
+    Total wall-clock time is max(face_time, ocr_time) instead of face_time + ocr_time.
+
+    An outer 40-second hard deadline ensures LINE never sees a timeout (LINE requires
+    response within ~50s; previously the serial chain could take 270s+).
     """
     try:
         data: bytearray = await blob.get_message_content(message_id)
@@ -316,101 +324,116 @@ async def _handle_image(message_id: str, blob: AsyncMessagingApiBlob) -> str:
         logger.warning("Failed to download LINE image %s: %s", message_id, exc)
         return "กระจกดาวน์โหลดรูปภาพไม่ได้ ลองส่งใหม่อีกครั้งนะ"
 
-    # Step 1: Face/emotion detection (Typhoon OCR primary → AI for Thai fallback)
-    face_result = await face.analyze_image(image_bytes)
+    async def _run_with_timeout() -> str:
+        # Step 1 + Step 2 in PARALLEL — face detection and OCR start at the same time.
+        # This eliminates the serial 30s face timeout before OCR even begins.
+        face_task = asyncio.create_task(face.analyze_image(image_bytes))
+        ocr_task  = asyncio.create_task(ocr.transcribe_image(image_bytes))
 
-    if face_result.ok:
-        # --- Typhoon OCR emotion path: full emotion data available ---
-        if face_result.service == "face-typhoon":
-            raw = face_result.raw
-            face_count = int(raw.get("face_count", 0))
-            if face_count > 0:
-                emotion_th = str(raw.get("emotion_th", "ปกติ"))
-                description = str(raw.get("description", ""))
-                confidence = float(face_result.score or 0.5)
+        face_result, ocr_result = await asyncio.gather(face_task, ocr_task)
 
-                llm_prompt = _EMOTION_LLM_PROMPT.format(
-                    emotion_th=emotion_th,
-                    description=description,
-                    pct=confidence,
-                )
-                llm = await pathumma.generate_reply(llm_prompt)
-                if llm.ok and llm.text:
-                    return strip_latex_for_line(llm.text)
-                # LLM failed — use structured fallback with emotion data
-                return (
-                    f"กระจกเห็นใบหน้าของคุณแล้ว ดูเหมือนรู้สึก {emotion_th} นะ\n\n"
-                    f"{description}\n\n"
-                    "ถ้าอยากคุยเรื่องนี้เพิ่มเติม พิมพ์มาได้เลย"
-                )
-            # face_count == 0 from typhoon-ocr → likely homework photo → fall through to OCR
+        # --- Route on face result first ---
+        if face_result.ok:
+            # Typhoon OCR emotion path: full emotion data available
+            if face_result.service == "face-typhoon":
+                raw = face_result.raw
+                face_count = int(raw.get("face_count", 0))
+                if face_count > 0:
+                    emotion_th = str(raw.get("emotion_th", "ปกติ"))
+                    description = str(raw.get("description", ""))
+                    confidence = float(face_result.score or 0.5)
 
-        # --- AI for Thai fallback path: face presence only, no emotion data ---
-        elif face_result.service == "face":
-            objects = face_result.raw.get("objects") or []
-            count = len(objects) if isinstance(objects, list) else 0
-            if count > 0:
-                llm = await pathumma.generate_reply(
-                    "ผู้ใช้ส่งเซลฟี่มาทาง LINE กระจกตรวจพบใบหน้าในภาพ "
-                    "ตอบทักทายอบอุ่น สอบถามความรู้สึกวันนี้ 2-3 ประโยคภาษาไทย "
-                    "ห้ามตอบเป็นภาษาจีนหรือภาษาอื่นที่ไม่ใช่ภาษาไทย"
-                )
-                if llm.ok and llm.text:
-                    return strip_latex_for_line(llm.text)
-                return (
-                    f"กระจกเห็นใบหน้าของคุณแล้ว ({count} ใบหน้า) 😊\n\n"
-                    "วันนี้รู้สึกเป็นยังไงบ้าง? พิมพ์มาเล่าให้ฟังได้นะ"
-                )
-            # count == 0 → fall through to OCR
+                    llm_prompt = _EMOTION_LLM_PROMPT.format(
+                        emotion_th=emotion_th,
+                        description=description,
+                        pct=confidence,
+                    )
+                    llm = await pathumma.generate_reply(llm_prompt)
+                    if llm.ok and llm.text:
+                        return strip_latex_for_line(llm.text)
+                    # LLM failed — use structured fallback with emotion data
+                    return (
+                        f"กระจกเห็นใบหน้าของคุณแล้ว ดูเหมือนรู้สึก {emotion_th} นะ\n\n"
+                        f"{description}\n\n"
+                        "ถ้าอยากคุยเรื่องนี้เพิ่มเติม พิมพ์มาได้เลย"
+                    )
+                # face_count == 0 from typhoon-ocr → likely homework photo → fall through to OCR result
 
-    # Step 2: OCR for homework/document images
-    ocr_result = await ocr.transcribe_image(image_bytes)
-    if ocr_result.ok and (ocr_result.text or "").strip():
-        extracted = ocr_result.text.strip()[:3000]
-        llm = await pathumma.generate_reply(_OCR_PROMPT.format(text=extracted))
-        if llm.ok and llm.text:
-            reply_text = strip_latex_for_line(llm.text)
-            # Reject hallucinated replies: Chinese/Japanese, no Thai, OR English-dominant.
-            # The xcv.jpg screenshot showed a 100%-English hallucination ("Step-by-step",
-            # "Part B", "EXAMPLE CASE") that slipped through the old Chinese-only guard.
-            import re as _re
-            has_chinese = bool(_re.search(r"[一-鿿぀-ヿ]", reply_text))
-            has_thai = bool(_re.search(r"[฀-๿]", reply_text))
-            # English-dominant: hard markers OR latin >> thai ratio
-            _eng_markers = bool(_re.search(
-                r"(Step-by-step|Part [A-Z][\s：:]|EXAMPLE CASE|Suppose\s+\w+|"
-                r"Determine[sd]? [Ww]hether|ObjectiveFunction|Imagine Scenario|"
-                r"TheirHeightsMust|STEPS THREE|"
-                r"STEP_\d|END OF DRAFT|\[Diagram\]|\[Example\s*Diagram\]|"
-                r"Note:\s*This draft|\\boxed\{)",
-                reply_text, _re.IGNORECASE,
-            ))
-            _latin = len(_re.findall(r"[A-Za-z]", reply_text))
-            _thai_cnt = len(_re.findall(r"[฀-๿]", reply_text))
-            _english_dominant = (
-                _eng_markers
-                or (not has_thai)
-                or (len(reply_text) > 200 and _thai_cnt > 0 and _latin > _thai_cnt * 3)
+            # AI for Thai fallback path: face presence only, no emotion data
+            elif face_result.service == "face":
+                objects = face_result.raw.get("objects") or []
+                count = len(objects) if isinstance(objects, list) else 0
+                if count > 0:
+                    llm = await pathumma.generate_reply(
+                        "ผู้ใช้ส่งเซลฟี่มาทาง LINE กระจกตรวจพบใบหน้าในภาพ "
+                        "ตอบทักทายอบอุ่น สอบถามความรู้สึกวันนี้ 2-3 ประโยคภาษาไทย "
+                        "ห้ามตอบเป็นภาษาจีนหรือภาษาอื่นที่ไม่ใช่ภาษาไทย"
+                    )
+                    if llm.ok and llm.text:
+                        return strip_latex_for_line(llm.text)
+                    return (
+                        f"กระจกเห็นใบหน้าของคุณแล้ว ({count} ใบหน้า) 😊\n\n"
+                        "วันนี้รู้สึกเป็นยังไงบ้าง? พิมพ์มาเล่าให้ฟังได้นะ"
+                    )
+                # count == 0 → fall through to OCR result
+
+        # --- Step 2: Use the OCR result that was already fetched in parallel ---
+        if ocr_result.ok and (ocr_result.text or "").strip():
+            extracted = ocr_result.text.strip()[:3000]
+            llm = await pathumma.generate_reply(_OCR_PROMPT.format(text=extracted))
+            if llm.ok and llm.text:
+                reply_text = strip_latex_for_line(llm.text)
+                # Reject hallucinated replies: Chinese/Japanese, no Thai, OR English-dominant.
+                import re as _re
+                has_chinese = bool(_re.search(r"[一-鿿぀-ヿ]", reply_text))
+                has_thai = bool(_re.search(r"[฀-๿]", reply_text))
+                # English-dominant: hard markers OR latin >> thai ratio
+                _eng_markers = bool(_re.search(
+                    r"(Step-by-step|Part [A-Z][\s：:]|EXAMPLE CASE|Suppose\s+\w+|"
+                    r"Determine[sd]? [Ww]hether|ObjectiveFunction|Imagine Scenario|"
+                    r"TheirHeightsMust|STEPS THREE|"
+                    r"STEP_\d|END OF DRAFT|\[Diagram\]|\[Example\s*Diagram\]|"
+                    r"Note:\s*This draft|\\boxed\{)",
+                    reply_text, _re.IGNORECASE,
+                ))
+                _latin = len(_re.findall(r"[A-Za-z]", reply_text))
+                _thai_cnt = len(_re.findall(r"[฀-๿]", reply_text))
+                _english_dominant = (
+                    _eng_markers
+                    or (not has_thai)
+                    or (len(reply_text) > 200 and _thai_cnt > 0 and _latin > _thai_cnt * 3)
+                )
+                if has_chinese or _english_dominant:
+                    logger.warning(
+                        "LLM reply for OCR prompt is hallucinated "
+                        "(chinese=%s english_dominant=%s has_thai=%s) — showing raw OCR text",
+                        has_chinese, _english_dominant, has_thai,
+                    )
+                    return (
+                        "📷 กระจกอ่านข้อความจากภาพได้:\n\n"
+                        f"{extracted}\n\n"
+                        "พิมพ์ถามมาได้เลย ว่าอยากให้ช่วยอธิบายตรงไหน"
+                    )
+                return reply_text
+            return (
+                "📷 กระจกอ่านข้อความจากภาพได้:\n\n"
+                f"{extracted}\n\n"
+                "พิมพ์ถามมาได้เลย ว่าอยากให้ช่วยอธิบายตรงไหน"
             )
-            if has_chinese or _english_dominant:
-                logger.warning(
-                    "LLM reply for OCR prompt is hallucinated "
-                    "(chinese=%s english_dominant=%s has_thai=%s) — showing raw OCR text",
-                    has_chinese, _english_dominant, has_thai,
-                )
-                return (
-                    "📷 กระจกอ่านข้อความจากภาพได้:\n\n"
-                    f"{extracted}\n\n"
-                    "พิมพ์ถามมาได้เลย ว่าอยากให้ช่วยอธิบายตรงไหน"
-                )
-            return reply_text
-        return (
-            "📷 กระจกอ่านข้อความจากภาพได้:\n\n"
-            f"{extracted}\n\n"
-            "พิมพ์ถามมาได้เลย ว่าอยากให้ช่วยอธิบายตรงไหน"
-        )
 
-    return _NO_FACE_PHRASE
+        return _NO_FACE_PHRASE
+
+    # Hard 40-second deadline: LINE requires a reply within ~50s.
+    # Previously the serial face+OCR+fallback chain could take 270s+ causing LINE
+    # to re-deliver the message (which produced the duplicate reply in the screenshot).
+    try:
+        return await asyncio.wait_for(_run_with_timeout(), timeout=40.0)
+    except asyncio.TimeoutError:
+        logger.warning("_handle_image timed out after 40s — returning graceful fallback")
+        return (
+            "📷 กระจกกำลังประมวลผลรูปภาพช้าไปหน่อย\n\n"
+            "ลองส่งรูปใหม่อีกครั้ง หรือพิมพ์โจทย์มาแทนได้เลยนะ"
+        )
 
 
 # ---------------------------------------------------------------------------

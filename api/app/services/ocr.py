@@ -105,7 +105,7 @@ async def extract_text_document(image_bytes: bytes) -> ServiceResult:
 
     try:
         async with httpx.AsyncClient(
-            timeout=60.0, verify=not settings.insecure_tls
+            timeout=20.0, verify=not settings.insecure_tls
         ) as client:
             for path in TOCR_CANDIDATES:
                 try:
@@ -170,7 +170,7 @@ async def extract_text_vqa(image_bytes: bytes) -> ServiceResult:
 
     try:
         async with httpx.AsyncClient(
-            timeout=90.0, verify=not settings.insecure_tls
+            timeout=30.0, verify=not settings.insecure_tls
         ) as client:
             resp = await client.post(VQA_URL, headers=headers, files=files, data=data)
             try:
