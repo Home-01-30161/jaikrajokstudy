@@ -18,6 +18,8 @@ const PATHUMMA_PROXY = "/api/pathumma";
 const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
 const TYPHOON_PROXY  = "/api/typhoon";
 const TAVILY_PROXY   = "/api/tavily";
+const PTM_ASR_PROXY  = "/api/ptm-asr";
+const PTM_ASR_MODEL  = "ptm-asr-1";
 
 // Keys are now server-side only — always available
 export function hasApiKey(): boolean { return true; }
@@ -148,6 +150,16 @@ function stripThink(text: string): string {
     }
   }
 
+
+  // 5. Physics/math homework: if response is long and starts with reasoning prose before
+  //    the structured answer (## header), trim the preamble. Threshold: >400 chars before first ##.
+  const firstHeaderIdx = cleaned.search(/^#{1,3}\s/m);
+  if (firstHeaderIdx > 400) {
+    const preamble5 = cleaned.slice(0, firstHeaderIdx);
+    if (/ดังนั้น|พิจารณา|สังเกต|จะเห็นว่า|ต้องการหา|กำหนดให้|เนื่องจาก|จากโจทย์/.test(preamble5)) {
+      return cleaned.slice(firstHeaderIdx).trim();
+    }
+  }
   return cleaned;
 }
 
@@ -250,7 +262,7 @@ export async function callTextLLM(
 
   // Detect Math / Calculation / Explicit Math Homework Prompt
   // (Excludes simple range hyphens like "2-3 ประโยค" from false-triggering math mode)
-  const isMathOrChoice = /(โจทย์คณิต|คำนวณ|สมการ|ค\.ร\.น\.|ห\.ร\.ม\.|เศษเหลือ|ข้อสอบ|lcm|gcd|\bmod\b|\$\d|\d+\s*[+*/%]\s*\d+|\d+\s*=\s*\d+)/i.test(instruction);
+  const isMathOrChoice = /(โจทย์คณิต|คำนวณ|สมการ|ค\.ร\.น\.|ห\.ร\.ม\.|เศษเหลือ|ข้อสอบ|lcm|gcd|\bmod\b|\$\d|\d+\s*[+*/%]\s*\d+|\d+\s*=\s*\d+|โจทย์ที่อ่านได้|คำอธิบายแผนภาพ|ข้อมูลโจทย์)/i.test(instruction);
   if (isMathOrChoice) {
     effectiveTemperature = 0.05;
     extraInstruction = "\n\n[หากมีโจทย์คณิตศาสตร์ในคำขอ: แสดงขั้นตอนการคำนวณอย่างแม่นยำทีละบรรทัด ห้ามเดาตัวเลข " +
@@ -736,33 +748,36 @@ function fixThaiChoices(reply: string, ocrText: string): string {
 }
 
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
-  // Two parallel vision calls: prose OCR + diagram measurement extraction
+  // Call 1: OCR the prose text (Thai problem statement, numbers, variable names)
+  // Call 2: Describe the diagram in structured natural language sentences
   const [ocrResult, diagramResult] = await Promise.allSettled([
     callVisionLLM(
       imageBlob,
-      "Transcribe every piece of text visible in this image exactly as written. Include all Thai text, numbers, variable names, and labels."
+      "Transcribe all text visible in this image exactly as written. Include Thai text, numbers, variable names, choice labels (ก. ข. ค. ง.), and axis labels."
     ),
     callVisionLLM(
       imageBlob,
-      "List EVERY angle, measurement, number, and geometric label in this diagram. " +
-      "For each one state what it labels, e.g. 'angle at point A = 60deg', 'launch angle at O = 45deg', 'velocity = u'. " +
-      "Be exhaustive — do not skip any annotated value, even small ones."
+      "Describe the diagram in this image using complete sentences. " +
+      "For EVERY angle arc shown, state exactly which two lines it is between and its numerical value. " +
+      "For EVERY labeled point (O, A, B, etc.), state what angle the velocity vector makes at that point and with respect to which axis or line. " +
+      "Example format: 'At point O, the projectile is launched at 45 degrees from the vertical axis.' " +
+      "'At point A, the velocity vector makes an angle of 60 degrees from the vertical axis.' " +
+      "Be precise and exhaustive about every angle in the diagram."
     ),
   ]);
 
   const ocrText = ocrResult.status === "fulfilled" ? ocrResult.value : "";
   const diagramText = diagramResult.status === "fulfilled" ? diagramResult.value : "";
   console.debug("[OCR text]", ocrText);
-  console.debug("[Diagram measurements]", diagramText);
+  console.debug("[Diagram description]", diagramText);
 
   let answer: string;
   if (!ocrText && !diagramText) {
     console.warn("Vision LLM homework: both calls empty");
     answer = "ไม่สามารถอ่านโจทย์จากภาพได้ในขณะนี้";
   } else {
-    answer = ocrText + (diagramText ? `\n\n[ค่าและมุมจากแผนภาพ]\n${diagramText}` : "");
+    answer = ocrText + (diagramText ? `\n\n[คำอธิบายแผนภาพ]\n${diagramText}` : "");
   }
-
   // Step 2: Detect whether OCR actually found real multiple-choice items.
   // Require choice labels (ก. / ข. / ค. / ง.) to appear at the START of a line
   // (list items), NOT just anywhere in the text (avoids matching disclaimer notes
@@ -793,21 +808,36 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
     } else {
       // Open-ended / individual problem — no choices, just solve step-by-step
       solvePrompt =
-        `โจทย์ที่อ่านได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
-        `⚠️ หมายเหตุสำคัญ: ค่า มุม และ label ทุกอย่างใน <figure>...</figure> คือข้อมูลจากแผนภาพจริงในโจทย์\n` +
-        `— ต้องใช้ทุกมุม ทุกค่าเหล่านั้นในการคำนวณ ห้ามเดาหรือสมมติค่าที่ไม่มีในโจทย์\n\n` +
-        `คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์\n` +
-        `1. **โจทย์**: สรุปข้อมูลที่กำหนด รวมมุมและค่าจากแผนภาพทุกจุด\n` +
-        `2. **วิเคราะห์และหาคำตอบ**: แสดงขั้นตอนการคำนวณอย่างละเอียด\n` +
-        `3. **คำตอบสุดท้าย**: ระบุค่าคำตอบที่ได้ชัดเจน\n\n` +
+        `โจทย์ที่อ่านได้จากภาพ (รวมคำอธิบายแผนภาพ):
+${answer.slice(0, 4000)}
+
+` +
+        `⚠️ คำสั่งสำคัญ:
+` +
+        `ส่วน [คำอธิบายแผนภาพ] ด้านบนคือข้อมูลจากแผนภาพจริงในโจทย์ ไม่ใช่คำอธิบายทั่วไป
+` +
+        `ทุกมุมที่ระบุในแผนภาพ เช่น 'มุม 60° ที่จุด A จากแนวดิ่ง' คือ ข้อมูลทางฟิสิกส์ที่ต้องใช้คำนวณโดยตรง
+` +
+        `ห้ามบอกว่า 'ขาดข้อมูล' หากข้อมูลนั้นปรากฏในส่วน [คำอธิบายแผนภาพ]
+
+` +
+        `คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์
+` +
+        `1. **โจทย์**: สรุปข้อมูลทั้งหมดที่กำหนด รวมมุมและค่าจากแผนภาพ
+` +
+        `2. **วิเคราะห์และหาคำตอบ**: แสดงขั้นตอนการคำนวณอย่างละเอียด
+` +
+        `3. **คำตอบสุดท้าย**: ระบุค่าคำตอบชัดเจน
+
+` +
         `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด เพราะโจทย์นี้ไม่มีตัวเลือก`;
     }
 
     const rawReply = await callTextLLM(
       solvePrompt,
       MATH_SYSTEM_PROMPT,
-      3072,
-      0.0
+      6144,
+      0.1
     );
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
@@ -822,7 +852,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 3. AUDIO — Typhoon ASR (primary) + Pathumma AudioQA (fallback)
+// 3. AUDIO — Pathumma ptm-asr-1 (primary) + Pathumma AudioQA (fallback)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface AudioResult {
@@ -831,9 +861,9 @@ export interface AudioResult {
   emotionKey: string;
 }
 
-/** Typhoon ASR — OpenAI-compatible transcription endpoint */
+/** Pathumma ptm-asr-1 — OpenAI-compatible transcription endpoint */
 export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
-  // Typhoon ASR supported formats: wav, mp3, flac, ogg, opus
+  // ptm-asr-1 supported formats: wav, mp3, flac, ogg, opus
   // Chrome MediaRecorder produces audio/webm which is rejected (415).
   // Convert any unsupported format to WAV via Web Audio API.
   const SUPPORTED = ["audio/wav", "audio/wave", "audio/x-wav", "audio/mp3", "audio/mpeg", "audio/flac", "audio/ogg", "audio/opus"];
@@ -843,7 +873,7 @@ export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
   let fileName: string;
 
   if (!isSupported) {
-    console.debug("[TyphoonASR] Converting", audioBlob.type, "→ WAV for upload");
+    console.debug("[ptm-asr-1] Converting", audioBlob.type, "→ WAV for upload");
     fileBlob = await blobToWav(audioBlob);
     fileName = "recording.wav";
   } else {
@@ -858,9 +888,9 @@ export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
 
   const form = new FormData();
   form.append("file", fileBlob, fileName);
-  form.append("model", "typhoon-asr-realtime");
+  form.append("model", PTM_ASR_MODEL);
 
-  const res = await fetch(`${TYPHOON_PROXY}/v1/audio/transcriptions`, {
+  const res = await fetch(`${PTM_ASR_PROXY}/audio/transcriptions`, {
     method: "POST",
     headers: {},
     body: form,
@@ -868,14 +898,14 @@ export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    console.error("[TyphoonASR] HTTP error", res.status, errBody.slice(0, 300));
-    throw new Error(`Typhoon ASR ${res.status}: ${errBody.slice(0, 200)}`);
+    console.error("[ptm-asr-1] HTTP error", res.status, errBody.slice(0, 300));
+    throw new Error(`ptm-asr-1 ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  console.debug("[TyphoonASR] raw response:", raw);
+  console.debug("[ptm-asr-1] raw response:", raw);
   const text = (raw.text as string) ?? "";
-  if (!text.trim()) throw new Error("Typhoon ASR returned empty transcription");
+  if (!text.trim()) throw new Error("ptm-asr-1 returned empty transcription");
   return text.trim();
 }
 
@@ -913,12 +943,12 @@ export async function callAudioLLM(audioBlob: Blob, instruction: string): Promis
 export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
   let transcription = "";
 
-  // Always use Typhoon ASR via proxy
+  // Always use ptm-asr-1 via proxy
   try {
       transcription = await callTyphoonASR(audioBlob);
-      console.debug("[TyphoonASR] Transcription:", transcription);
+      console.debug("[ptm-asr-1] Transcription:", transcription);
     } catch (err) {
-      console.warn("[TyphoonASR] Failed, falling back to Pathumma AudioQA:", err);
+      console.warn("[ptm-asr-1] Failed, falling back to Pathumma AudioQA:", err);
     }
 
   // Fallback: Pathumma AudioQA
