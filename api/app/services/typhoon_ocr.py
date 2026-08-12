@@ -278,8 +278,10 @@ def _parse_chat_response(raw: dict) -> str:
                     val = parsed.get(key)
                     if isinstance(val, str) and val.strip():
                         return val.strip()
-                # If none of the known keys match, return the raw JSON string
-                return content
+                # All known keys are empty/missing — treat as no text extracted.
+                # Return "" so the caller's empty-text guard triggers fallback
+                # instead of leaking {"natural_text": ""} as literal OCR output.
+                return ""
         except (_json.JSONDecodeError, ValueError):
             pass
 

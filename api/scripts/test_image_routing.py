@@ -1,15 +1,18 @@
 """
-test_image_routing.py - Race all services against testproblem.jpg simultaneously.
+test_image_routing.py - Race all services against testproblem.jpg AND smile.jpg simultaneously.
 
-Fires 3 async calls in parallel:
-  1. face.analyze_image()                (AI for Thai face detect)
-  2. ocr.transcribe_image()              (full chain: Typhoon OCR -> doc OCR -> VQA)
+Tests:
+  testproblem.jpg  → physics homework (no faces) → should route to OCR
+  smile.jpg        → selfie with happy face → should route to face/emotion path
+
+For each image, fires 3 async calls in parallel:
+  1. face.analyze_image()                (typhoon-ocr emotion primary → AI for Thai fallback)
+  2. ocr.transcribe_image()              (full chain: Typhoon OCR → doc OCR → VQA)
   3. typhoon_ocr.extract_text_typhoon()  (direct, no fallback, no preprocessing)
 
-Shows timing for each, sorted fastest first, then simulates LINE bot routing.
-
-NOTE: Typhoon Vision is NOT available on the Typhoon API (no vision model in
-the official model list as of 2025). Face detection uses AI for Thai only.
+NOTE: typhoon-ocr handles BOTH text extraction (OCR system prompt) AND face/emotion
+analysis (emotion system prompt). They use different system prompts — see
+typhoon_ocr.py vs face.py for the two separate prompts.
 
 Usage:
   cd E:/pathummalesgo/api
@@ -41,8 +44,6 @@ else:
 from app.config import get_settings                          # noqa: E402
 from app.services import face, ocr                           # noqa: E402
 from app.services.typhoon_ocr import extract_text_typhoon   # noqa: E402
-
-IMAGE_PATH = ROOT.parent / "docs" / "testproblem.jpg"
 
 # ANSI colours
 G = "\033[92m"
@@ -131,14 +132,30 @@ def routing(face_r, ocr_r) -> None:
     went_selfie = False
 
     if face_r.ok:
-        # face.py only returns service="face" (AI for Thai, no emotion data)
-        objs = face_r.raw.get("objects") or []
-        fc = len(objs) if isinstance(objs, list) else 0
-        if fc > 0:
-            print(_ok("SELFIE PATH -- AI for Thai found " + str(fc) + " face(s) [no emotion data]"))
-            went_selfie = True
-        else:
-            print(_nfo("AI for Thai: 0 faces detected -> fall through to OCR"))
+        # Primary path: typhoon-ocr with emotion-analysis prompt
+        if face_r.service == "face-typhoon":
+            fc = int(face_r.raw.get("face_count", 0)) if face_r.raw else 0
+            if fc > 0:
+                emo = str(face_r.raw.get("emotion_th", "?"))
+                desc = str(face_r.raw.get("description", ""))
+                conf = face_r.score or 0.0
+                print(_ok("SELFIE PATH (typhoon-ocr) -- " + str(fc) + " face(s), emotion=" + emo
+                          + " (" + str(round(conf * 100)) + "%)"))
+                if desc:
+                    print(_nfo("description: " + desc))
+                went_selfie = True
+            else:
+                print(_nfo("typhoon-ocr: face_count=0 (no human faces) -> fall through to OCR"))
+
+        # Fallback path: AI for Thai face detection (presence only)
+        elif face_r.service == "face":
+            objs = face_r.raw.get("objects") or [] if face_r.raw else []
+            fc = len(objs) if isinstance(objs, list) else 0
+            if fc > 0:
+                print(_ok("SELFIE PATH (AI for Thai fallback) -- " + str(fc) + " face(s) [no emotion data]"))
+                went_selfie = True
+            else:
+                print(_nfo("AI for Thai: 0 faces -> fall through to OCR"))
     else:
         print(_nfo("Face service failed (" + str(face_r.error) + ") -> fall through to OCR"))
 
@@ -156,57 +173,65 @@ def routing(face_r, ocr_r) -> None:
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
-    if not IMAGE_PATH.exists():
-        print(_bad("Image not found: " + str(IMAGE_PATH)))
-        sys.exit(1)
-
-    image_bytes = IMAGE_PATH.read_bytes()
     s = get_settings()
 
-    print()
-    print(B + "Image : " + Z + IMAGE_PATH.name
-          + "  (" + str(round(len(image_bytes) / 1024, 1)) + " KB)")
-    print(B + "Keys  : " + Z
-          + "TYPHOON=" + ("SET" if s.typhoon_api_key else "MISSING")
-          + "  AIFORTHAI=" + ("SET" if s.aiforthai_api_key else "MISSING"))
-    print()
-    print(B + "Firing all 3 calls in parallel now..." + Z)
-    print()
+    images = [
+        ("testproblem.jpg", ROOT.parent / "docs" / "testproblem.jpg", "physics homework — expect OCR path"),
+        ("smile.jpg",       ROOT.parent / "docs" / "smile.jpg",       "selfie — expect face/emotion path"),
+    ]
 
-    t_wall = time.perf_counter()
-    results = await asyncio.gather(
-        run_face(image_bytes),
-        run_ocr(image_bytes),
-        run_typhoon_direct(image_bytes),
-        return_exceptions=True,
-    )
-    wall = time.perf_counter() - t_wall
+    for img_name, img_path, description in images:
+        print()
+        print(B + "=" * 70 + Z)
+        print(B + "  IMAGE: " + img_name + Z)
+        print(B + "  (" + description + ")" + Z)
+        print(B + "=" * 70 + Z)
 
-    valid  = [r for r in results if isinstance(r, tuple)]
-    errors = [r for r in results if isinstance(r, Exception)]
-    valid.sort(key=lambda x: x[1])
+        if not img_path.exists():
+            print(R + "  NOT FOUND: " + str(img_path) + Z)
+            continue
 
-    print(B + "Results -- fastest to slowest:" + Z)
+        image_bytes = img_path.read_bytes()
+        print(B + "  Size  : " + Z + str(round(len(image_bytes) / 1024, 1)) + " KB")
+        print(B + "  Keys  : " + Z
+              + "TYPHOON=" + ("SET" if s.typhoon_api_key else "MISSING")
+              + "  AIFORTHAI=" + ("SET" if s.aiforthai_api_key else "MISSING"))
+        print()
+        print(B + "  Firing all 3 calls in parallel..." + Z)
+        print()
 
-    face_r = ocr_r = None
-    for label, elapsed, r in valid:
-        show(label, elapsed, r)
-        if "face.analyze_image" in label:
-            face_r = r
-        elif "ocr.transcribe_image" in label:
-            ocr_r = r
+        t_wall = time.perf_counter()
+        results = await asyncio.gather(
+            run_face(image_bytes),
+            run_ocr(image_bytes),
+            run_typhoon_direct(image_bytes),
+            return_exceptions=True,
+        )
+        wall = time.perf_counter() - t_wall
 
-    print()
-    print(B + "Total wall-clock (all 3 ran in parallel): "
-          + str(round(wall, 2)) + "s" + Z)
+        valid  = [r for r in results if isinstance(r, tuple)]
+        errors = [r for r in results if isinstance(r, Exception)]
+        valid.sort(key=lambda x: x[1])
 
-    if face_r and ocr_r:
-        routing(face_r, ocr_r)
+        face_r = ocr_r = None
+        for label, elapsed, r in valid:
+            show(label, elapsed, r)
+            if "face.analyze_image" in label:
+                face_r = r
+            elif "ocr.transcribe_image" in label:
+                ocr_r = r
 
-    if errors:
-        print(R + "Python exceptions:" + Z)
-        for e in errors:
-            print("  " + type(e).__name__ + ": " + str(e))
+        print()
+        print(B + "  Total wall-clock (all 3 ran in parallel): "
+              + str(round(wall, 2)) + "s" + Z)
+
+        if face_r and ocr_r:
+            routing(face_r, ocr_r)
+
+        if errors:
+            print(R + "  Python exceptions:" + Z)
+            for e in errors:
+                print("    " + type(e).__name__ + ": " + str(e))
 
 
 if __name__ == "__main__":
