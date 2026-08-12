@@ -1,4 +1,4 @@
-﻿"""JaiKrajok FastAPI entrypoint."""
+"""JaiKrajok FastAPI entrypoint."""
 
 from pathlib import Path
 

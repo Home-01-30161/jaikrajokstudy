@@ -161,8 +161,12 @@ export const api = {
   transcribeVoice: (audio: Blob, filename = "voice.webm") =>
     request<AnalysisResult>("/voice/transcribe", upload(audio, filename)),
 
-  readHomework: (image: Blob, filename = "homework.jpg") =>
-    request<AnalysisResult>("/homework/ocr", upload(image, filename)),
+  readHomework: (image: Blob, filename = "homework.jpg", caption?: string) => {
+    const form = new FormData();
+    form.append("file", image, filename);
+    if (caption && caption.trim()) form.append("caption", caption.trim());
+    return request<AnalysisResult>("/homework/ocr", { method: "POST", body: form });
+  },
 
   trend: () => request<TrendResult>("/trend", { method: "GET" }),
 

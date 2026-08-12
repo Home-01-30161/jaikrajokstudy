@@ -136,54 +136,6 @@ async def _read_upload(upload: UploadFile, *allowed_types: str) -> bytes:
     return b"".join(chunks)
 
 
-def _resize_image_for_ocr(image_bytes: bytes, max_pixels: int = 500_000) -> bytes:
-    """Resize image if too large for OCR API to handle.
-
-    AI for Thai OCR API fails with 'roi' error on large images (>1M pixels)
-    or images with non-white backgrounds. Resize to max 500K pixels while
-    maintaining aspect ratio and normalize background to white.
-    """
-    try:
-        from PIL import Image, ImageOps
-        import io
-
-        img = Image.open(io.BytesIO(image_bytes))
-        total_pixels = img.width * img.height
-
-        # Convert to RGB if needed
-        if img.mode not in ('RGB', 'L'):
-            img = img.convert('RGB')
-
-        # Resize if too large
-        if total_pixels > max_pixels:
-            ratio = (max_pixels / total_pixels) ** 0.5
-            new_size = (int(img.width * ratio), int(img.height * ratio))
-            img = img.resize(new_size, Image.Resampling.LANCZOS)
-
-        # Normalize background: AI for Thai OCR expects white background
-        # Convert to grayscale to analyze
-        gray = img.convert('L')
-        import numpy as np
-        gray_arr = np.array(gray)
-
-        # If background is dark/gray (mean < 200), invert or enhance contrast
-        if gray_arr.mean() < 200:
-            # Enhance contrast and brighten
-            img = ImageOps.autocontrast(img, cutoff=2)
-            # If still too dark, increase brightness
-            from PIL import ImageEnhance
-            enhancer = ImageEnhance.Brightness(img)
-            img = enhancer.enhance(1.3)
-
-        # Save as JPEG with good quality
-        buffer = io.BytesIO()
-        img.save(buffer, format='JPEG', quality=90)
-        return buffer.getvalue()
-    except Exception:
-        # If resize/processing fails, return original
-        return image_bytes
-
-
 async def _mood_and_reply(user_id: str, text: str, *, source: str, history: list | None = None) -> tuple[str, str, float | None, list[str]]:
     """Sentiment -> mood -> mood-aware LLM reply. Returns (mood, reply, confidence, degraded)."""
     degraded: list[str] = []
@@ -383,15 +335,23 @@ async def transcribe_voice(
 @router.post("/homework/ocr")
 async def homework_ocr(
     file: UploadFile = File(...),
+    caption: str | None = None,
     user_id: str = Depends(require_session),
 ) -> AnalysisResponse:
-    """Homework mode: OCR the photo, then let the LLM help with what it read."""
+    """Homework mode: OCR the photo, then let the LLM help with what it read.
+
+    Args:
+        file: Image file to OCR.
+        caption: Optional user question typed alongside the image
+                 (e.g. "อธิบายข้อ 2" / "solve this problem").
+                 When provided, Typhoon OCR is asked the question directly.
+                 When omitted, default text-extraction + LLM explain is used.
+    """
     data = await _read_upload(file, "image/")
 
-    # Resize image if too large for OCR API
-    data = _resize_image_for_ocr(data)
-
-    result = await ocr.transcribe_image(data)
+    # ocr.transcribe_image() runs prepare_for_ocr() internally (resize + CLAHE
+    # + denoising + shadow removal) — no pre-processing needed here.
+    result = await ocr.transcribe_image(data, user_prompt=caption or None)
 
     if not result.ok or not (result.text or "").strip():
         return AnalysisResponse(
@@ -402,10 +362,23 @@ async def homework_ocr(
         )
 
     extracted = result.text.strip()[:_MAX_OCR_CHARS]
-    llm = await pathumma.generate_reply(
-        f"นักเรียนส่งรูปการบ้านมา ข้อความที่อ่านได้จากภาพคือ:\n{extracted}\n\n"
-        "ช่วยอธิบายหรือแนะนำวิธีทำอย่างเป็นขั้นตอน โดยไม่เฉลยคำตอบตรง ๆ ทันที"
-    )
+
+    # If user typed a caption, Typhoon already answered the question in `extracted`.
+    # Pass to LLM only to structure/prettify the answer.
+    # If no caption, run the standard homework-explain prompt.
+    if caption and caption.strip():
+        llm_prompt = (
+            "นักเรียนส่งรูปการบ้านมาพร้อมคำถามว่า: \"" + caption.strip() + "\"\n"
+            "ผลการวิเคราะห์ภาพ/คำตอบเบื้องต้น:\n" + extracted + "\n\n"
+            "ช่วยอธิบายหรือเรียบเรียงคำตอบให้ชัดเจนขึ้นสำหรับนักเรียนมัธยม "
+            "ถ้าเป็นโจทย์คณิตศาสตร์หรือวิทยาศาสตร์ให้แสดงขั้นตอนการคิดด้วย"
+        )
+    else:
+        llm_prompt = (
+            "นักเรียนส่งรูปการบ้านมา ข้อความที่อ่านได้จากภาพคือ:\n" + extracted + "\n\n"
+            "ช่วยอธิบายหรือแนะนำวิธีทำอย่างเป็นขั้นตอน โดยไม่เฉลยคำตอบตรง ๆ ทันที"
+        )
+    llm = await pathumma.generate_reply(llm_prompt)
     reply = (
         llm.text
         if llm.ok and llm.text

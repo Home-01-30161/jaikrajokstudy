@@ -1,4 +1,4 @@
-﻿"""Text-to-Speech client: AI for Thai Vaja9, with optional TokenMind ptm-tts-1."""
+"""Text-to-Speech client: AI for Thai Vaja9, with optional TokenMind ptm-tts-1."""
 
 from __future__ import annotations
 

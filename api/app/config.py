@@ -111,13 +111,31 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("TOKENMIND_TTS_VOICE", "APP_TOKENMIND_TTS_VOICE"),
     )
 
+    # ThaiLLM Playground API — used for LLM only (replaces TokenMind LLM).
+    # ASR/TTS still use tokenmind_* vars above because the ThaiLLM gateway
+    # does not expose those endpoints.
+    thaillm_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("THAILLM_API_KEY", "APP_THAILLM_API_KEY"),
+    )
+    thaillm_base_url: str = Field(
+        default="http://thaillm.or.th/api/v1",
+        validation_alias=AliasChoices("THAILLM_BASE_URL", "APP_THAILLM_BASE_URL"),
+    )
+    thaillm_llm_model: str = Field(
+        default="Pathumma-ThaiLLM-qwen3-8b-think-3.0.0",
+        validation_alias=AliasChoices("THAILLM_LLM_MODEL", "APP_THAILLM_LLM_MODEL"),
+    )
+
     # Typhoon OCR (SCB 10X) - replaces AI for Thai OCR to avoid "roi" errors
     typhoon_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("TYPHOON_API_KEY", "APP_TYPHOON_API_KEY"),
     )
+    # NOTE: typhoon_ocr.py hardcodes the chat/completions endpoint and does not
+    # use this field — kept only for env-var compatibility during migration.
     typhoon_base_url: str = Field(
-        default="https://api.opentyphoon.ai/v1/ocr",
+        default="https://api.opentyphoon.ai/v1/chat/completions",
         validation_alias=AliasChoices("TYPHOON_BASE_URL", "APP_TYPHOON_BASE_URL"),
     )
 

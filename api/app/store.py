@@ -433,7 +433,9 @@ def concern_streak(user_id: str, window: int = 3) -> int:
         if len(rows) < window:
             return 0
         negative = {"stressed", "sad"}
-        return sum(1 for r in rows if r["mood"] in negative) if all(r["mood"] in negative for r in rows) else 0
+        if all(r["mood"] in negative for r in rows):
+            return window
+        return 0
     except Exception:
         logger.exception("concern_streak failed")
         return 0

@@ -1,4 +1,4 @@
-﻿"""AI for Thai Sentiment Analysis client."""
+"""AI for Thai Sentiment Analysis client."""
 
 from __future__ import annotations
 

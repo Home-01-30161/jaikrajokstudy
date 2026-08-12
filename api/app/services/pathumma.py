@@ -160,6 +160,13 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None, his
     if emotion_hint and emotion_hint != "ปกติ":
         prompt = f"(อารมณ์โดยประมาณ: {emotion_hint})\nคำถาม/ข้อความของผู้เรียน: {user_text}"
 
+    # Prefer ThaiLLM Playground API (dedicated LLM key) → fall back to TokenMind → textqa
+    if settings.thaillm_api_key:
+        result = await _generate_thaillm(prompt, settings, history=history or [])
+        if result.ok:
+            return result
+        logger.warning("ThaiLLM LLM failed (%s); trying TokenMind", result.error)
+
     if settings.tokenmind_api_key:
         result = await _generate_tokenmind(prompt, settings, history=history or [])
         if result.ok:
@@ -170,13 +177,80 @@ async def generate_reply(user_text: str, *, emotion_hint: str | None = None, his
         return ServiceResult(
             service="pathumma",
             ok=False,
-            error="Missing TOKENMIND_API_KEY and AIFORTHAI_API_KEY",
+            error="Missing THAILLM_API_KEY / TOKENMIND_API_KEY and AIFORTHAI_API_KEY",
         )
     return await _generate_textqa(prompt, settings)
 
 
+async def _generate_thaillm(prompt: str, settings, history: list | None = None) -> ServiceResult:
+    """OpenAI-compatible /chat/completions call against the ThaiLLM Playground API."""
+    url = f"{settings.thaillm_base_url.rstrip('/')}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings.thaillm_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for h in (history or [])[-10:]:
+        role = "assistant" if h.get("role") == "bot" else "user"
+        text = (h.get("text") or "").strip()
+        if text:
+            messages.append({"role": role, "content": text})
+    messages.append({"role": "user", "content": prompt})
+
+    # Pathumma-ThaiLLM-qwen3-8b-think-3.0.0 is a Qwen3 reasoning model:
+    # it emits <think>...</think> before the real answer — stripped below.
+    # max_tokens=2048 matches the playground default.
+    # Note: repetition_penalty is NOT supported by this gateway.
+    payload = {
+        "model": settings.thaillm_llm_model,
+        "messages": messages,
+        "max_tokens": 2048,
+        "temperature": 0.3,
+    }
+    try:
+        verify = not settings.insecure_tls
+        async with httpx.AsyncClient(timeout=120.0, verify=verify) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            try:
+                raw = resp.json()
+            except Exception:
+                raw = {"text": resp.text}
+
+            if resp.status_code >= 400:
+                logger.warning("ThaiLLM HTTP %s: %s", resp.status_code, resp.text[:300])
+                return ServiceResult(
+                    service="pathumma",
+                    ok=False,
+                    error=f"HTTP {resp.status_code}",
+                    raw=raw if isinstance(raw, dict) else {"body": str(raw)},
+                )
+
+            raw_dict = raw if isinstance(raw, dict) else {}
+            finish_reason = ""
+            choices = raw_dict.get("choices")
+            if isinstance(choices, list) and choices:
+                finish_reason = choices[0].get("finish_reason") or ""
+            if finish_reason == "length":
+                logger.warning("ThaiLLM: finish_reason=length — response cut at max_tokens")
+
+            text = _strip_emoji(
+                _dedup_lines(_strip_reasoning(_extract_text(raw_dict)))
+            )
+            if not text:
+                return ServiceResult(
+                    service="pathumma", ok=False, error="empty reply after stripping reasoning"
+                )
+            return ServiceResult(service="pathumma", ok=True, text=text, raw=raw_dict)
+    except httpx.TimeoutException:
+        return ServiceResult(service="pathumma", ok=False, error="timeout")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("ThaiLLM call failed")
+        return ServiceResult(service="pathumma", ok=False, error=str(exc))
+
+
 async def _generate_tokenmind(prompt: str, settings, history: list | None = None) -> ServiceResult:
-    """OpenAI-compatible /chat/completions call against the TokenMind gateway."""
+    """OpenAI-compatible /chat/completions call against the TokenMind gateway (fallback)."""
     url = f"{settings.tokenmind_base_url.rstrip('/')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {settings.tokenmind_api_key}",
@@ -201,7 +275,7 @@ async def _generate_tokenmind(prompt: str, settings, history: list | None = None
         "messages": messages,
         "max_tokens": 8192,
         "temperature": 0.3,
-        "repetition_penalty": 1.15,  # reduce repetitive loop output
+        "repetition_penalty": 1.15,
     }
     try:
         verify = not settings.insecure_tls

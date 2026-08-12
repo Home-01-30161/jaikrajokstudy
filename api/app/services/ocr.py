@@ -1,4 +1,4 @@
-﻿"""OCR client for JaiKrajok homework photos.
+"""OCR client for JaiKrajok homework photos.
 
 Fallback chain: Typhoon OCR (SCB 10X) → AI for Thai document OCR → AI for Thai VQA.
 
@@ -38,10 +38,17 @@ TOCR_CANDIDATES = ("/ocr", "/ocr/tocr", "/ocr/deepocr")
 _OCR_MAX_BYTES = 900_000
 
 
-async def transcribe_image(image_bytes: bytes) -> ServiceResult:
+async def transcribe_image(image_bytes: bytes, user_prompt: str | None = None) -> ServiceResult:
     """Transcribe an image, trying each OCR backend until one returns text.
 
     Order: Typhoon OCR (SCB 10X) -> AI for Thai Document OCR -> AI for Thai VQA.
+
+    Args:
+        image_bytes: Raw image bytes.
+        user_prompt: Optional question/instruction about the image content.
+                     Passed to Typhoon OCR so it can answer specific questions
+                     (e.g. "explain step 2", "solve this maths problem").
+                     Falls back to default OCR extraction when None.
 
     Applies automatic image preprocessing before sending to OCR APIs.
     """
@@ -55,7 +62,7 @@ async def transcribe_image(image_bytes: bytes) -> ServiceResult:
         # Continue with original image if preprocessing fails
 
     # Try Typhoon OCR first (avoids AI for Thai "roi" errors)
-    typhoon = await extract_text_typhoon(image_bytes)
+    typhoon = await extract_text_typhoon(image_bytes, user_prompt=user_prompt)
     if typhoon.ok and (typhoon.text or "").strip():
         return typhoon
     errors.append(f"typhoon: {typhoon.error}")

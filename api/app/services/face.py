@@ -1,4 +1,4 @@
-﻿"""AI for Thai Face Detection client."""
+"""AI for Thai Face Detection client."""
 
 from __future__ import annotations
 

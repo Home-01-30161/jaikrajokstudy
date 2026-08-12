@@ -1,4 +1,4 @@
-﻿"""AI for Thai Speech-to-Text client."""
+"""AI for Thai Speech-to-Text client."""
 
 from __future__ import annotations
 

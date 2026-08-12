@@ -1,4 +1,4 @@
-﻿"""Shared types for AI service responses."""
+"""Shared types for AI service responses."""
 
 from typing import Any
 

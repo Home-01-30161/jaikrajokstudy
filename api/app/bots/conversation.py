@@ -1,4 +1,4 @@
-﻿"""Conversation flow for JaiKrajok LINE Official Account."""
+"""Conversation flow for JaiKrajok LINE Official Account."""
 
 from __future__ import annotations
 
@@ -326,7 +326,7 @@ async def handle_text(user_id: str, text: str) -> str:
         label = result.label or "ไม่ทราบ"
         score = f"{result.score:.0%}" if result.score is not None else "-"
         # Map to Thai mood label + emoji
-        mood = classify_mood(text, result.polarity if hasattr(result, "polarity") else None, result.score)
+        mood = classify_mood(text, result.label, result.score)
         emoji = _MOOD_EMOJI.get(mood, "💭")
         mood_th = MOOD_LABELS_TH.get(mood, label)
 
@@ -370,7 +370,7 @@ async def handle_text(user_id: str, text: str) -> str:
         if _sent.ok:
             _bg_mood = classify_mood(
                 text,
-                _sent.polarity if hasattr(_sent, "polarity") else None,
+                _sent.label,
                 _sent.score,
             )
         store.record_mood(user_id, _bg_mood, source="line_chat", channel="line",

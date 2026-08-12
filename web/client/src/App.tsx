@@ -2164,6 +2164,9 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const homeworkInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);  // for manual stop
   const [isRecording, setIsRecording] = useState(false);
+  // Pending homework image — holds the file until user optionally types a caption
+  const [pendingHomework, setPendingHomework] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [homeworkCaption, setHomeworkCaption] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -2508,13 +2511,18 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     }
   };
 
-  const analyzeHomework = async (image: Blob, filename: string) => {
+  const analyzeHomework = async (image: Blob, filename: string, caption?: string) => {
     const imageUrl = URL.createObjectURL(image);
+
+    // Show user message with image + caption if provided
+    const userText = caption && caption.trim()
+      ? `ส่งรูปพร้อมคำถาม: "${caption.trim()}"`
+      : "ส่งรูปการบ้านให้ใจกระจกอ่านข้อความ";
 
     setMessages((prev) => [...prev, {
       id: Math.random().toString(),
       role: "user",
-      text: "ส่งรูปการบ้านให้ใจกระจกอ่านข้อความ",
+      text: userText,
       timestamp: Date.now(),
       sourceTag: "รูปการบ้าน",
       imageUrl,
@@ -2526,7 +2534,7 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
     setModalityState({ mode: "homework", status: "processing", startedAt: ocrStart });
 
     try {
-      const result = await api.readHomework(image, filename);
+      const result = await api.readHomework(image, filename, caption);
       setModalityState({ mode: "homework", status: "success", startedAt: ocrStart, duration: Date.now() - ocrStart });
       if (result.detail) {
         setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: "อ่านข้อความจากภาพแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${result.detail}"` }]);
@@ -2555,7 +2563,26 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
   const handleHomeworkFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (file) void analyzeHomework(file, file.name || "homework.jpg");
+    if (!file) return;
+    // Show pending preview so user can optionally type a caption before sending
+    const previewUrl = URL.createObjectURL(file);
+    setPendingHomework({ file, previewUrl });
+    setHomeworkCaption("");
+  };
+
+  const submitPendingHomework = () => {
+    if (!pendingHomework) return;
+    const { file, previewUrl } = pendingHomework;
+    URL.revokeObjectURL(previewUrl);
+    setPendingHomework(null);
+    void analyzeHomework(file, file.name || "homework.jpg", homeworkCaption);
+    setHomeworkCaption("");
+  };
+
+  const cancelPendingHomework = () => {
+    if (pendingHomework) URL.revokeObjectURL(pendingHomework.previewUrl);
+    setPendingHomework(null);
+    setHomeworkCaption("");
   };
 
   const resetChat = () => {
@@ -3000,6 +3027,11 @@ function AppShell({ age, guardianConsent }: { age: string; guardianConsent: bool
                   emotionHistory={emotionHistory}
                   accessibilitySettings={accessibilitySettings}
                   onAccessibilityChange={setAccessibilitySettings}
+                  pendingHomework={pendingHomework}
+                  homeworkCaption={homeworkCaption}
+                  setHomeworkCaption={setHomeworkCaption}
+                  submitPendingHomework={submitPendingHomework}
+                  cancelPendingHomework={cancelPendingHomework}
                 />
               </PageWrapper>
             )}
@@ -3521,6 +3553,7 @@ function ChatView({
   mood, concernStreak, transparencyLogs, supportStrip, onDismissSupport, onNotifyCounselor,
   showCrisisAlert, onDismissCrisis, crisisDetected, detailedTransparencyLogs,
   modalityState, onPickRegulationTool, emotionHistory, accessibilitySettings, onAccessibilityChange,
+  pendingHomework, homeworkCaption, setHomeworkCaption, submitPendingHomework, cancelPendingHomework,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -3549,6 +3582,11 @@ function ChatView({
   emotionHistory: EmotionHistoryPoint[];
   accessibilitySettings: AccessibilityState;
   onAccessibilityChange: (s: AccessibilityState) => void;
+  pendingHomework: { file: File; previewUrl: string } | null;
+  homeworkCaption: string;
+  setHomeworkCaption: (v: string) => void;
+  submitPendingHomework: () => void;
+  cancelPendingHomework: () => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -3779,6 +3817,48 @@ function ChatView({
               );
             })}
           </div>
+          {/* Pending homework image preview + caption input */}
+          {pendingHomework && (
+            <div className="mx-4 mb-2 p-3 rounded-2xl flex gap-3 items-start" style={{ backgroundColor: "#FFF7F3", border: "1.5px solid #E3A48E" }}>
+              <img
+                src={pendingHomework.previewUrl}
+                alt="รูปการบ้าน"
+                className="rounded-xl object-cover flex-shrink-0"
+                style={{ width: 64, height: 64 }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold mb-1" style={{ fontFamily: "'Inter','Noto Sans Thai',sans-serif", color: T.salmon }}>
+                  📷 รูปพร้อมส่ง — พิมพ์คำถามเพิ่ม (ไม่บังคับ)
+                </p>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="เช่น อธิบายโจทย์ข้อนี้ / ช่วยแก้สมการนี้..."
+                  value={homeworkCaption}
+                  onChange={(e) => setHomeworkCaption(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") submitPendingHomework(); if (e.key === "Escape") cancelPendingHomework(); }}
+                  className="w-full px-3 py-1.5 rounded-xl text-sm outline-none"
+                  style={{ backgroundColor: "#FFF0EB", border: "1px solid #E3A48E", fontFamily: "'Inter','Noto Sans Thai',sans-serif", color: T.black }}
+                />
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={submitPendingHomework}
+                    className="flex-1 py-1.5 rounded-xl text-xs font-bold text-white transition-all active:scale-[0.97]"
+                    style={{ backgroundColor: T.salmon, fontFamily: "'Inter','Noto Sans Thai',sans-serif" }}
+                  >
+                    ส่ง{homeworkCaption.trim() ? " พร้อมคำถาม" : " (แค่อ่านข้อความ)"}
+                  </button>
+                  <button
+                    onClick={cancelPendingHomework}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-[0.97]"
+                    style={{ border: "1.5px solid #E3A48E", color: "#6B3B49", fontFamily: "'Inter','Noto Sans Thai',sans-serif" }}
+                  >
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex gap-2">
             <input
               id="chat-input"
