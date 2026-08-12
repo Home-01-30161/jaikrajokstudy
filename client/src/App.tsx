@@ -2822,7 +2822,7 @@ function ChatView({
             <div className="flex items-center gap-3">
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0"
-                style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `1.5px solid ${T.salmon}` }}
+                style={{ backgroundColor: EMO[mood]?.bg || "#E3EAE0", border: `1.5px solid ${EMO[mood]?.color || T.salmon}` }}
               >
                 {EMO[mood]?.emoji || "😌"}
               </div>
@@ -2831,7 +2831,7 @@ function ChatView({
                   กระจกสะท้อนใจ
                 </p>
                 <p className="text-xs flex items-center gap-1 font-medium text-gray-500">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: EMO[mood]?.color || "#10b981" }} />
                   สภาวะอารมณ์: {EMO[mood]?.label || "ปกติ"}
                 </p>
               </div>
