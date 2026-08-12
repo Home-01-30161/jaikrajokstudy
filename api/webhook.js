@@ -93,7 +93,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const secret = process.env.LINE_CHANNEL_SECRET;
+  const secret = process.env.LINE_BOT_CHANNEL_SECRET;
   if (!secret) {
     res.status(500).json({ error: "LINE_CHANNEL_SECRET not set" });
     return;
