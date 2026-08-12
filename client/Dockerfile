@@ -36,7 +36,9 @@ ENV VITE_LINE_CHANNEL_ID=$VITE_LINE_CHANNEL_ID \
     VITE_FRONTEND_FORGE_API_URL=$VITE_FRONTEND_FORGE_API_URL \
     VITE_FRONTEND_FORGE_API_KEY=$VITE_FRONTEND_FORGE_API_KEY
 
-RUN pnpm run build
+# Only build the Vite frontend — skip the server/index.ts esbuild step
+# (server/ is not needed here; nginx serves the static files)
+RUN pnpm exec vite build
 
 # ── Stage 2: Serve with nginx ─────────────────────────────────────────────────
 FROM nginx:alpine
