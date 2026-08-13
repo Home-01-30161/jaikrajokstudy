@@ -5,6 +5,7 @@ import ssenseHandler from "./ssense.js";
 import tavilyHandler from "./tavily.js";
 import pathummaHandler from "./pathumma.js";
 import typhoonHandler from "./typhoon.js";
+import thaillmHandler from "./thaillm.js";
 import ptmAsrHandler from "./ptm-asr.js";
 import lineTokenHandler from "./line-token.js";
 import geminiHandler from "./gemini.js";
@@ -56,6 +57,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.all("/history", historyHandler);
 app.post("/ssense", ssenseHandler);
 app.post("/tavily", tavilyHandler);
+app.all(["/thaillm", "/thaillm/*"], thaillmHandler);
 
 // gemini uses req.url for path + req.body for JSON payload
 app.all(["/gemini", "/gemini/*"], (req, res) => {

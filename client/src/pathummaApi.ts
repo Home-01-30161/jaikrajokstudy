@@ -11,7 +11,7 @@
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const THAILLM_PROXY  = "/api/typhoon";
+const THAILLM_PROXY  = "/api/thaillm";
 const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
