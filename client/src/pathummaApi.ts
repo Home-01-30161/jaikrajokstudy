@@ -786,6 +786,13 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
       TYPHOON_OCR_MODEL,
       HOMEWORK_VISION_SYSTEM
     );
+    // Typhoon OCR sometimes returns HTML-encoded LaTeX (&amp; instead of &)
+    answer = answer
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
     console.debug("[Homework vision]", answer);
   } catch (e) {
     console.warn("Homework vision failed:", e);
@@ -820,17 +827,15 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
     } else {
       solvePrompt =
-        `ข้อมูลจากภาพโจทย์ฟิสิกส์/คณิตศาสตร์ (มุม เวกเตอร์ แรง จุด และค่าที่กำหนด):\n` +
-        `${answer.slice(0, 3000)}\n\n` +
-        `แก้โจทย์นี้ **กระชับ ภายใน 250 คำ**:\n` +
-        `## ข้อมูลที่กำหนด\n[รวบรวมค่าและมุมที่ใช้]\n\n` +
-        `## วิธีคำนวณ\n[สมการและขั้นตอน ใช้ $...$ สำหรับ LaTeX]\n\n` +
-        `## คำตอบ\n$$[คำตอบสุดท้ายพร้อมหน่วย]$$\n\n` +
-        `⚠️ ทุกมุม ค่า และแรงในข้อมูลด้านบนคือข้อมูลที่ถูกต้อง ใช้คำนวณได้ทันที ห้ามบอกว่าขาดข้อมูล\n` +
-        `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเอง ❌ ห้ามอธิบายยาวเกิน 250 คำ`;
+        `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ:\n` +
+        `${answer.slice(0, 2000)}\n\n` +
+        `เฉลย (ตอบสั้น ไม่เกิน 150 คำ):\n` +
+        `**ข้อมูล:** [ระบุค่าที่กำหนดสั้น ๆ]\n` +
+        `**คำนวณ:** [สมการทีละขั้น ใช้ $...$]\n` +
+        `**คำตอบ:** $$[ผลลัพธ์]$$`;
     }
 
-    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 512, 0.05);
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 256, 0.05);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;

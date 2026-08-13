@@ -8,7 +8,7 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${process.env.THAILLM_API_KEY}`,
       },
       body: req.method !== "GET" ? JSON.stringify(req.body) : undefined,
-      signal: AbortSignal.timeout(55000),
+      signal: AbortSignal.timeout(110000),
     });
     const text = await response.text();
     let data;
