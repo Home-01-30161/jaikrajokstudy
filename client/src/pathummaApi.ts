@@ -330,7 +330,6 @@ export async function callTextLLM(
     messages,
     max_tokens: maxTokens,
     temperature: effectiveTemperature,
-    enable_thinking: false,
   });
 
   const res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
@@ -771,16 +770,20 @@ function fixThaiChoices(reply: string, ocrText: string): string {
 
 // System prompt for the unified vision+reasoning call on homework images
 const HOMEWORK_VISION_SYSTEM =
-  "You are a physics and mathematics expert who can both read Thai text from images and reason about diagrams. " +
-  "When given an image containing a problem: " +
-  "1. Transcribe ALL Thai text exactly as written (problem statement, variable names, units). " +
-  "2. For any diagram/figure: identify every labeled point (O, A, B, ...), every angle arc with its exact degree value, " +
-  "every vector/arrow with its direction description, every axis label, and every annotated quantity. " +
-  "State each diagram fact as a complete sentence: 'The projectile is launched from point O at 45 degrees from the vertical axis (Y-axis).' " +
-  "'At point A, the velocity vector makes 60 degrees from the vertical (Y-axis), i.e., 30 degrees above horizontal.' " +
-  "3. List ALL given quantities with their symbols and values. " +
-  "4. State what the problem is asking to find. " +
-  "Do NOT solve — only extract and describe. Be exhaustive and precise about angles; never describe grid coordinates as physics data.";
+  "You are a physics and mathematics expert specializing in reading Thai homework problems and physics diagrams. " +
+  "When given an image: " +
+  "1. Transcribe ALL Thai text exactly as written. " +
+  "2. For physics diagrams (free body diagrams, projectile motion, force diagrams, vector diagrams): " +
+  "   - List every labeled point (O, A, B, P, Q, ...) and its physical meaning. " +
+  "   - State every angle with EXACT degree value and what it is measured from (e.g. 'angle 45° from vertical Y-axis', '60° from horizontal X-axis'). " +
+  "   - State every vector/arrow: its label, direction, and what it represents (velocity u, gravity g, force F, etc.). " +
+  "   - State every axis label (X, Y, horizontal, vertical). " +
+  "   - State every trajectory path and what it represents. " +
+  "   - For projectile problems: state launch angle from HORIZONTAL explicitly. " +
+  "   - For force diagrams: list every force, its direction, and magnitude if given. " +
+  "3. List ALL given quantities: symbol, value, unit. " +
+  "4. State clearly what the problem asks to find (unknown). " +
+  "5. Do NOT solve — only extract and describe. Be exhaustive about angles — state both the diagram angle AND the equivalent from horizontal.";
 
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   // Single vision call: unified OCR + diagram description with physics-aware system prompt
@@ -790,9 +793,13 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
     // so it reasons about angles/diagram structure instead of just dumping raw text.
     answer = await callVisionLLM(
       imageBlob,
-      "Read this image. Transcribe all Thai text exactly. For each diagram element (points, angles, vectors, axes), " +
-      "write one sentence per element stating exactly what it shows with its precise numerical value. " +
-      "List all given quantities. State what the problem asks to find. Do not solve.",
+      "Analyze this physics/math homework image. " +
+      "1) Transcribe all Thai text exactly. " +
+      "2) For every diagram element: state the exact angle in degrees (and whether measured from horizontal or vertical), " +
+      "every labeled point, every vector/arrow with label and direction, every axis, every trajectory. " +
+      "For projectile problems, explicitly state the launch angle from horizontal. " +
+      "3) List all given quantities (symbol, value, unit). " +
+      "4) State what the problem asks to find. Do NOT solve.",
       "image.jpg",
       TYPHOON_OCR_MODEL,
       HOMEWORK_VISION_SYSTEM
@@ -831,19 +838,16 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
     } else {
       solvePrompt =
-        `ข้อมูลทั้งหมดที่อ่านได้จากภาพโจทย์ฟิสิกส์/คณิตศาสตร์ (รวมมุม จุด เวกเตอร์ แรง ค่าที่กำหนด และสิ่งที่โจทย์ถาม):\n` +
-        `${answer.slice(0, 4000)}\n\n` +
-        `⚠️ คำสั่งสำคัญ: ข้อมูลด้านบนมาจากการอ่านภาพโจทย์จริง รวมถึงมุม เวกเตอร์ แรง และค่าต่าง ๆ จากแผนภาพ\n` +
-        `ทุกมุม ทุกจุด ทุกแรง และทุกค่าที่ระบุด้านบน คือข้อมูลฟิสิกส์ที่ต้องใช้คำนวณโดยตรง ห้ามบอกว่า 'ขาดข้อมูล'\n\n` +
-        `คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์ **ตอบสั้น กระชับ ตรงประเด็น ภายใน 400 คำ**\n` +
-        `1. **ข้อมูลที่กำหนด**: รวบรวมค่า สัญลักษณ์ มุม และสิ่งที่โจทย์ถามหา\n` +
-        `2. **วิธีคำนวณ**: แสดงสมการและขั้นตอนทีละบรรทัด (ใช้ LaTeX $...$ สำหรับสูตร)\n` +
-        `3. **คำตอบสุดท้าย**: ระบุค่าพร้อมหน่วยใน $$...$$\n\n` +
-        `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด\n` +
-        `❌ ห้ามอธิบายยาว เน้นขั้นตอนคำนวณที่จำเป็นเท่านั้น`;
-    }
+        `ข้อมูลจากภาพโจทย์ฟิสิกส์/คณิตศาสตร์ (มุม เวกเตอร์ แรง จุด และค่าที่กำหนด):\n` +
+        `${answer.slice(0, 3000)}\n\n` +
+        `แก้โจทย์นี้ **กระชับ ภายใน 250 คำ**:\n` +
+        `## ข้อมูลที่กำหนด\n[รวบรวมค่าและมุมที่ใช้]\n\n` +
+        `## วิธีคำนวณ\n[สมการและขั้นตอน ใช้ $...$ สำหรับ LaTeX]\n\n` +
+        `## คำตอบ\n$$[คำตอบสุดท้ายพร้อมหน่วย]$$\n\n` +
+        `⚠️ ทุกมุม ค่า และแรงในข้อมูลด้านบนคือข้อมูลที่ถูกต้อง ใช้คำนวณได้ทันที ห้ามบอกว่าขาดข้อมูล\n` +
+        `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเอง ❌ ห้ามอธิบายยาวเกิน 250 คำ`;\n    }
 
-    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 2048, 0.05);
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 512, 0.05);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
