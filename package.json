@@ -103,13 +103,26 @@
     "vite-plugin-manus-runtime": "^0.0.58",
     "vitest": "^4.1.10"
   },
+  "overrides": {
+    "protobufjs": "^8.7.2",
+    "adm-zip": "^0.6.0",
+    "sharp": "^0.35.3",
+    "uuid": "^11.1.1",
+    "undici": "^6.27.0",
+    "@azure/msal-node": "^5.1.5"
+  },
   "packageManager": "pnpm@10.4.1",
   "pnpm": {
     "patchedDependencies": {
       "wouter@3.7.1": "patches/wouter@3.7.1.patch"
     },
     "overrides": {
-      "tailwindcss>nanoid": "3.3.7"
+      "tailwindcss>nanoid": "3.3.7",
+      "protobufjs": "^8.7.2",
+      "adm-zip": "^0.6.0",
+      "sharp": "^0.35.3",
+      "uuid": "^11.1.1",
+      "undici": "^6.27.0"
     }
   }
 }
