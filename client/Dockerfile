@@ -12,7 +12,6 @@ RUN pnpm install --frozen-lockfile
 # Copy source files needed for build
 COPY client/            ./client/
 COPY shared/            ./shared/
-COPY CollagePics/       ./CollagePics/
 COPY tsconfig.json      tsconfig.node.json vite.config.ts components.json ./
 
 # Placeholder for optional @assets alias — build won't fail if nothing imports it

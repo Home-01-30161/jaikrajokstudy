@@ -1529,13 +1529,12 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     },
     [activeSessionId]
   );
+  const setMoodRef = useRef(setMood);
+  setMoodRef.current = setMood;
 
   // Keep a ref that always reflects the latest messages — used to read history
   const messagesRef = useRef<ChatMsg[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
-  const setMoodRef = useRef(setMood);
-  setMoodRef.current = setMood;
-
   const [inputText, setInputText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -3452,7 +3451,7 @@ export default function App() {
               avatarUrl: profile.pictureUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${profile.userId}`,
             };
 
-            // Fetch shared LINE+Web history from PostgreSQL via /api/history
+            // Fetch shared LINE+Web history via Vercel serverless function (uses service key server-side)
             try {
               const histRes = await fetch(`/api/history?line_user_id=${encodeURIComponent(profile.userId)}`);
               if (histRes.ok) {

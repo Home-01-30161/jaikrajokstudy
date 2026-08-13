@@ -203,57 +203,6 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-/* Copy CollagePics into the built bundle so /collage/* resolves in production */
-function vitePluginCollageBuild(): Plugin {
-  const collagePicsDir = path.resolve(PROJECT_ROOT, "CollagePics");
-  return {
-    name: "collage-pics-build",
-    closeBundle() {
-      const outDir = path.resolve(PROJECT_ROOT, "dist", "public", "collage");
-      fs.mkdirSync(outDir, { recursive: true });
-      for (const f of fs.readdirSync(collagePicsDir)) {
-        const src = path.join(collagePicsDir, f);
-        if (!fs.statSync(src).isFile()) continue;
-        fs.copyFileSync(src, path.join(outDir, f));
-      }
-    },
-  };
-}
-
-/* Serve CollagePics directory at /collage/ */
-function vitePluginCollagePics(): Plugin {
-  const collagePicsDir = path.resolve(PROJECT_ROOT, "CollagePics");
-  return {
-    name: "collage-pics-serve",
-    configureServer(server: ViteDevServer) {
-      server.middlewares.use("/collage", (req, res, next) => {
-        const filename = req.url?.replace(/^\//, "") ?? "";
-        const filePath = path.join(collagePicsDir, filename);
-        if (!filePath.startsWith(collagePicsDir)) {
-          res.writeHead(403);
-          res.end("Forbidden");
-          return;
-        }
-        if (!fs.existsSync(filePath)) {
-          return next();
-        }
-        const ext = path.extname(filePath).toLowerCase();
-        const mime: Record<string, string> = {
-          ".png": "image/png",
-          ".jpg": "image/jpeg",
-          ".jpeg": "image/jpeg",
-          ".webp": "image/webp",
-          ".gif": "image/gif",
-        };
-        res.writeHead(200, {
-          "Content-Type": mime[ext] ?? "application/octet-stream",
-          "Cache-Control": "public, max-age=86400",
-        });
-        fs.createReadStream(filePath).pipe(res);
-      });
-    },
-  };
-}
 
 import nodemailer from "nodemailer";
 
@@ -435,7 +384,7 @@ export default defineConfig(({ mode }) => {
   // Explicitly populate process.env so proxy configure callbacks can read them
   Object.assign(process.env, env);
 
-  const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginCollagePics(), vitePluginCollageBuild(), vitePluginOtpEmail(), vitePluginSsenseDev(), vitePluginLineTokenDev()];
+  const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginOtpEmail(), vitePluginSsenseDev(), vitePluginLineTokenDev()];
 
   return {
     plugins,
