@@ -12,7 +12,7 @@
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const THAILLM_PROXY  = "/api/typhoon";
-const THAILLM_MODEL  = "typhoon-v2.5-30b-a3b-instruct";
+const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
 const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";

@@ -42,7 +42,7 @@ async function llmReply(text) {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "typhoon-v2.5-30b-a3b-instruct",
+        model: "pathumma-thaillm-qwen3-8b-think-3.0.0",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: text },
