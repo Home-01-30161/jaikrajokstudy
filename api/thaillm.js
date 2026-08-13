@@ -10,7 +10,12 @@ export default async function handler(req, res) {
       body: req.method !== "GET" ? JSON.stringify(req.body) : undefined,
       signal: AbortSignal.timeout(55000),
     });
-    const data = await response.json().catch(() => ({}));
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text.slice(0, 500) }; }
+    if (!response.ok) {
+      console.error(`[thaillm] upstream ${response.status}:`, text.slice(0, 300));
+    }
     res.status(response.status).json(data);
   } catch (err) {
     const isTimeout = err?.name === "TimeoutError" || err?.name === "AbortError";
