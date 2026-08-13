@@ -2,12 +2,12 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+RUN npm install -g pnpm@10.4.1 --no-fund --no-audit
 
 # Install dependencies first (layer cache)
 COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Copy source files needed for build
 COPY client/            ./client/
