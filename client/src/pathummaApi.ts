@@ -109,13 +109,31 @@ function stripThink(text: string): string {
   if (text.includes("</think>")) {
     const after = text.split("</think>").slice(1).join("</think>").trim();
     if (after) return after;
+    // </think> at end with nothing after — fall through to return cleaned content before it
+    const before = text.split("</think>")[0].replace(/^<think>/i, "").trim();
+    if (before) return before;
   }
 
-  // 2. Unclosed <think> tag at start
+  // 2. Unclosed <think> tag — model was cut off inside reasoning block.
+  //    Extract the best lines from within the think block instead of returning "".
   if (text.trimStart().startsWith("<think>")) {
-    const withoutTag = text.replace(/^<think>/i, "").trim();
-    const after = withoutTag.includes("</think>") ? withoutTag.split("</think>").slice(1).join("</think>").trim() : "";
-    if (after) return after;
+    const inner = text.replace(/^<think>/i, "").trim();
+    // If there's a </think> somewhere later, take everything after it
+    if (inner.includes("</think>")) {
+      const after = inner.split("</think>").slice(1).join("</think>").trim();
+      if (after) return after;
+    }
+    // Think block was truncated — return the last substantive paragraph
+    // (reasoning usually builds toward the answer at the end)
+    const paragraphs = inner.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+    if (paragraphs.length > 0) {
+      // Return last paragraph that has actual content (not just ellipsis or whitespace)
+      for (let i = paragraphs.length - 1; i >= 0; i--) {
+        if (paragraphs[i].length > 10) return paragraphs[i];
+      }
+      return paragraphs[paragraphs.length - 1];
+    }
+    return inner;
   }
 
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>/gi, "").trim();
@@ -823,7 +841,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด`;
     }
 
-    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 6144, 0.05);
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 2048, 0.05);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
