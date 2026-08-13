@@ -20,7 +20,7 @@ export default async function handler(req, res) {
       const clientId = process.env.VITE_LINE_CHANNEL_ID || process.env.LINE_CHANNEL_ID;
       const clientSecret = process.env.LINE_CHANNEL_SECRET;
 
-      if (!clientId || !clientSecret) {
+      if (!clientId || clientId === "undefined" || !clientSecret || clientSecret === "undefined") {
         res.status(500).json({ error: "LINE Channel configuration missing on server" });
         return;
       }
