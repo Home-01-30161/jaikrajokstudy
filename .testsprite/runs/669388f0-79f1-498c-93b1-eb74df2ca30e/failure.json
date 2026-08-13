@@ -1,5 +1,0 @@
-{
-  "rootCauseHypothesis": "TEST FAILURE\n\nThe site did not show a not-found/404 page for the non-existent path — the application login page was displayed instead.\n\nObservations:\n- Navigated to /this-page-does-not-exist and the page displayed the application's login screen titled 'JaiKraJok' with visible email and password input fields and login buttons.\n- No 404 or not-found message, blank white screen, or server error was visible; the UI appears as the normal login page.",
-  "recommendedFixTarget": null,
-  "evidence": []
-}
