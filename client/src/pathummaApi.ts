@@ -13,6 +13,11 @@
 
 const THAILLM_PROXY  = "/api/thaillm";
 const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
+// Direct URL so browser (not server) makes the request — bypasses Cloudflare bot protection
+const THAILLM_DIRECT = "https://thaillm.or.th/api/v1/chat/completions";
+// Hackathon key — safe to expose client-side for competition duration
+const THAILLM_KEY: string =
+  (import.meta.env.VITE_THAILLM_API_KEY as string) || "CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T";
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
 const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
@@ -25,7 +30,10 @@ const PTM_ASR_MODEL  = "ptm-asr-1";
 export function hasApiKey(): boolean { return true; }
 
 function thaiLLMHeaders(): Record<string, string> {
-  return { "Content-Type": "application/json" };
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${THAILLM_KEY}`,
+  };
 }
 
 function pathummaHeaders(): Record<string, string> {
@@ -314,11 +322,25 @@ export async function callTextLLM(
     temperature: effectiveTemperature,
   });
 
-  const res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
-    method: "POST",
-    headers: thaiLLMHeaders(),
-    body,
-  });
+  // Try direct browser→thaillm.or.th first (bypasses Cloudflare bot block on server proxy).
+  // Fall back to server proxy if CORS blocks the direct call.
+  let res: Response;
+  try {
+    res = await fetch(THAILLM_DIRECT, {
+      method: "POST",
+      headers: thaiLLMHeaders(),
+      body,
+    });
+    console.debug("[ThaiLLM] direct call status:", res.status);
+  } catch {
+    // CORS or network error on direct call — fall back to proxy
+    console.warn("[ThaiLLM] direct call failed, using proxy");
+    res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  }
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
