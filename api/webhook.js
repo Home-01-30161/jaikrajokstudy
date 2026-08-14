@@ -202,7 +202,9 @@ async function llmReply(text, history = []) {
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return data?.choices?.[0]?.message?.content?.trim() || null;
+    const raw = data?.choices?.[0]?.message?.content || "";
+    // Strip <think>...</think> reasoning blocks (ThaiLLM chain-of-thought)
+    return raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() || null;
   } catch (e) {
     console.error("LLM error:", e?.message);
     return null;
