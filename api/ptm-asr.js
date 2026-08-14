@@ -1,17 +1,17 @@
 export default async function handler(req, res) {
   const path = req.url.replace("/api/ptm-asr", "");
   const contentType = req.headers["content-type"] ?? "";
-  const isForm = contentType.includes("multipart/form-data");
 
   try {
     const response = await fetch(`https://tokenmind.pathumma.in.th/v1${path}`, {
       method: req.method,
-      headers: isForm
-        // Forward the full content-type so the multipart boundary reaches the upstream
-        ? { Authorization: `Bearer ${process.env.TOKENMIND_API_KEY}`, "Content-Type": contentType }
-        : { Authorization: `Bearer ${process.env.TOKENMIND_API_KEY}`, "Content-Type": "application/json" },
-      // For JSON use the parsed body; for form data stream req directly
-      body: req.method !== "GET" ? (isForm ? req : JSON.stringify(req.body)) : undefined,
+      headers: {
+        // Always forward the original Content-Type (preserves multipart boundary)
+        "Content-Type": contentType || "application/json",
+        Authorization: `Bearer ${process.env.TOKENMIND_API_KEY}`,
+      },
+      // Stream the raw request body through (routes registered before express.json so req.body is undefined)
+      body: req.method !== "GET" ? req : undefined,
       duplex: "half",
       signal: AbortSignal.timeout(60000),
     });
