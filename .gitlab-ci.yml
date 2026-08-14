@@ -105,9 +105,21 @@ restart:
     - docker compose -p "$TEAM" restart
     - docker compose -p "$TEAM" ps
 
+migrate:
+  <<: *ops
+  script: [docker compose -p "$TEAM" exec -T api alembic upgrade head]
+
 shell-cmd:
   <<: *ops
   variables:
     SERVICE: api
     CMD: "node -e 'console.log(process.version)'"
   script: [docker compose -p "$TEAM" exec -T "$SERVICE" sh -lc "$CMD"]
+
+reset-db:
+  <<: *ops
+  script:
+    - docker compose -p "$TEAM" stop db
+    - docker compose -p "$TEAM" rm -f db
+    - rm -rf /data/hack/$TEAM/pgdata/*
+    - docker compose -p "$TEAM" up -d
