@@ -135,7 +135,7 @@ smoke-test:
         && ok "ssense" || fail "ssense" "HTTP error"
 
       echo "── gemini (proxy) ───────────────────────────────────"
-      r=$(curl -s -X POST "$API/gemini/v1beta/models/gemini-2.0-flash:generateContent" \
+      r=$(curl -s -X POST "$API/gemini/v1beta/models/gemini-2.5-flash:generateContent" \
         -H "Content-Type: application/json" \
         -d '{"contents":[{"parts":[{"text":"say hi"}]}]}' \
         || echo "CURL_FAIL")
