@@ -88,7 +88,7 @@ deploy:
       printenv | grep '^APP_' > /tmp/deploy.env || true
       scp /tmp/deploy.env "$DEPLOY_USER@$DEPLOY_HOST:/data/hack/$TEAM/.env"
 
-      ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s <<'REMOTE'
+      ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -c '
         set -e
         cd /data/hack/team07
         git pull origin main
@@ -96,14 +96,14 @@ deploy:
 
         echo "Waiting for healthcheck..."
         for i in $(seq 1 40); do
-          st=$(docker inspect -f '{{.State.Health.Status}}' "team07-api-1" 2>/dev/null || echo none)
-          [ "$st" = "healthy" ] && { echo "api healthy ✓"; break; }
+          st=$(docker inspect -f '"'"'{{.State.Health.Status}}'"'"' "team07-api-1" 2>/dev/null || echo none)
+          [ "$st" = "healthy" ] && { echo "api healthy"; break; }
           sleep 5
         done
 
         docker compose -p team07 ps
         docker compose -p team07 exec -T api curl -fsS http://localhost:8000/health && echo " <- /health OK"
-REMOTE
+      '
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
