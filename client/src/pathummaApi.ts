@@ -306,6 +306,7 @@ export async function callTextLLM(
     messages,
     max_tokens: maxTokens,
     temperature: effectiveTemperature,
+    enable_thinking: false,  // prevent Qwen3 from exhausting all tokens on <think> chains
   });
 
   // Always use server proxy — direct HTTP call is blocked by Mixed Content on HTTPS pages.
@@ -854,7 +855,6 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   try {
     if (hasChoices) {
       solvePrompt =
-        `/no_think\n` +
         `ข้อมูลโจทย์และตัวเลือกที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
         `คำสั่งเรียบเรียงเฉลย:\n` +
         `1. **โจทย์และข้อมูลในภาพ**: สรุปโจทย์และรายละเอียดสั้น ๆ\n` +
@@ -864,7 +864,6 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
     } else {
       solvePrompt =
-        `/no_think\n` +
         `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ:\n` +
         `${answer.slice(0, 2500)}\n\n` +
         `กฎเหล็ก — ห้ามละเมิดเด็ดขาด:\n` +
@@ -881,7 +880,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `**คำตอบ:** $$[ผลลัพธ์]$$`;
     }
 
-    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 2048, 0.3);
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 4096, 0.3);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
