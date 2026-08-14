@@ -131,7 +131,8 @@ smoke-test:
         && ok "ssense" || fail "ssense" "HTTP error"
 
       echo "── gemini (proxy) ───────────────────────────────────"
-      r=$(curl -sf -X POST "$API/gemini/v1beta/models/gemini-2.0-flash:generateContent" \
+      # Drop -f so HTTP error bodies are captured instead of CURL_FAIL
+      r=$(curl -s -X POST "$API/gemini/v1beta/models/gemini-2.0-flash:generateContent" \
         -H "Content-Type: application/json" \
         -d '{"contents":[{"parts":[{"text":"say hi"}]}]}' \
         || echo "CURL_FAIL")
@@ -141,7 +142,8 @@ smoke-test:
       echo "── typhoon-ocr (vision/OCR) — 1×1 white PNG ─────────"
       # Minimal 1×1 white PNG as base64 — just enough for the model to accept
       TINY_PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
-      r=$(curl -sf -X POST "$API/typhoon/v1/chat/completions" \
+      # Drop -f so HTTP error bodies are captured instead of CURL_FAIL
+      r=$(curl -s -X POST "$API/typhoon/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${TINY_PNG}\"}},{\"type\":\"text\",\"text\":\"what text is in this image?\"}]}],\"max_tokens\":16}" \
         || echo "CURL_FAIL")
@@ -149,8 +151,9 @@ smoke-test:
         && ok "typhoon-ocr" || fail "typhoon-ocr" "$(echo $r | cut -c1-200)"
 
       echo "── ptm-asr-1 (speech-to-text) — silent WAV ──────────"
-      # Generate a minimal valid WAV (44-byte header + 1600 samples of silence = ~0.1s mono 16kHz)
-      WAV_FILE=$(mktemp /tmp/smoke-asr-XXXXXX.wav)
+      # BusyBox mktemp (Alpine) does not support filename suffixes — drop .wav extension;
+      # the MIME type is set explicitly in the -F flag so the filename extension is irrelevant
+      WAV_FILE=$(mktemp /tmp/smoke-asr-XXXXXX)
       # 44-byte minimal WAV: RIFF header + fmt chunk + empty data chunk (0 samples, 16kHz mono PCM)
       printf '\122\111\106\106\044\000\000\000\127\101\126\105\146\155\164\040\020\000\000\000\001\000\001\000\200\076\000\000\000\175\000\000\002\000\020\000\144\141\164\141\000\000\000\000' > "$WAV_FILE"
       r=$(curl -sf -X POST "$API/ptm-asr/audio/transcriptions" \
