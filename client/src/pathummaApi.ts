@@ -814,17 +814,17 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
     // so it reasons about angles/diagram structure instead of just dumping raw text.
     answer = await callVisionLLM(
       imageBlob,
-      "Analyze this physics/math homework image. " +
-      "1) Transcribe all Thai text exactly. " +
-      "2) For every diagram element: " +
-      "state the exact angle in degrees and what it is measured FROM (horizontal or vertical). " +
-      "For the LAUNCH POINT: state the launch angle from both horizontal and vertical. " +
-      "For EVERY OTHER LABELED POINT on the trajectory (A, B, P, Q, etc.): " +
-      "state the angle of the velocity vector at that point and whether it is measured from horizontal or vertical — " +
-      "this is CRITICAL for solving the problem. " +
-      "Also state every labeled point, every vector/arrow with label and direction, every axis. " +
-      "3) List all given quantities (symbol, value, unit). " +
-      "4) State exactly what the problem asks to find. Do NOT solve.",
+      "Answer each question in order about this physics diagram:\n" +
+      "Q1: Transcribe ALL Thai text exactly as it appears.\n" +
+      "Q2: List EVERY angle labeled in the diagram. For each: state the exact value in degrees, " +
+      "the location (e.g. 'at launch point O' or 'at point A on the trajectory'), " +
+      "and what it is measured from (vertical Y-axis or horizontal X-axis). " +
+      "Include ALL annotations — at the launch point AND at every other labeled point on the path.\n" +
+      "Q3: Is there any angle annotation near point A (or any labeled point) on the trajectory arc itself, " +
+      "separate from the launch angle? State yes/no and the exact value.\n" +
+      "Q4: List all given quantities (symbol, value, unit).\n" +
+      "Q5: What exactly does the problem ask to find?\n" +
+      "Do NOT solve. Do NOT assume what any point represents.",
       "image.jpg",
       TYPHOON_OCR_MODEL,
       HOMEWORK_VISION_SYSTEM
@@ -872,14 +872,17 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
       solvePrompt =
         `/no_think\n` +
         `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ:\n` +
-        `${answer.slice(0, 2000)}\n\n` +
-        `กฎเหล็กสำหรับโจทย์โพรเจคไทล์ (ห้ามละเมิด):\n` +
-        `- vₓ = v₀cosθ₀ คงที่ตลอด\n` +
-        `- ถ้าโจทย์ระบุมุมของความเร็ว ณ จุด A จากแนวดิ่ง = α: ใช้ vᵧ = vₓ·tan(90°-α) แล้วหา h จาก vᵧ²=v₀ᵧ²-2gh\n` +
-        `- ถ้าโจทย์ระบุมุมของความเร็ว ณ จุด A จากแนวนอน = β: ใช้ vᵧ = vₓ·tanβ แล้วหา h จาก vᵧ²=v₀ᵧ²-2gh\n` +
-        `- ❌ ห้ามสมมติว่า A คือจุดสูงสุด (v=0) ถ้าไม่ได้ระบุไว้ชัดเจน\n\n` +
+        `${answer.slice(0, 2500)}\n\n` +
+        `กฎเหล็ก — ห้ามละเมิดเด็ดขาด:\n` +
+        `❌ ห้ามสมมติว่า "จุด A คือจุดสูงสุด" หรือ "ความเร็วแนวดิ่ง = 0 ที่จุด A" ` +
+        `เว้นแต่โจทย์จะระบุว่า "A คือจุดสูงสุด" ชัดเจน\n` +
+        `✅ ถ้ามีมุมความเร็ว ณ จุด A จากแนวดิ่ง = α°: ` +
+        `vₓ = u·sin(θ₀), vᵧ_A = vₓ·tan(90°−α) แล้วหา h จาก vᵧ_A² = v₀ᵧ²−2gh\n` +
+        `✅ ถ้ามีมุมความเร็ว ณ จุด A จากแนวนอน = β°: ` +
+        `vᵧ_A = vₓ·tan(β) แล้วหา h จาก vᵧ_A² = v₀ᵧ²−2gh\n` +
+        `✅ vₓ = u·cos(θ₀_from_horizontal) = u·sin(θ₀_from_vertical) คงที่ตลอด\n\n` +
         `เฉลย (ตอบสั้น ไม่เกิน 150 คำ):\n` +
-        `**ข้อมูล:** [ระบุค่าที่กำหนดสั้น ๆ]\n` +
+        `**ข้อมูล:** [ระบุค่าที่กำหนดสั้น ๆ รวมมุมความเร็วที่จุด A]\n` +
         `**คำนวณ:** [สมการทีละขั้น ใช้ $...$]\n` +
         `**คำตอบ:** $$[ผลลัพธ์]$$`;
     }
