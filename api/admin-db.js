@@ -21,6 +21,11 @@ export default async function handler(req, res) {
   if (!process.env.DATABASE_URL)
     return res.status(500).send("<h2>DATABASE_URL not configured</h2>");
 
+  // Override the global API CSP (default-src 'none') for this HTML page.
+  // Inline <style> is required; no external scripts or frames needed.
+  res.setHeader("Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+
   const s   = req.query.secret;
   const tab  = ["messages","emotions","homework","alerts"].includes(req.query.tab)
                ? req.query.tab : "messages";
