@@ -12,6 +12,7 @@ import geminiHandler from "./gemini.js";
 import sendOtpHandler from "./send-otp.js";
 import guardianEmailHandler from "./guardian-email.js";
 import adminDbHandler from "./admin-db.js";
+import { runMigrations } from "./migrate.js";
 
 // Strip APP_ prefix injected by CI so handlers read env vars normally
 // e.g. APP_DATABASE_URL → DATABASE_URL
@@ -74,6 +75,14 @@ app.get("/admin-db", adminDbHandler);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`JaiKraJok API listening on :${PORT}`);
-});
+
+runMigrations()
+  .then(() => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`JaiKraJok API listening on :${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Startup migration failed — aborting:", err.message);
+    process.exit(1);
+  });
