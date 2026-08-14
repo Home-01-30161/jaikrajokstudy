@@ -1,4 +1,4 @@
-﻿/**
+/**
  * pathummaApi.ts — JaiKraJok ThaiLLM client (v5)
  * =====================================================
  * Uses the NEW ThaiLLM API (OpenAI-compatible):
@@ -315,15 +315,26 @@ export async function callTextLLM(
   });
 
   // Always use server proxy — direct HTTP call is blocked by Mixed Content on HTTPS pages.
-  const res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  } catch (fetchErr) {
+    console.warn("[ThaiLLM] Network error, falling back to Typhoon:", fetchErr);
+    return await callTyphoonText(messages, systemPrompt, maxTokens);
+  }
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
     console.error("[ThaiLLM] HTTP error", res.status, errBody.slice(0, 300));
+    // On 5xx (server-side overload / bad gateway), fall back to Typhoon silently
+    if (res.status >= 500) {
+      console.warn(`[ThaiLLM] ${res.status} — falling back to Typhoon text model`);
+      return await callTyphoonText(messages, systemPrompt, maxTokens);
+    }
     throw new Error(`ThaiLLM ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
@@ -335,7 +346,11 @@ export async function callTextLLM(
   const content = choices?.[0]?.message?.content ?? "";
 
   const text = stripThink(content);
-  if (!text) throw new Error("ThaiLLM returned empty response");
+  if (!text) {
+    // Empty reply from ThaiLLM — fall back to Typhoon
+    console.warn("[ThaiLLM] Empty response — falling back to Typhoon text model");
+    return await callTyphoonText(messages, systemPrompt, maxTokens);
+  }
   return text;
 }
 
@@ -753,14 +768,16 @@ function fixThaiChoices(reply: string, ocrText: string): string {
 
 /** Typhoon text fallback — only used when ThaiLLM origin is overloaded (502/504) */
 async function callTyphoonText(
-  prompt: string,
+  promptOrMessages: string | { role: string; content: string }[],
   systemPrompt: string,
   maxTokens: number
 ): Promise<string> {
-  const messages = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: prompt },
-  ];
+  const messages: { role: string; content: string }[] = Array.isArray(promptOrMessages)
+    ? promptOrMessages
+    : [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: promptOrMessages },
+      ];
   const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
