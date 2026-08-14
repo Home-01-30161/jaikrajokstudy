@@ -13,7 +13,7 @@ variables:
   # Force Docker CLI to use the host Unix socket, not any injected DinD tcp endpoint
   DOCKER_HOST: "unix:///var/run/docker.sock"
 
-stages: [check, deploy, ops]
+stages: [check, deploy, smoke, ops]
 
 # ------------------------------------------------------------
 #  Validate docker-compose.yml before deploy
@@ -77,6 +77,65 @@ deploy:
       done
       docker compose -p "$TEAM" ps
     - docker compose -p "$TEAM" exec -T api curl -fsS http://localhost:8000/health && echo " <- /health OK"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ------------------------------------------------------------
+#  Smoke test — runs automatically after deploy on main
+#  Tests every AI model the project uses.
+#  typhoon-ocr and ptm-asr-1 are skipped (require file upload).
+# ------------------------------------------------------------
+smoke-test:
+  stage: smoke
+  needs: [deploy]
+  script:
+    - |
+      API="http://127.0.0.1:${BASE_1}"
+      FAIL=0
+      ok()  { echo "  ✅ $1"; }
+      fail(){ echo "  ❌ $1 — $2"; FAIL=1; }
+
+      echo "── /health ──────────────────────────────────────────"
+      curl -sf "$API/health" >/dev/null \
+        && ok "health" || fail "health" "unreachable"
+
+      echo "── thaillm-8b (primary text LLM) ────────────────────"
+      r=$(curl -sf -X POST "$API/thaillm/v1/chat/completions" \
+        -H "Content-Type: application/json" \
+        -d '{"model":"thaillm-8b","messages":[{"role":"user","content":"ตอบว่า ok"}],"max_tokens":8,"stream":false}' \
+        || echo "CURL_FAIL")
+      echo "$r" | grep -q '"choices"' \
+        && ok "thaillm-8b" || fail "thaillm-8b" "$(echo $r | cut -c1-200)"
+
+      echo "── typhoon-v2.5-30b-a3b-instruct (text fallback) ────"
+      r=$(curl -sf -X POST "$API/typhoon/v1/chat/completions" \
+        -H "Content-Type: application/json" \
+        -d '{"model":"typhoon-v2.5-30b-a3b-instruct","messages":[{"role":"user","content":"say ok"}],"max_tokens":8}' \
+        || echo "CURL_FAIL")
+      echo "$r" | grep -q '"choices"' \
+        && ok "typhoon-text" || fail "typhoon-text" "$(echo $r | cut -c1-200)"
+
+      echo "── ssense (sentiment analysis) ──────────────────────"
+      curl -sf -X POST "$API/ssense" \
+        -H "Content-Type: application/json" \
+        -d '{"text":"วันนี้ดีใจมาก"}' >/dev/null \
+        && ok "ssense" || fail "ssense" "HTTP error"
+
+      echo "── gemini (proxy) ───────────────────────────────────"
+      r=$(curl -sf -X POST "$API/gemini/v1beta/models/gemini-2.0-flash:generateContent" \
+        -H "Content-Type: application/json" \
+        -d '{"contents":[{"parts":[{"text":"say hi"}]}]}' \
+        || echo "CURL_FAIL")
+      echo "$r" | grep -q '"candidates"' \
+        && ok "gemini" || fail "gemini" "$(echo $r | cut -c1-200)"
+
+      echo "── typhoon-ocr   ⏭  skipped (requires image file) ──"
+      echo "── ptm-asr-1     ⏭  skipped (requires audio file) ──"
+
+      echo ""
+      [ $FAIL -eq 0 ] \
+        && echo "✅  All smoke tests passed" \
+        || { echo "❌  One or more smoke tests FAILED — see above"; exit 1; }
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
