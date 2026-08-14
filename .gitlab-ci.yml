@@ -7,6 +7,8 @@ variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
+  DOCKER_HOST: unix:///var/run/docker.sock
+  DOCKER_TLS_CERTDIR: ""
 
 stages: [check, deploy, ops]
 
