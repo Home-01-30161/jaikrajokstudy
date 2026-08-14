@@ -1,10 +1,10 @@
 /**
- * pathummaApi.ts — JaiKraJok ThaiLLM client (v5)
+ * pathummaApi.ts — JaiKraJok ThaiLLM client (v6)
  * =====================================================
- * Uses the NEW ThaiLLM API (OpenAI-compatible):
- *   Model:    pathumma-thaillm-qwen3-8b-think-3.0.0
- *   Endpoint: POST http://thaillm.or.th/api/v1/chat/completions
- *   Auth:     Authorization: Bearer <VITE_THAILLM_API_KEY>
+ * Uses the TokenMind ThaiLLM API (OpenAI-compatible):
+ *   Model:    thaillm-8b
+ *   Endpoint: POST https://tokenmind.pathumma.in.th/v1/chat/completions
+ *   Auth:     Authorization: Bearer <VITE_TOKENMIND_API_KEY>
  *
  * VQA + Audio: Still uses Pathumma API (aiforthai.in.th) since ThaiLLM is text-only.
  */
@@ -12,12 +12,12 @@
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const THAILLM_PROXY  = "/api/thaillm";
-const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
-// Direct URL so browser (not server) makes the request — bypasses Cloudflare bot protection
-const THAILLM_DIRECT = "http://thaillm.or.th/api/v1/chat/completions";
-// Hackathon key — safe to expose client-side for competition duration
+const THAILLM_MODEL  = "thaillm-8b";
+// TokenMind endpoint hosts thaillm-8b
+const THAILLM_DIRECT = "https://tokenmind.pathumma.in.th/v1/chat/completions";
+// Team API key for TokenMind
 const THAILLM_KEY: string =
-  (import.meta.env.VITE_THAILLM_API_KEY as string) || "CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T";
+  (import.meta.env.VITE_TOKENMIND_API_KEY as string) || "sk-YKzTabSzMnF8kSpMvSxc1g";
 // Typhoon text fallback (used when ThaiLLM origin is overloaded)
 const TYPHOON_TEXT_MODEL = "typhoon-v2.5-30b-a3b-instruct";
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
@@ -247,7 +247,7 @@ interface ChatMessage {
 }
 
 /**
- * TEXT LLM: Call ThaiLLM pathumma-thaillm-qwen3-8b-think-3.0.0
+ * TEXT LLM: Call ThaiLLM thaillm-8b via TokenMind
  * Uses proper OpenAI messages[] array format — no need to inject history into prompt strings.
  */
 export async function callTextLLM(

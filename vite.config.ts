@@ -418,13 +418,13 @@ export default defineConfig(({ mode }) => {
           },
         },
         '/api/thaillm': {
-          target: 'http://thaillm.or.th',
+          target: 'https://tokenmind.pathumma.in.th',
           changeOrigin: true,
-          secure: false,
-          rewrite: (path: string) => path.replace(/^\/api\/thaillm/, ''),
+          secure: true,
+          rewrite: (path: string) => path.replace(/^\/api\/thaillm/, '/v1'),
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq) => {
-              proxyReq.setHeader('Authorization', `Bearer ${env.THAILLM_API_KEY ?? ''}`);
+              proxyReq.setHeader('Authorization', `Bearer ${env.TOKENMIND_API_KEY ?? ''}`);
             });
           },
         },

@@ -2756,10 +2756,10 @@ function ChatView({
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => toast("โมเดลหลัก: Pathumma-ThaiLLM-qwen3-8b-think-3.0.0")}
+                  onClick={() => toast("โมเดลหลัก: thaillm-8b (TokenMind)")}
                   className="text-xs px-3 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors shadow-xs"
                 >
-                  Pathumma-ThaiLLM-qwen3-8b-think-3.0.0 ▾
+                  thaillm-8b ▾
                 </button>
                 <button
                   onClick={handleVoice}
@@ -3000,10 +3000,10 @@ function ChatView({
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => toast("โมเดลหลัก: Pathumma-ThaiLLM-qwen3-8b-think-3.0.0")}
+                    onClick={() => toast("โมเดลหลัก: thaillm-8b (TokenMind)")}
                     className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer"
                   >
-                    Pathumma-ThaiLLM-qwen3-8b-think-3.0.0 ▾
+                    thaillm-8b ▾
                   </button>
                   <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="พูดระบาย">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

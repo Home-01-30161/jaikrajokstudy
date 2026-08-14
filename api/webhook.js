@@ -35,14 +35,14 @@ function verifySignature(rawBody, signature, secret) {
 }
 
 async function llmReply(text) {
-  const apiKey = process.env.TYPHOON_API_KEY || process.env.TYPHOON_ASR_KEY;
+  const apiKey = process.env.TOKENMIND_API_KEY;
   if (!apiKey) return null;
   try {
-    const res = await fetch("https://api.opentyphoon.ai/v1/chat/completions", {
+    const res = await fetch("https://tokenmind.pathumma.in.th/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "pathumma-thaillm-qwen3-8b-think-3.0.0",
+        model: "thaillm-8b",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: text },

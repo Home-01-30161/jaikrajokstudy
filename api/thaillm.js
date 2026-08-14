@@ -3,7 +3,7 @@ async function callUpstream(method, upstream, body) {
     method,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.THAILLM_API_KEY}`,
+      Authorization: `Bearer ${process.env.TOKENMIND_API_KEY}`,
       "User-Agent": "Mozilla/5.0 (compatible; jaikrajok-proxy/1.0)",
       Accept: "application/json",
     },
@@ -14,8 +14,8 @@ async function callUpstream(method, upstream, body) {
 
 export default async function handler(req, res) {
   const path = req.url.replace(/^\/thaillm/, "");
-  const upstream = `http://thaillm.or.th/api${path}`;
-  console.log(`[thaillm] → ${req.method} ${upstream}`);
+  const upstream = `https://tokenmind.pathumma.in.th/v1${path}`;
+  console.log(`[thaillm→tokenmind] → ${req.method} ${upstream}`);
   try {
     let response = await callUpstream(req.method, upstream, req.body);
     // single retry on 502/503 (Cloudflare transient)
@@ -33,6 +33,6 @@ export default async function handler(req, res) {
     res.status(response.status).json(data);
   } catch (err) {
     const isTimeout = err?.name === "TimeoutError" || err?.name === "AbortError";
-    res.status(504).json({ error: isTimeout ? "ThaiLLM timeout" : String(err?.message) });
+    res.status(504).json({ error: isTimeout ? "ThaiLLM (TokenMind) timeout" : String(err?.message) });
   }
 }
