@@ -816,11 +816,15 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
       imageBlob,
       "Analyze this physics/math homework image. " +
       "1) Transcribe all Thai text exactly. " +
-      "2) For every diagram element: state the exact angle in degrees (and whether measured from horizontal or vertical), " +
-      "every labeled point, every vector/arrow with label and direction, every axis, every trajectory. " +
-      "For projectile problems, explicitly state the launch angle from horizontal. " +
+      "2) For every diagram element: " +
+      "state the exact angle in degrees and what it is measured FROM (horizontal or vertical). " +
+      "For the LAUNCH POINT: state the launch angle from both horizontal and vertical. " +
+      "For EVERY OTHER LABELED POINT on the trajectory (A, B, P, Q, etc.): " +
+      "state the angle of the velocity vector at that point and whether it is measured from horizontal or vertical — " +
+      "this is CRITICAL for solving the problem. " +
+      "Also state every labeled point, every vector/arrow with label and direction, every axis. " +
       "3) List all given quantities (symbol, value, unit). " +
-      "4) State what the problem asks to find. Do NOT solve.",
+      "4) State exactly what the problem asks to find. Do NOT solve.",
       "image.jpg",
       TYPHOON_OCR_MODEL,
       HOMEWORK_VISION_SYSTEM
@@ -869,6 +873,11 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `/no_think\n` +
         `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ:\n` +
         `${answer.slice(0, 2000)}\n\n` +
+        `กฎเหล็กสำหรับโจทย์โพรเจคไทล์ (ห้ามละเมิด):\n` +
+        `- vₓ = v₀cosθ₀ คงที่ตลอด\n` +
+        `- ถ้าโจทย์ระบุมุมของความเร็ว ณ จุด A จากแนวดิ่ง = α: ใช้ vᵧ = vₓ·tan(90°-α) แล้วหา h จาก vᵧ²=v₀ᵧ²-2gh\n` +
+        `- ถ้าโจทย์ระบุมุมของความเร็ว ณ จุด A จากแนวนอน = β: ใช้ vᵧ = vₓ·tanβ แล้วหา h จาก vᵧ²=v₀ᵧ²-2gh\n` +
+        `- ❌ ห้ามสมมติว่า A คือจุดสูงสุด (v=0) ถ้าไม่ได้ระบุไว้ชัดเจน\n\n` +
         `เฉลย (ตอบสั้น ไม่เกิน 150 คำ):\n` +
         `**ข้อมูล:** [ระบุค่าที่กำหนดสั้น ๆ]\n` +
         `**คำนวณ:** [สมการทีละขั้น ใช้ $...$]\n` +
