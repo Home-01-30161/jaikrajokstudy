@@ -1,17 +1,29 @@
+async function callUpstream(method, upstream, body) {
+  return fetch(upstream, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.THAILLM_API_KEY}`,
+      "User-Agent": "Mozilla/5.0 (compatible; jaikrajok-proxy/1.0)",
+      Accept: "application/json",
+    },
+    body: method !== "GET" ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(90000),
+  });
+}
+
 export default async function handler(req, res) {
   const path = req.url.replace(/^\/thaillm/, "");
   const upstream = `http://thaillm.or.th/api${path}`;
   console.log(`[thaillm] → ${req.method} ${upstream}`);
   try {
-    const response = await fetch(upstream, {
-      method: req.method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.THAILLM_API_KEY}`,
-      },
-      body: req.method !== "GET" ? JSON.stringify(req.body) : undefined,
-      signal: AbortSignal.timeout(60000),
-    });
+    let response = await callUpstream(req.method, upstream, req.body);
+    // single retry on 502/503 (Cloudflare transient)
+    if ((response.status === 502 || response.status === 503) && req.method !== "GET") {
+      console.warn(`[thaillm] ${response.status} — retrying in 2s`);
+      await new Promise(r => setTimeout(r, 2000));
+      response = await callUpstream(req.method, upstream, req.body);
+    }
     const text = await response.text();
     let data;
     try { data = JSON.parse(text); } catch { data = { raw: text.slice(0, 500) }; }
