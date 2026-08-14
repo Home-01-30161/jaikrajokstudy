@@ -1,33 +1,30 @@
 /**
  * pathummaApi.ts — JaiKraJok ThaiLLM client (v6)
  * =====================================================
- * Uses the TokenMind ThaiLLM API (OpenAI-compatible):
- *   Model:    thaillm-8b
- *   Endpoint: POST https://tokenmind.pathumma.in.th/v1/chat/completions
- *   Auth:     Handled server-side by api/thaillm.js (process.env.TOKENMIND_API_KEY)
+ * Primary model:  thaillm-8b  (tokenmind.pathumma.in.th)
+ * Fallback model: typhoon-v2.5-30b-a3b-instruct  (api.opentyphoon.ai)
  *
- * VQA + Audio: Still uses Pathumma API (aiforthai.in.th) since ThaiLLM is text-only.
- *   Auth:     Handled server-side by api/pathumma.js (process.env.PATHUMMA_API_KEY)
+ * VQA + Audio: Pathumma API (aiforthai.in.th) — text-only models above.
  */
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
+// Primary: team's thaillm-8b on tokenmind (via /api/thaillm proxy)
 const THAILLM_PROXY = "/api/thaillm";
 const THAILLM_MODEL = "thaillm-8b";
-// Typhoon text fallback (used when ThaiLLM origin is overloaded)
+
+// Fallback: typhoon-v2.5-30b via existing proxy
+const TYPHOON_PROXY = "/api/typhoon";
 const TYPHOON_TEXT_MODEL = "typhoon-v2.5-30b-a3b-instruct";
+
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
-const TYPHOON_PROXY = "/api/typhoon";
 const TAVILY_PROXY = "/api/tavily";
 const PTM_ASR_PROXY = "/api/ptm-asr";
 const PTM_ASR_MODEL = "ptm-asr-1";
 
-// Keys are now server-side only — always available
-export function hasApiKey(): boolean { return true; }
+// Keys are server-side only — proxies always inject auth.
 
-// Auth headers are added server-side by the backend proxies (typhoon.js / pathumma.js).
-// The browser only needs Content-Type — never sends API keys directly.
 function thaiLLMHeaders(): Record<string, string> {
   return { "Content-Type": "application/json" };
 }
@@ -113,21 +110,13 @@ function stripThink(text: string): string {
   if (text.includes("</think>")) {
     const after = text.split("</think>").slice(1).join("</think>").trim();
     if (after) return after;
-    // </think> at end with nothing after — fall through to return cleaned content before it
-    const before = text.split("</think>")[0].replace(/^<think>/i, "").trim();
-    if (before) return before;
   }
 
-  // 2. Unclosed <think> tag — model was cut off mid-reasoning. Return "" so
-  //    the caller can show a fallback instead of leaking half-thoughts to users.
+  // 2. Unclosed <think> tag at start
   if (text.trimStart().startsWith("<think>")) {
-    const inner = text.replace(/^<think>/i, "").trim();
-    if (inner.includes("</think>")) {
-      const after = inner.split("</think>").slice(1).join("</think>").trim();
-      if (after) return after;
-    }
-    // Truncated — no final answer available
-    return "";
+    const withoutTag = text.replace(/^<think>/i, "").trim();
+    const after = withoutTag.includes("</think>") ? withoutTag.split("</think>").slice(1).join("</think>").trim() : "";
+    if (after) return after;
   }
 
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>/gi, "").trim();
@@ -135,7 +124,7 @@ function stripThink(text: string): string {
   // 3. Remove leaked English reasoning blocks (e.g. `สดใส" (bright). The task is to...`)
   if (/(?:The task is to|First, I need to|The user wants|Check if it's within|Wait, the user|Looking at the|Let's analyze|Let's break down|We need to solve|So, start by|The response should)/i.test(cleaned)) {
     // Check if there is a quoted Thai message like "ดีใจที่เห็นรอยยิ้ม..."
-    const thaiQuoteMatch = cleaned.match(/"([\u0E00-\u0E7F][^"]{10,})"/);
+    const thaiQuoteMatch = cleaned.match(/"([฀-๿][^"]{10,})"/);
     if (thaiQuoteMatch && thaiQuoteMatch[1]) {
       return thaiQuoteMatch[1].trim();
     }
@@ -143,7 +132,7 @@ function stripThink(text: string): string {
     // Otherwise, split into lines and find lines that contain natural Thai text without English instructions
     const lines = cleaned.split("\n");
     const thaiLines = lines.filter(l => {
-      const thaiCount = (l.match(/[\u0E00-\u0E7F]/g) || []).length;
+      const thaiCount = (l.match(/[฀-๿]/g) || []).length;
       const engCount = (l.match(/[a-zA-Z]/g) || []).length;
       return thaiCount > 8 && thaiCount > engCount && !l.includes("The task is") && !l.includes("First, I need") && !l.includes("The user wants");
     });
@@ -154,7 +143,7 @@ function stripThink(text: string): string {
   }
 
   // 4. General preamble stripping: if text starts with English reasoning before Thai content
-  const firstThaiIdx = cleaned.search(/[\u0E00-\u0E7F]/);
+  const firstThaiIdx = cleaned.search(/[฀-๿]/);
   if (firstThaiIdx > 0) {
     const preamble = cleaned.slice(0, firstThaiIdx).trim();
     if (/^(Also|Wait|Okay|Alright|Let|The|First|So|I|Hmm|Looking|To|Because|In|#\s*Wait)/i.test(preamble)) {
@@ -229,13 +218,28 @@ export const JAIKRAJOK_SYSTEM_PROMPT =
   "5. หากผู้ใช้มีความเสี่ยงซึมเศร้ารุนแรง ให้แนะนำสายด่วน 1323 ด้วยความห่วงใย";
 
 export const MATH_SYSTEM_PROMPT =
-  "You are a physics and mathematics tutor. Answer in Thai. " +
-  "You are a physics and mathematics tutor. Answer in Thai. " +
-  "IMPORTANT: u, g, m, θ etc. are SYMBOLIC VARIABLES — answers like u²/(6g) are complete and valid. " +
-  "NEVER say 'ไม่มีค่า u หรือ g' — u and g ARE the variables in the answer. " +
-  "Show step-by-step calculation. Use $...$ for inline LaTeX and $$...$$ for display math. " +
-  "Use ## headers to structure: ## ข้อมูลที่กำหนด / ## วิธีคำนวณ / ## คำตอบ. " +
-  "State the final answer once in $$...$$. Do not repeat. Be concise.";
+  "คุณคือครูสอนพิเศษคณิตศาสตร์และวิทยาศาสตร์ผู้เชี่ยวชาญระดับสูง สร้างโดยทีม JaiKraJok " +
+  "📐 กฎการจัดรูปแบบคำตอบ (Output Formatting Rules) — **บังคับปฏิบัติตลอด**: " +
+  "1. **LaTeX Math**: ใช้ `$...$` สำหรับ inline math และ `$$...$$` สำหรับ display math **ทุกสูตรสมการ** " +
+  "2. **Code Blocks**: ใช้ ```language\ncode\n``` พร้อมระบุภาษา " +
+  "3. **Tables**: สร้างตาราง markdown แสดงขั้นตอนคำนวณ เปรียบเทียบตัวเลือก หรือสรุปผล " +
+  "4. **Task Lists**: ใช้ `- [ ]` สำหรับขั้นตอนการแก้โจทย์ `- [x]` สำหรับขั้นตอนที่ทำเสร็จ " +
+  "5. **Blockquotes**: ใช้ `> **คำแนะนำ**` เน้นเคล็ดลับ สูตรสำคัญ หรือข้อระวัง " +
+  "6. **Headers**: ใช้ `##` `###` จัดโครงสร้าง: ## วิธีแก้, ## การคำนวณ, ## สรุปคำตอบ " +
+  "7. **Bold**: ใช้ `**คำตอบสุดท้าย**` เน้นผลลัพธ์ " +
+  "8. **Horizontal Rules**: ใช้ `---` แยกแต่ละขั้นตอนหลัก " +
+  "🔤 กฎการใช้อักษรตัวเลือก (CRITICAL Choice Rule): " +
+  "- หากโจทย์ใช้ตัวเลือกภาษาไทย (ก. ข. ค. ง.) ให้ใช้อักษร ก. ข. ค. ง. ตลอดทั้งคำตอบ ❌ ห้ามเปลี่ยนเป็น A, B, C, D เด็ดขาด " +
+  "🚫 กฎต่อต้านการซ้ำซ้อน (CRITICAL Anti-Repetition): " +
+  "- ห้ามแสดงส่วน '## สรุปคำตอบสุดท้าย' หรือ 'คำตอบที่ถูกต้อง' มากกว่า **1 ครั้ง** ต่อคำตอบ เด็ดขาด! " +
+  "- ห้ามซ้ำหรือ copy ย่อหน้าเดิม ประโยคเดิม หรือข้อความเดิมในคำตอบ " +
+  "- ตอบจบในส่วนสรุปเดียว ไม่ต้องพูดซ้ำอีก " +
+  "กฎการตอบ (ห้ามเดาตัวเลข คำนวณจริงทีละขั้น): " +
+  "1. ตอบเป็นภาษาไทย อธิบายละเอียด ทุกขั้นตอน ห้ามสุ่มหรือเดาคำตอบเด็ดขาด " +
+  "2. สำหรับโจทย์เศษเหลือและการหาร: คำนวณ ค.ร.น. (LCM) ให้แม่นยำ บวกเศษกลับเข้าไป แล้วตรวจสอบเงื่อนไขขอบเขต " +
+  "3. หากมีตัวเลือก ก. ข. ค. ง. ให้ตรวจทานคำตอบที่คำนวณได้กับตัวเลือกอย่างระมัดระวัง แล้วระบุข้อที่ถูกต้องด้วยอักษร ก. ข. ค. ง. " +
+  "4. แสดงสูตรและสมการด้วย LaTeX: inline ใช้ $...$ และ block ใช้ $$...$$ " +
+  "5. สรุปคำตอบสุดท้าย **ครั้งเดียว** ในกรอบ $$...$$ และให้กำลังใจผู้เรียน — ห้ามซ้ำสรุปอีก!";
 
 /** OpenAI-compatible message type */
 interface ChatMessage {
@@ -309,47 +313,70 @@ export async function callTextLLM(
     messages,
     max_tokens: maxTokens,
     temperature: effectiveTemperature,
-    stream: false,
-    enable_thinking: false,
   });
 
-  // Always use server proxy — direct HTTP call is blocked by Mixed Content on HTTPS pages.
-  let res: Response;
+  // ── Primary: thaillm-8b (tokenmind via /api/thaillm proxy) ────────────────
   try {
-    res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
-  } catch (fetchErr) {
-    console.warn("[ThaiLLM] Network error, falling back to Typhoon:", fetchErr);
-    return await callTyphoonText(messages, systemPrompt, maxTokens);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const res = await fetch(`${THAILLM_PROXY}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: controller.signal,
+      });
+
+      if (res.ok) {
+        const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
+        console.debug("[PTM-ThaiLLM] raw response:", raw);
+        const choices = raw.choices as { message?: { content?: string } }[] | undefined;
+        const content = choices?.[0]?.message?.content ?? "";
+        const text = stripThink(content);
+        if (text) return text;
+      } else {
+        console.warn("[PTM-ThaiLLM] HTTP", res.status, "— falling back to typhoon");
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      console.warn("[PTM-ThaiLLM] timed out after 60s — falling back to typhoon");
+    } else {
+      console.warn("[PTM-ThaiLLM] fetch error — falling back to typhoon:", err);
+    }
   }
+
+  // ── Fallback: typhoon-v2.5-30b ────────────────────────────────────────────
+  const fallbackBody = JSON.stringify({
+    model: TYPHOON_TEXT_MODEL,
+    messages,
+    max_tokens: maxTokens,
+    temperature: effectiveTemperature,
+  });
+
+  const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
+    method: "POST",
+    headers: thaiLLMHeaders(),
+    body: fallbackBody,
+  });
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    console.error("[ThaiLLM] HTTP error", res.status, errBody.slice(0, 300));
-    // On 5xx (server-side overload / bad gateway), fall back to Typhoon silently
-    if (res.status >= 500) {
-      console.warn(`[ThaiLLM] ${res.status} — falling back to Typhoon text model`);
-      return await callTyphoonText(messages, systemPrompt, maxTokens);
-    }
+    console.error("[Typhoon fallback] HTTP error", res.status, errBody.slice(0, 300));
     throw new Error(`ThaiLLM ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
   const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
-  console.debug("[ThaiLLM] raw response:", raw);
+  console.debug("[Typhoon fallback] raw response:", raw);
 
   // OpenAI-compatible extraction
   const choices = raw.choices as { message?: { content?: string } }[] | undefined;
   const content = choices?.[0]?.message?.content ?? "";
 
   const text = stripThink(content);
-  if (!text) {
-    // Empty reply from ThaiLLM — fall back to Typhoon
-    console.warn("[ThaiLLM] Empty response — falling back to Typhoon text model");
-    return await callTyphoonText(messages, systemPrompt, maxTokens);
-  }
+  if (!text) throw new Error("ThaiLLM returned empty response");
   return text;
 }
 
@@ -472,107 +499,34 @@ export async function callTextLLMWithSearch(
   // Perform web search with Tavily
   let searchCtx = "";
   let sources: { title: string; url: string }[] = [];
-  try {
-    let searchQuery = instruction;
-    const taskMatch = instruction.match(/(tasks\/|problem\/)([a-zA-Z0-9_-]+)/i);
-    if (taskMatch) {
-      searchQuery = `${taskMatch[2]} programming.in.th problem solution`;
-    }
-    const data = await searchWeb(searchQuery, 5, "advanced");
-    sources = (data.results || []).map(r => ({ title: r.title || "เว็บอ้างอิง", url: r.url }));
 
-    // Build context block for the prompt with explicit URLs
-    const snippets = data.results
-      .map((r, i) => `[${i + 1}] **ชื่อเว็บ:** [${r.title}](${r.url})\n**URL:** ${r.url}\n**เนื้อหา:** ${r.content.slice(0, 700)}`)
+  try {
+    const searchData = await searchWeb(instruction, 5, "basic");
+    sources = searchData.results.map(r => ({ title: r.title, url: r.url }));
+
+    const snippets = searchData.results
+      .map((r, i) => `[${i + 1}] **${r.title}** (${r.url})\n${r.content.slice(0, 400)}`)
       .join("\n\n");
 
     searchCtx =
-      `\n\n---\n**ผลการค้นหาจริงจากเว็บ (Tavily Web Search Results):**\n${snippets}\n` +
-      (data.answer ? `\n**สรุปภาพรวมจากระบบค้นหา:** ${data.answer}\n` : "") +
-      `---\n\n**คำสั่งบังคับ**: สรุปข้อมูลตอบคำถามผู้ใช้โดยใช้เฉพาะข้อมูลใน 5 ผลการค้นหาด้านบนเท่านั้น ห้ามเอ่ยถึงบุคคลอื่นที่ไม่ปรากฏในผลการค้นหา`;
+      `\n\n---\n**ผลการค้นหาเว็บ (Tavily Search) — ใช้ข้อมูลเหล่านี้ตอบคำถาม:**\n\n${snippets}\n\n` +
+      `**คำสั่ง**: ตอบคำถามผู้ใช้โดยอิงจากผลการค้นหาด้านบนเท่านั้น อ้างอิงด้วย [1], [2], ... ห้ามแต่งข้อมูลที่ไม่มีในผลการค้นหา\n---`;
   } catch (err) {
-    console.warn("[Tavily] Search failed, answering without search context:", err);
+    console.warn("[Tavily] Search failed, falling back to LLM-only:", err);
   }
 
-  const isProblemSolving = /(solve|แก้โจทย์|คำตอบ|ส่งผ่าน|pass|tasks\/|problem\/|contest\/|toi\d|codecube|leetcode|hackerrank)/i.test(instruction);
-  const activeSystemPrompt = isProblemSolving ? CODING_SOLVER_PROMPT : SEARCH_SYSTEM_PROMPT;
+  const augmentedInstruction = instruction + searchCtx;
+  const effectiveSystemPrompt = searchCtx ? SEARCH_SYSTEM_PROMPT : systemPrompt;
 
-  // Special hint for toi2_maxseq to ensure 100% correct C++ Kadane's algorithm output format
-  if (instruction.includes("toi2_maxseq") || instruction.includes("maxseq")) {
-    searchCtx += "\n\n[ข้อบังคับโจทย์ toi2_maxseq (Max Subsequence Sum)]:\n" +
-      "- ใช้อัลกอริทึม Kadane's Algorithm หาช่วง contiguous subarray ที่ได้ผลรวมสูงสุด (หากผลรวมเท่ากันให้เลือกช่วงที่ยาวที่สุด)\n" +
-      "- บรรทัดที่ 1 ของ Output: พิมพ์ตัวเลขใน subarray นั้นเว้นวรรคด้วยช่องว่าง (เช่น: 3 -2 6)\n" +
-      "- บรรทัดที่ 2 ของ Output: พิมพ์ผลรวมสูงสุด (เช่น: 7)\n" +
-      "- ❌ ห้ามพิมพ์แค่ตัวเลขตัวเดียว ให้พิมพ์โค้ด C++ ที่แสดงผลครบทั้ง 2 บรรทัด 100%";
-  }
+  const reply = await callTextLLM(augmentedInstruction, effectiveSystemPrompt, maxTokens, temperature, history);
 
-  // Use activeSystemPrompt and ultra-low temperature (0.01) when web search is active
-  const rawReply = await callTextLLM(
-    instruction + searchCtx,
-    activeSystemPrompt,
-    maxTokens,
-    0.01,
-    history
-  );
-
-  let reply = stripThink(rawReply);
-
-  // If problem solving request produced no code block, append fallback solution
-  if (isProblemSolving && !reply.includes("```")) {
-    if (instruction.includes("toi2_maxseq") || instruction.includes("maxseq")) {
-      const codeBlock = "```cpp\n" +
-        "#include <bits/stdc++.h>\n" +
-        "using namespace std;\n\n" +
-        "int main() {\n" +
-        "    ios_base::sync_with_stdio(false);\n" +
-        "    cin.tie(NULL);\n" +
-        "    int n;\n" +
-        "    if (!(cin >> n)) return 0;\n" +
-        "    vector<int> a(n);\n" +
-        "    for (int i = 0; i < n; ++i) cin >> a[i];\n\n" +
-        "    int max_sum = -1e9, current_sum = 0;\n" +
-        "    int best_start = 0, best_end = 0, current_start = 0;\n\n" +
-        "    for (int i = 0; i < n; ++i) {\n" +
-        "        if (current_sum <= 0) {\n" +
-        "            current_sum = a[i];\n" +
-        "            current_start = i;\n" +
-        "        } else {\n" +
-        "            current_sum += a[i];\n" +
-        "        }\n" +
-        "        if (current_sum > max_sum || (current_sum == max_sum && (i - current_start > best_end - best_start))) {\n" +
-        "            max_sum = current_sum;\n" +
-        "            best_start = current_start;\n" +
-        "            best_end = i;\n" +
-        "        }\n" +
-        "    }\n\n" +
-        "    for (int i = best_start; i <= best_end; ++i) {\n" +
-        '        cout << a[i] << (i == best_end ? "" : " ");\n' +
-        "    }\n" +
-        '    cout << "\\n" << max_sum << "\\n";\n' +
-        "    return 0;\n" +
-        "}\n" +
-        "```";
-
-      reply = `## 💻 เฉลยโจทย์ toi2_maxseq (C++)\n\n` +
-        `แนวคิด: ใช้ Kadane's Algorithm หาช่วง contiguous subarray ที่มีผลรวมสูงสุด โดยเก็บตำแหน่งเริ่มต้น/สิ้นสุดของช่วงเพื่อแสดงสมาชิกทั้งหมดในบรรทัดแรก และแสดงผลรวมสูงสุดในบรรทัดที่สอง\n\n` +
-        codeBlock + `\n\n` +
-        `### Complexity\n` +
-        `- **Time Complexity:** $O(N)$\n` +
-        `- **Space Complexity:** $O(N)$`;
-    }
-  }
-
-  // Guarantee clean verified Markdown source links appended at the bottom
+  // Append source links if search was used
   if (sources.length > 0) {
-    if (reply.includes("แหล่งอ้างอิง")) {
-      reply = reply.replace(/(###?\s*แหล่งอ้างอิง[\s\S]*$)/i, "").trim();
-    }
-
     const sourcesBlock =
-      `\n\n---\n### 🌐 แหล่งอ้างอิงข้อมูลจริงจากเว็บ (Verified Sources)\n` +
+      "\n\n---\n**แหล่งข้อมูล:**\n" +
       sources.map((s, idx) => `[${idx + 1}] [${s.title}](${s.url})`).join("\n");
 
-    reply += sourcesBlock;
+    return { reply: reply + sourcesBlock, searchUsed: sources.length > 0, sources };
   }
 
   return { reply, searchUsed: sources.length > 0, sources };
@@ -765,45 +719,18 @@ function fixThaiChoices(reply: string, ocrText: string): string {
   return result;
 }
 
-/** Typhoon text fallback — only used when ThaiLLM origin is overloaded (502/504) */
-async function callTyphoonText(
-  promptOrMessages: string | { role: string; content: string }[],
-  systemPrompt: string,
-  maxTokens: number
-): Promise<string> {
-  const messages: { role: string; content: string }[] = Array.isArray(promptOrMessages)
-    ? promptOrMessages
-    : [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: promptOrMessages },
-    ];
-  const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: TYPHOON_TEXT_MODEL, messages, max_tokens: maxTokens, temperature: 0.05 }),
-  });
-  if (!res.ok) throw new Error(`Typhoon fallback ${res.status}`);
-  const raw = await res.json() as Record<string, unknown>;
-  const choices = raw.choices as { message?: { content?: string } }[] | undefined;
-  return choices?.[0]?.message?.content ?? "";
-}
-
 // System prompt for the unified vision+reasoning call on homework images
 const HOMEWORK_VISION_SYSTEM =
-  "You are a physics and mathematics expert specializing in reading Thai homework problems and physics diagrams. " +
-  "When given an image: " +
-  "1. Transcribe ALL Thai text exactly as written. " +
-  "2. For physics diagrams (free body diagrams, projectile motion, force diagrams, vector diagrams): " +
-  "   - List every labeled point (O, A, B, P, Q, ...) and its physical meaning. " +
-  "   - State every angle with EXACT degree value and what it is measured from (e.g. 'angle 45° from vertical Y-axis', '60° from horizontal X-axis'). " +
-  "   - State every vector/arrow: its label, direction, and what it represents (velocity u, gravity g, force F, etc.). " +
-  "   - State every axis label (X, Y, horizontal, vertical). " +
-  "   - State every trajectory path and what it represents. " +
-  "   - For projectile problems: state launch angle from HORIZONTAL explicitly. " +
-  "   - For force diagrams: list every force, its direction, and magnitude if given. " +
-  "3. List ALL given quantities: symbol, value, unit. " +
-  "4. State clearly what the problem asks to find (unknown). " +
-  "5. Do NOT solve — only extract and describe. Be exhaustive about angles — state both the diagram angle AND the equivalent from horizontal.";
+  "You are a physics and mathematics expert who can both read Thai text from images and reason about diagrams. " +
+  "When given an image containing a problem: " +
+  "1. Transcribe ALL Thai text exactly as written (problem statement, variable names, units). " +
+  "2. For any diagram/figure: identify every labeled point (O, A, B, ...), every angle arc with its exact degree value, " +
+  "every vector/arrow with its direction description, every axis label, and every annotated quantity. " +
+  "State each diagram fact as a complete sentence: 'The projectile is launched from point O at 45 degrees from the vertical axis (Y-axis).' " +
+  "'At point A, the velocity vector makes 60 degrees from the vertical (Y-axis), i.e., 30 degrees above horizontal.' " +
+  "3. List ALL given quantities with their symbols and values. " +
+  "4. State what the problem is asking to find. " +
+  "Do NOT solve — only extract and describe. Be exhaustive and precise about angles; never describe grid coordinates as physics data.";
 
 export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   // Single vision call: unified OCR + diagram description with physics-aware system prompt
@@ -813,28 +740,13 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
     // so it reasons about angles/diagram structure instead of just dumping raw text.
     answer = await callVisionLLM(
       imageBlob,
-      "Answer each question in order about this physics diagram:\n" +
-      "Q1: Transcribe ALL Thai text exactly as it appears.\n" +
-      "Q2: List EVERY angle labeled in the diagram. For each: state the exact value in degrees, " +
-      "the location (e.g. 'at launch point O' or 'at point A on the trajectory'), " +
-      "and what it is measured from (vertical Y-axis or horizontal X-axis). " +
-      "Include ALL annotations — at the launch point AND at every other labeled point on the path.\n" +
-      "Q3: Is there any angle annotation near point A (or any labeled point) on the trajectory arc itself, " +
-      "separate from the launch angle? State yes/no and the exact value.\n" +
-      "Q4: List all given quantities (symbol, value, unit).\n" +
-      "Q5: What exactly does the problem ask to find?\n" +
-      "Do NOT solve. Do NOT assume what any point represents.",
+      "Read this image. Transcribe all Thai text exactly. For each diagram element (points, angles, vectors, axes), " +
+      "write one sentence per element stating exactly what it shows with its precise numerical value. " +
+      "List all given quantities. State what the problem asks to find. Do not solve.",
       "image.jpg",
       TYPHOON_OCR_MODEL,
       HOMEWORK_VISION_SYSTEM
     );
-    // Typhoon OCR sometimes returns HTML-encoded LaTeX (&amp; instead of &)
-    answer = answer
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'");
     console.debug("[Homework vision]", answer);
   } catch (e) {
     console.warn("Homework vision failed:", e);
@@ -854,10 +766,10 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   }
   const hasChoices = choiceLettersFound.size >= 2;
 
-
   let llmReply: string;
-  let solvePrompt = "";
   try {
+    let solvePrompt: string;
+
     if (hasChoices) {
       solvePrompt =
         `ข้อมูลโจทย์และตัวเลือกที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
@@ -868,43 +780,26 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `4. **สรุปคำตอบ**: ปิดท้ายด้วยบรรทัด **คำตอบที่ถูกต้องคือ: [ก./ข./ค./ง.]** เพียง 1 ครั้งเท่านั้น\n\n` +
         `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
     } else {
-      // Generic solver: pass all vision-extracted Q&A directly to the LLM.
-      // No problem-specific pattern matching — works for any diagram type.
       solvePrompt =
-        `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ (อ่านโดย AI อาจมีข้อผิดพลาด):\n` +
-        `${answer.slice(0, 2500)}\n\n` +
-        `กฎ — ห้ามละเมิด:\n` +
-        `❌ ห้ามสมมติว่าจุดใดเป็นจุดสูงสุดเว้นจะระบุชัดเจน\n` +
-        `✅ ตัวแปรสัญลักษณ์ (u, g, m ฯลฯ) คือคำตอบที่สมบูรณ์ ไม่ต้องการตัวเลข\n` +
-        `✅ ใช้สมการที่ตรงกับข้อมูลที่อ่านได้จากภาพเท่านั้น\n\n` +
-        `แสดงการแก้โจทย์ทีละขั้น พร้อม ## ข้อมูลที่กำหนด / ## วิธีคำนวณ / ## คำตอบ`;
+        `ข้อมูลทั้งหมดที่อ่านได้จากภาพโจทย์ (รวมมุม จุด เวกเตอร์ ค่าที่กำหนด และสิ่งที่โจทย์ถาม):\n` +
+        `${answer.slice(0, 4000)}\n\n` +
+        `⚠️ คำสั่งสำคัญ: ข้อมูลด้านบนมาจากการอ่านภาพโจทย์จริง รวมถึงมุมและค่าต่าง ๆ จากแผนภาพ\n` +
+        `ทุกมุม ทุกจุด และทุกค่าที่ระบุด้านบน คือข้อมูลฟิสิกส์ที่ต้องใช้คำนวณโดยตรง ห้ามบอกว่า 'ขาดข้อมูล'\n\n` +
+        `คำสั่ง: แก้โจทย์นี้แบบเฉลยสมบูรณ์\n` +
+        `1. **ข้อมูลที่กำหนด**: รวบรวมค่า สัญลักษณ์ มุม และสิ่งที่โจทย์ถามหา\n` +
+        `2. **วิธีคำนวณ**: แสดงสมการและขั้นตอนทีละบรรทัด\n` +
+        `3. **คำตอบสุดท้าย**: ระบุค่าพร้อมหน่วย\n\n` +
+        `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด`;
     }
 
-    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 4096, 0.3);
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 6144, 0.05);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
     }
-    // Append AI disclaimer for non-choice (open-ended) problems
-    if (!hasChoices) {
-      llmReply += `\n\n---\n> ⚠️ **คำเตือน**: เฉลยนี้ผลิตโดย AI ซึ่งอ่านภาพและวิเคราะห์โจทย์โดยอัตโนมัติ สำหรับโจทย์ฟิสิกส์/คณิตศาสตร์ที่ซับซ้อน AI อาจแปลค่าหรือใช้สมมติฐานผิด กรุณาตรวจสอบคำตอบกับครู/แบบเรียนอีกครั้ง`;
-    }
   } catch (err) {
-    // ThaiLLM failed — fall back to Typhoon text model
-    console.warn("ThaiLLM unavailable, using Typhoon fallback:", err);
-    try {
-      const rawReply = await callTyphoonText(solvePrompt, MATH_SYSTEM_PROMPT, 2048);
-      llmReply = fixThaiChoices(rawReply, answer);
-      if (!llmReply || llmReply.length < 30) {
-        llmReply = `## เฉลยการบ้าน\n\n${answer}`;
-      }
-      if (!hasChoices) {
-        llmReply += `\n\n---\n> ⚠️ **คำเตือน**: เฉลยนี้ผลิตโดย AI ซึ่งอ่านภาพและวิเคราะห์โจทย์โดยอัตโนมัติ สำหรับโจทย์ฟิสิกส์/คณิตศาสตร์ที่ซับซ้อน AI อาจแปลค่าหรือใช้สมมติฐานผิด กรุณาตรวจสอบคำตอบกับครู/แบบเรียนอีกครั้ง`;
-      }
-    } catch (err2) {
-      console.error("Homework text LLM failed (both ThaiLLM and Typhoon):", err2);
-      llmReply = `## โจทย์และเฉลยจากภาพ\n\n${answer}`;
-    }
+    console.error("Homework text LLM failed:", err);
+    llmReply = `## โจทย์และเฉลยจากภาพ\n\n${answer}`;
   }
 
   return { answer, llmReply };

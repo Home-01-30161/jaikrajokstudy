@@ -3,7 +3,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
 import {
-  hasApiKey,
   chat,
   analyzeSelfie,
   analyzeHomework,
@@ -124,43 +123,11 @@ const EMO: Record<string, MoodInfo> = {
   },
 };
 
-const KEYWORDS: Record<string, string[]> = {
-  negative: ["เครียด", "กังวล", "กลัว", "กดดัน", "วิตก", "เศร้า", "ท้อ", "ผิดหวัง", "แย่", "เหนื่อย", "หมดแรง", "อ่อนเพลีย", "ล้า"],
-  positive: ["ดีใจ", "สนุก", "มีความสุข", "โล่งใจ", "ภูมิใจ", "สำเร็จ", "ทำได้แล้ว"],
-  calm: ["สงบ", "โอเค", "ปกติ", "สบายใจ", "ผ่อนคลาย"],
-};
-
-const RESPONSES: Record<string, string[]> = {
-  negative: [
-    "เข้าใจนะ ความรู้สึกแบบนี้เป็นเรื่องปกติ ลองหายใจเข้าลึกๆ ช้าๆ สัก 3 ครั้ง แล้วค่อยเล่าให้ฟังต่อได้ไหม กระจกอยู่ตรงนี้นะ",
-    "ขอบคุณที่กล้าเล่าให้ฟังนะ ความรู้สึกแบบนี้ไม่ผิดเลย อยากให้รู้ว่ามีที่นี่ให้ระบายได้เสมอ",
-  ],
-  neutral: [
-    "รับทราบนะ ถ้ามีอะไรอยากเล่าเพิ่มเติม หรืออยากให้ช่วยดูการบ้านก็บอกกระจกได้เลย",
-    "โอเคเลย กระจกอยู่ตรงนี้ พร้อมฟังทุกเรื่องไม่ว่าจะเรื่องเรียนหรือเรื่องทั่วไป",
-  ],
-  calm: [
-    "ดีใจที่วันนี้ใจสงบนะ รักษาจังหวะแบบนี้ไว้แล้วค่อยๆ ทบทวนบทเรียนไปทีละนิดได้เลย",
-    "สบายใจแบบนี้ดีมากเลย ถ้าพร้อมแล้วอยากให้กระจกช่วยทบทวนเรื่องไหนก่อนไหม",
-  ],
-  positive: [
-    "เก่งมากเลย! ความรู้สึกดีๆ แบบนี้ให้ตัวเองได้ภูมิใจไปกับมันเต็มที่นะ",
-    "สุดยอดเลย กระจกดีใจไปด้วยนะ ลองเก็บความรู้สึกนี้ไว้เป็นกำลังใจสำหรับตอนที่เหนื่อยด้วย",
-  ],
-};
-
 const TRANSPARENCY: Record<string, string> = {
   เซลฟี่: "กำลังวิเคราะห์อารมณ์จากใบหน้าของคุณ (Face Recognition API)",
   ข้อความ: "กำลังวิเคราะห์น้ำเสียงจากข้อความ (Sentiment Analysis API)",
   เสียงพูด: "กำลังแปลงเสียงพูดเป็นข้อความ (Speech-to-Text API)",
   รูปการบ้าน: "กำลังอ่านข้อความจากภาพ (OCR API)",
-};
-
-const SELFIE_RESULTS = ["negative", "neutral", "calm"];
-const SELFIE_NOTES: Record<string, string> = {
-  negative: "กระจกสังเกตสีหน้าดูเกร็งหรือเหนื่อยล้า อาจมีสัญญาณของความเครียดสะสม",
-  neutral: "สีหน้าอยู่ในเกณฑ์ปกติ ไม่พบสัญญาณผิดปกติชัดเจน",
-  calm: "สีหน้าดูผ่อนคลาย แววตาสดใส",
 };
 
 const EMO_REASONS: Record<string, string[]> = {
@@ -573,8 +540,8 @@ function OtpModal({
           ))}
         </div>
 
-        {/* Real Email Inbox Preview Link (when test account SMTP generated) */}
-        {previewUrl && (
+        {/* Email inbox preview — dev/test only */}
+        {import.meta.env.DEV && previewUrl && (
           <a
             href={previewUrl}
             target="_blank"
@@ -761,8 +728,11 @@ function LineOAuthModal({
 
   const startOAuth = () => {
     setLoading(true);
-    const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
-    const nonce = Math.random().toString(36).substring(2);
+    const buf = new Uint8Array(16);
+    crypto.getRandomValues(buf);
+    const state = Array.from(buf).map((b) => b.toString(16).padStart(2, "0")).join("") + Date.now().toString(36);
+    crypto.getRandomValues(buf);
+    const nonce = Array.from(buf).map((b) => b.toString(16).padStart(2, "0")).join("");
     sessionStorage.setItem("jaikrajok:line_state", state);
     sessionStorage.setItem("jaikrajok:line_nonce", nonce);
 
@@ -850,13 +820,17 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
     gsap.fromTo(".login-form", { y: 20 }, { y: 0, duration: 0.8, ease: "back.out(1.2)", delay: 0.2 });
   }, []);
 
-  const generateOtpCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+  const generateOtpCode = () => {
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    return String(100000 + (buf[0] % 900000));
+  };
 
   const handleVerifyOtpSuccess = () => {
     if (!pendingRegistration) return;
     const users = getUsersList();
     const newUser: UserAccount = {
-      id: "usr_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      id: crypto.randomUUID(),
       email: pendingRegistration.email,
       name: pendingRegistration.email.split("@")[0],
       passwordHash: pendingRegistration.passwordHash,
@@ -1680,7 +1654,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       return [...prev, { id: nextId, valence: info.valence, color: info.color, key, label: info.label }].slice(-9);
     });
     const nowStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
-    setLogEntries((prev) => [{ id: Math.random().toString(), time: nowStr, label: info.label, source: sourceLabel, key }, ...prev.slice(0, 19)]);
+    setLogEntries((prev) => [{ id: crypto.randomUUID(), time: nowStr, label: info.label, source: sourceLabel, key }, ...prev.slice(0, 19)]);
     setConcernStreak((prevStreak) => (info.concern ? prevStreak + 1 : 0));
     if (info.concern) setShowSupportStrip(true);
   }, []);
@@ -1691,7 +1665,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       if (nextSet.size === 2 && !prev.has(sourceLabel)) {
         setTimeout(() => {
           setMessages((msgs) => [...msgs, {
-            id: Math.random().toString(),
+            id: crypto.randomUUID(),
             role: "system",
             text: `Pathumma LLM กำลังรวมข้อมูลจากหลายแหล่ง (${Array.from(nextSet).join(" + ")}) เพื่อให้คำแนะนำที่แม่นยำขึ้น`,
             timestamp: Date.now(),
@@ -1704,17 +1678,6 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     setTransparencyLogs((prev) => [transNote, ...prev.slice(0, 4)]);
   }, []);
 
-  const detectEmotion = (text: string) => {
-    const t = text.toLowerCase();
-    const scores: Record<string, number> = {};
-    for (const key in KEYWORDS) {
-      scores[key] = KEYWORDS[key].reduce((acc, word) => acc + (t.includes(word) ? 1 : 0), 0);
-    }
-    let bestKey = "neutral", bestScore = 0;
-    for (const key in scores) { if (scores[key] > bestScore) { bestKey = key; bestScore = scores[key]; } }
-    return bestScore === 0 ? "neutral" : bestKey;
-  };
-
   const sendMessage = useCallback(async (overrideText?: string, sourceLabel: string = "ข้อความ") => {
     const textToSend = overrideText !== undefined ? overrideText : inputText;
     if (!textToSend.trim()) return;
@@ -1726,75 +1689,36 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       .slice(-8)  // keep last 8 for context
       .map((m) => ({ role: m.role, text: m.text }));
 
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
     saveWebMessage("user", textToSend);
     noteMultimodal(sourceLabel);
     setIsAnalyzing(true);
 
-    if (hasApiKey()) {
-      // ── Real Pathumma Text LLM ──
-      try {
-        const { emotionKey, reply, searchUsed } = await chat(textToSend, currentHistory);
-        if (searchUsed) {
-          toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ (Tavily Search)");
-        }
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: reply, timestamp: Date.now() }]);
-        saveWebMessage("bot", reply);
-        pushTrend(emotionKey, sourceLabel);
-      } catch (err) {
-        console.error("Pathumma Text LLM error:", err);
-        toast("ไม่สามารถเชื่อมต่อ Pathumma LLM ได้ ใช้การตอบสนองในเครื่องแทน");
-        // Fallback to local mock
-        const key = detectEmotion(textToSend);
-        const list = RESPONSES[key] || RESPONSES.neutral;
-        const fallbackReply = list[Math.floor(Math.random() * list.length)];
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: fallbackReply, timestamp: Date.now() }]);
-        saveWebMessage("bot", fallbackReply);
-        pushTrend(key, sourceLabel);
-      } finally {
-        setIsAnalyzing(false);
+    try {
+      const { emotionKey, reply, searchUsed } = await chat(textToSend, currentHistory);
+      if (searchUsed) {
+        toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ (Tavily Search)");
       }
-    } else {
-      // ── Local mock (no API key) ──
-      setTimeout(() => {
-        const key = detectEmotion(textToSend);
-        const list = RESPONSES[key] || RESPONSES.neutral;
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: list[Math.floor(Math.random() * list.length)], timestamp: Date.now() }]);
-        setIsAnalyzing(false);
-        pushTrend(key, sourceLabel);
-      }, 1000);
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "bot", text: reply, timestamp: Date.now() }]);
+      saveWebMessage("bot", reply);
+      pushTrend(emotionKey, sourceLabel);
+    } catch (err) {
+      console.error("Pathumma Text LLM error:", err);
+      toast.error("ไม่สามารถเชื่อมต่อ AI ได้ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setIsAnalyzing(false);
     }
   }, [inputText, noteMultimodal, pushTrend]);
 
   const handleSelfie = () => {
-    if (hasApiKey()) {
-      // Open native camera/file picker
-      selfieInputRef.current?.click();
-    } else {
-      // Mock fallback
-      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "📷 ถ่ายเซลฟี่เพื่อวิเคราะห์สีหน้า", timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
-      noteMultimodal("เซลฟี่");
-      setIsAnalyzing(true);
-      setTimeout(() => {
-        const key = SELFIE_RESULTS[Math.floor(Math.random() * SELFIE_RESULTS.length)];
-        const info = EMO[key];
-        const note = SELFIE_NOTES[key];
-        setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: note, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note, color: info.color, bg: info.bg, text: info.text, emotionKey: key } }]);
-        setIsAnalyzing(false);
-        pushTrend(key, "เซลฟี่");
-        setTimeout(() => {
-          const list = RESPONSES[key];
-          setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: list[Math.floor(Math.random() * list.length)], timestamp: Date.now() }]);
-        }, 700);
-      }, 1200);
-    }
+    selfieInputRef.current?.click();
   };
 
   const handleSelfieFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: `📷 ถ่ายเซลฟี่: ${file.name}`, timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: `📷 ถ่ายเซลฟี่: ${file.name}`, timestamp: Date.now(), sourceTag: "เซลฟี่" }]);
     noteMultimodal("เซลฟี่");
     setIsAnalyzing(true);
     try {
@@ -1802,8 +1726,8 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       // Classify emotion from returned key or robust fallback
       const emotionKey = returnedKey || classifyMoodFromText(answer) || "positive";
       const info = EMO[emotionKey] || EMO.positive;
-      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: answer, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note: answer, color: info.color, bg: info.bg, text: info.text, emotionKey } }]);
-      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() }]);
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "bot", text: answer, timestamp: Date.now(), cardType: "emotion", emotionData: { label: info.label, note: answer, color: info.color, bg: info.bg, text: info.text, emotionKey } }]);
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "bot", text: llmReply, timestamp: Date.now() }]);
       pushTrend(emotionKey, "เซลฟี่");
     } catch (err) {
       console.error("Vision LLM selfie error:", err);
@@ -1815,13 +1739,6 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
 
 
   const handleVoice = async () => {
-    if (!hasApiKey()) {
-      // Mock fallback
-      const samples = ["วันนี้เหนื่อยมากเลย อ่านหนังสือทั้งวัน", "พรุ่งนี้สอบแล้วรู้สึกกังวลนิดหน่อย", "วันนี้โอเคดี สบายใจ", "เครียดมาก ทำโจทย์ไม่ได้เลย"];
-      await sendMessage(`🎤 (เสียงพูด): "${samples[Math.floor(Math.random() * samples.length)]}"`, "เสียงพูด");
-      return;
-    }
-
     if (isRecording) {
       // Stop recording
       mediaRecorderRef.current?.stop();
@@ -1860,7 +1777,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
         const blobType = recorder.mimeType || "audio/webm";
         const audioBlob = new Blob(audioChunksRef.current, { type: blobType });
 
-        const userMsgId = Math.random().toString();
+        const userMsgId = crypto.randomUUID();
         setMessages((prev) => [...prev, {
           id: userMsgId,
           role: "user",
@@ -1880,7 +1797,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
             m.id === userMsgId ? { ...m, text: displayText } : m
           ));
           setMessages((prev) => [...prev, {
-            id: Math.random().toString(),
+            id: crypto.randomUUID(),
             role: "bot",
             text: llmReply,
             timestamp: Date.now()
@@ -1892,7 +1809,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
             m.id === userMsgId ? { ...m, text: "🎤 บันทึกเสียงแล้ว (วิเคราะห์ไม่สำเร็จ)" } : m
           ));
           setMessages((prev) => [...prev, {
-            id: Math.random().toString(),
+            id: crypto.randomUUID(),
             role: "bot",
             text: "ขอโทษนะคะ กระจกวิเคราะห์เสียงไม่สำเร็จ ลองพูดอีกครั้งหรือพิมพ์ข้อความแทนได้ค่ะ",
             timestamp: Date.now()
@@ -1915,36 +1832,21 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   };
 
   const handleHomeworkPhoto = () => {
-    if (hasApiKey()) {
-      homeworkInputRef.current?.click();
-    } else {
-      // Mock fallback
-      setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: "🖼️ แนบรูปถ่ายการบ้าน (Homework.jpg)", timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
-      noteMultimodal("รูปการบ้าน");
-      setIsAnalyzing(true);
-      setTimeout(() => {
-        setMessages((prev) => [...prev,
-        { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์สมการเชิงเส้นเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: '"...จงหาค่า x จากสมการ 2x + 5 = 17 พร้อมแสดงวิธีทำ..."' },
-        { id: Math.random().toString(), role: "bot", text: "กระจกอ่านโจทย์แล้วนะ ดูเหมือนเป็นโจทย์สมการเชิงเส้น ลองบอกกระจกได้ไหมว่าติดขั้นตอนไหนอยู่", timestamp: Date.now() + 50 },
-        ]);
-        setIsAnalyzing(false);
-        pushTrend("neutral", "รูปการบ้าน");
-      }, 1300);
-    }
+    homeworkInputRef.current?.click();
   };
 
   const handleHomeworkFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: "user", text: `🖼️ แนบรูปถ่ายการบ้าน: ${file.name}`, timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: `🖼️ แนบรูปถ่ายการบ้าน: ${file.name}`, timestamp: Date.now(), sourceTag: "รูปการบ้าน" }]);
     noteMultimodal("รูปการบ้าน");
     setIsAnalyzing(true);
     try {
       const { answer, llmReply } = await analyzeHomework(file);
       setMessages((prev) => [...prev,
-      { id: Math.random().toString(), role: "bot", text: "อ่านโจทย์เรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer}"` },
-      { id: Math.random().toString(), role: "bot", text: llmReply, timestamp: Date.now() + 50 },
+      { id: crypto.randomUUID(), role: "bot", text: "อ่านโจทย์เรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer}"` },
+      { id: crypto.randomUUID(), role: "bot", text: llmReply, timestamp: Date.now() + 50 },
       ]);
       saveWebMessage("bot", llmReply);
       pushTrend("neutral", "รูปการบ้าน");
@@ -3464,7 +3366,7 @@ export default function App() {
                     title: ds.session_title || "สนทนา",
                     timestamp: new Date(ds.messages[ds.messages.length - 1]?.created_at || Date.now()).getTime(),
                     messages: ds.messages.map(m => ({
-                      id: "db_" + m.created_at + "_" + Math.random().toString(36).slice(2),
+                      id: crypto.randomUUID(),
                       role: m.role as "user" | "bot",
                       text: m.text,
                       timestamp: new Date(m.created_at).getTime() || Date.now(),

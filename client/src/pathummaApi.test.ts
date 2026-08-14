@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasApiKey, classifyMoodFromText } from './pathummaApi'
-
-describe('hasApiKey', () => {
-  it('returns true — key is hardcoded in source', () => {
-    expect(hasApiKey()).toBe(true)
-  })
-})
+import { classifyMoodFromText } from './pathummaApi'
 
 describe('classifyMoodFromText', () => {
   it('returns a non-empty string', () => {
