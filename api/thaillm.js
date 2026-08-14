@@ -1,12 +1,14 @@
 export default async function handler(req, res) {
   const path = req.url.replace(/^\/thaillm/, "");
-  const upstream = `https://thaillm.or.th${path}`;
-  console.log(`[thaillm] → ${upstream}`);
+  const upstream = `https://thaillm.or.th/api${path}`;
+  console.log(`[thaillm] → ${req.method} ${upstream}`);
   try {
     const response = await fetch(upstream, {
       method: req.method,
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; jaikrajok/1.0)",
         Authorization: `Bearer ${process.env.THAILLM_API_KEY}`,
       },
       body: req.method !== "GET" ? JSON.stringify(req.body) : undefined,
