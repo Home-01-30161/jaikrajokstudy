@@ -129,8 +129,36 @@ smoke-test:
       echo "$r" | grep -q '"candidates"' \
         && ok "gemini" || fail "gemini" "$(echo $r | cut -c1-200)"
 
-      echo "── typhoon-ocr   ⏭  skipped (requires image file) ──"
-      echo "── ptm-asr-1     ⏭  skipped (requires audio file) ──"
+      echo "── typhoon-ocr (vision/OCR) — 1×1 white PNG ─────────"
+      # Minimal 1×1 white PNG as base64 — just enough for the model to accept
+      TINY_PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
+      r=$(curl -sf -X POST "$API/typhoon/v1/chat/completions" \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${TINY_PNG}\"}},{\"type\":\"text\",\"text\":\"what text is in this image?\"}]}],\"max_tokens\":16}" \
+        || echo "CURL_FAIL")
+      echo "$r" | grep -q '"choices"' \
+        && ok "typhoon-ocr" || fail "typhoon-ocr" "$(echo $r | cut -c1-200)"
+
+      echo "── ptm-asr-1 (speech-to-text) — silent WAV ──────────"
+      # Generate a minimal valid WAV (44-byte header + 1600 samples of silence = ~0.1s mono 16kHz)
+      WAV_FILE=$(mktemp /tmp/smoke-asr-XXXXXX.wav)
+      python3 - "$WAV_FILE" <<'PYEOF'
+import struct, sys
+samples = b'\x00\x00' * 1600   # 1600 16-bit silence samples @ 16kHz = 0.1s
+hdr = struct.pack('<4sI4s4sIHHIIHH4sI',
+  b'RIFF', 36 + len(samples), b'WAVE',
+  b'fmt ', 16, 1, 1, 16000, 32000, 2, 16,
+  b'data', len(samples))
+open(sys.argv[1], 'wb').write(hdr + samples)
+PYEOF
+      r=$(curl -sf -X POST "$API/ptm-asr/audio/transcriptions" \
+        -F "file=@${WAV_FILE};type=audio/wav" \
+        -F "model=ptm-asr-1" \
+        || echo "CURL_FAIL")
+      rm -f "$WAV_FILE"
+      # Accept either a transcription (even empty "") or the known "no speech" response
+      echo "$r" | grep -qE '"text"' \
+        && ok "ptm-asr-1" || fail "ptm-asr-1" "$(echo $r | cut -c1-200)"
 
       echo ""
       [ $FAIL -eq 0 ] \
