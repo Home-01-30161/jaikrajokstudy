@@ -50,7 +50,7 @@ services:
       ROOT_PATH: /api
       NODE_ENV: production
       DATABASE_URL: postgresql://app:${TEAM:-team07}pass@db:5432/app
-      THAILLM_API_KEY: "${APP_THAILLM_API_KEY:-CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T}"
+      TOKENMIND_API_KEY: "${APP_TOKENMIND_API_KEY:-sk-YKzTabSzMnF8kSpMvSxc1g}"
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:
