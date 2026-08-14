@@ -143,7 +143,7 @@ smoke-test:
       # Minimal 1×1 white PNG as base64 — just enough for the model to accept
       TINY_PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
       # Drop -f so HTTP error bodies are captured instead of CURL_FAIL
-      r=$(curl -s -X POST "$API/typhoon/v1/chat/completions" \
+      r=$(curl -s --max-time 60 -X POST "$API/typhoon/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${TINY_PNG}\"}},{\"type\":\"text\",\"text\":\"what text is in this image?\"}]}],\"max_tokens\":16}" \
         || echo "CURL_FAIL")
