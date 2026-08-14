@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  const upstream = `http://thaillm.or.th/api${req.url.replace("/thaillm", "")}`;
+  const upstream = `https://thaillm.or.th/api${req.url.replace("/thaillm", "")}`;
   try {
     const response = await fetch(upstream, {
       method: req.method,
