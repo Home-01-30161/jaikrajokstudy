@@ -14,7 +14,7 @@
 const THAILLM_PROXY  = "/api/thaillm";
 const THAILLM_MODEL  = "pathumma-thaillm-qwen3-8b-think-3.0.0";
 // Direct URL so browser (not server) makes the request — bypasses Cloudflare bot protection
-const THAILLM_DIRECT = "https://thaillm.or.th/api/v1/chat/completions";
+const THAILLM_DIRECT = "http://thaillm.or.th/api/v1/chat/completions";
 // Hackathon key — safe to expose client-side for competition duration
 const THAILLM_KEY: string =
   (import.meta.env.VITE_THAILLM_API_KEY as string) || "CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T";
