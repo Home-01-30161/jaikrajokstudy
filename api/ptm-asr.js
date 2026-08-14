@@ -3,17 +3,21 @@ export default async function handler(req, res) {
   const contentType = req.headers["content-type"] ?? "";
 
   try {
+    // Buffer the full body first — piping req directly into undici fetch
+    // causes connection resets on multipart form-data (binary WAV) payloads
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const rawBody = Buffer.concat(chunks);
+
     const response = await fetch(`https://tokenmind.pathumma.in.th/v1${path}`, {
       method: req.method,
       headers: {
-        // Always forward the original Content-Type (preserves multipart boundary)
+        // Forward original Content-Type (preserves multipart boundary)
         "Content-Type": contentType || "application/json",
         Authorization: `Bearer ${process.env.TOKENMIND_API_KEY}`,
       },
-      // Stream the raw request body through (routes registered before express.json so req.body is undefined)
-      body: req.method !== "GET" ? req : undefined,
-      duplex: "half",
-      signal: AbortSignal.timeout(60000),
+      body: req.method !== "GET" ? rawBody : undefined,
+      signal: AbortSignal.timeout(90000),
     });
 
     const data = await response.json().catch(() => ({}));
