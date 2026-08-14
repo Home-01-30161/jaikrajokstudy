@@ -2,35 +2,23 @@
 #  .gitlab-ci.yml — team07
 #  base = 20000 + (7-1)*10 = 20060
 #
-#  Deploy via SSH to the deployment host (team07.aiforthai.in.th).
-#  The CI runner has no privileged mode so Docker-in-Docker cannot start.
-#  Required CI/CD variables (Settings → CI/CD → Variables):
-#    SSH_PRIVATE_KEY  — private key whose public key is in ~/.ssh/authorized_keys on host
-#    DEPLOY_USER      — SSH username on the host (e.g. ubuntu or team07)
+#  Runner runs directly on the host with Docker access.
+#  No SSH needed — CI runner IS on the deploy host (per guiderule §8).
 # ============================================================
 
 variables:
-  TEAM:        "team07"
-  BASE:        "20060"
-  BASE_1:      "20061"
-  DEPLOY_HOST: "team07.aiforthai.in.th"
-  GIT_DEPTH:   "1"
+  TEAM:   "team07"
+  BASE:   "20060"
+  BASE_1: "20061"
 
 stages: [check, deploy, ops]
 
-# Shared SSH setup used by deploy + ops jobs
-.ssh_setup: &ssh_setup
-  image: alpine:3.19
+default:
+  image: docker:27.3.1
   before_script:
-    - apk add --no-cache openssh-client bash curl
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > /tmp/deploy_key
-    - chmod 600 /tmp/deploy_key
-    - ssh-add /tmp/deploy_key || { echo "ssh-add failed — check SSH_PRIVATE_KEY in CI/CD Variables"; exit 1; }
-    - rm -f /tmp/deploy_key
-    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
-    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-    - echo "SSH ready → $DEPLOY_USER@$DEPLOY_HOST"
+    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
+    - apk add --no-cache curl bash >/dev/null
+    - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
 
 # ------------------------------------------------------------
 #  Validate docker-compose.yml (no Docker daemon needed)
@@ -78,7 +66,6 @@ check:
 #  Deploy — SSH to host, git pull, docker compose up --build
 # ------------------------------------------------------------
 deploy:
-  <<: *ssh_setup
   stage: deploy
   timeout: 20m
   interruptible: true
@@ -86,35 +73,24 @@ deploy:
     name: $TEAM
     url: https://$TEAM.aiforthai.in.th
   script:
+    - printenv | grep '^APP_' > .env || true
+    - docker compose -p "$TEAM" up -d --build --remove-orphans
     - |
-      # Build .env from APP_* CI variables and send to host
-      printenv | grep '^APP_' > /tmp/deploy.env || true
-      scp /tmp/deploy.env "$DEPLOY_USER@$DEPLOY_HOST:/data/hack/$TEAM/.env"
-
-      ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -c '
-        set -e
-        cd /data/hack/team07
-        git pull origin main
-        docker compose -p team07 up -d --build --remove-orphans
-
-        echo "Waiting for healthcheck..."
-        for i in $(seq 1 40); do
-          st=$(docker inspect -f '"'"'{{.State.Health.Status}}'"'"' "team07-api-1" 2>/dev/null || echo none)
-          [ "$st" = "healthy" ] && { echo "api healthy"; break; }
-          sleep 5
-        done
-
-        docker compose -p team07 ps
-        docker compose -p team07 exec -T api curl -fsS http://localhost:8000/health && echo " <- /health OK"
-      '
+      echo "Waiting for healthcheck..."
+      for i in $(seq 1 40); do
+        st=$(docker inspect -f '{{.State.Health.Status}}' "${TEAM}-api-1" 2>/dev/null || echo none)
+        [ "$st" = "healthy" ] && { echo "api healthy ✓"; break; }
+        sleep 5
+      done
+      docker compose -p "$TEAM" ps
+    - curl -fsS "http://127.0.0.1:${BASE_1}/health" && echo " <- /health OK"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
 # ============================================================
-#  Manual ops jobs — all run via SSH on the host
+#  Manual ops jobs
 # ============================================================
 .ops: &ops
-  <<: *ssh_setup
   stage: ops
   when: manual
   allow_failure: true
@@ -122,27 +98,23 @@ deploy:
 
 logs:
   <<: *ops
-  script:
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" docker compose -p team07 logs --tail=400 --timestamps --no-color
+  script: [docker compose -p "$TEAM" logs --tail=400 --timestamps --no-color]
 
 ps:
   <<: *ops
   script:
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" docker compose -p team07 ps
-    - |
-      ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -c \
-        'docker stats --no-stream $(docker compose -p team07 ps -q) || true'
+    - docker compose -p "$TEAM" ps
+    - docker stats --no-stream $(docker compose -p "$TEAM" ps -q) || true
 
 restart:
   <<: *ops
   script:
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" docker compose -p team07 restart
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" docker compose -p team07 ps
+    - docker compose -p "$TEAM" restart
+    - docker compose -p "$TEAM" ps
 
 shell-cmd:
   <<: *ops
   variables:
     SERVICE: api
     CMD: "node -e 'console.log(process.version)'"
-  script:
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" docker compose -p team07 exec -T "$SERVICE" sh -lc "$CMD"
+  script: [docker compose -p "$TEAM" exec -T "$SERVICE" sh -lc "$CMD"]
