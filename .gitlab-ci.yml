@@ -7,12 +7,24 @@ variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
 
 stages: [check, deploy, ops]
 
 default:
   image: docker:27.3.1
+  services:
+    - name: docker:27.3.1-dind
+      command: ["--tls=false", "--host=tcp://0.0.0.0:2375", "--host=unix:///var/run/docker.sock"]
   before_script:
+    - |
+      echo "Waiting for Docker daemon..."
+      i=0; until docker info >/dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "Docker daemon never started"; exit 1; }
+        sleep 2
+      done
+      echo "Docker ready after $((i*2))s"
     - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
     - apk add --no-cache curl bash >/dev/null
     - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
