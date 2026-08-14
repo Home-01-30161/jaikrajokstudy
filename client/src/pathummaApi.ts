@@ -18,6 +18,8 @@ const THAILLM_DIRECT = "https://thaillm.or.th/api/v1/chat/completions";
 // Hackathon key — safe to expose client-side for competition duration
 const THAILLM_KEY: string =
   (import.meta.env.VITE_THAILLM_API_KEY as string) || "CkAPIGzjpSP7jgLmbrlD4P8yJ9SuOb4T";
+// Typhoon text fallback (used when ThaiLLM origin is overloaded)
+const TYPHOON_TEXT_MODEL = "typhoon-v2.5-30b-a3b-instruct";
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
 const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
@@ -762,6 +764,27 @@ function fixThaiChoices(reply: string, ocrText: string): string {
   return result;
 }
 
+/** Typhoon text fallback — only used when ThaiLLM origin is overloaded (502/504) */
+async function callTyphoonText(
+  prompt: string,
+  systemPrompt: string,
+  maxTokens: number
+): Promise<string> {
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: prompt },
+  ];
+  const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: TYPHOON_TEXT_MODEL, messages, max_tokens: maxTokens, temperature: 0.05 }),
+  });
+  if (!res.ok) throw new Error(`Typhoon fallback ${res.status}`);
+  const raw = await res.json() as Record<string, unknown>;
+  const choices = raw.choices as { message?: { content?: string } }[] | undefined;
+  return choices?.[0]?.message?.content ?? "";
+}
+
 // System prompt for the unified vision+reasoning call on homework images
 const HOMEWORK_VISION_SYSTEM =
   "You are a physics and mathematics expert specializing in reading Thai homework problems and physics diagrams. " +
@@ -825,9 +848,8 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   const hasChoices = choiceLettersFound.size >= 2;
 
   let llmReply: string;
+  let solvePrompt = "";
   try {
-    let solvePrompt: string;
-
     if (hasChoices) {
       solvePrompt =
         `/no_think\n` +
@@ -855,8 +877,18 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
     }
   } catch (err) {
-    console.error("Homework text LLM failed:", err);
-    llmReply = `## โจทย์และเฉลยจากภาพ\n\n${answer}`;
+    // ThaiLLM failed — fall back to Typhoon text model
+    console.warn("ThaiLLM unavailable, using Typhoon fallback:", err);
+    try {
+      const rawReply = await callTyphoonText(solvePrompt, MATH_SYSTEM_PROMPT, 1024);
+      llmReply = fixThaiChoices(rawReply, answer);
+      if (!llmReply || llmReply.length < 30) {
+        llmReply = `## เฉลยการบ้าน\n\n${answer}`;
+      }
+    } catch (err2) {
+      console.error("Homework text LLM failed (both ThaiLLM and Typhoon):", err2);
+      llmReply = `## โจทย์และเฉลยจากภาพ\n\n${answer}`;
+    }
   }
 
   return { answer, llmReply };
