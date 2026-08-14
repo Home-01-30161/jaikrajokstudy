@@ -12,16 +12,16 @@
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const THAILLM_PROXY  = "/api/thaillm";
-const THAILLM_MODEL  = "thaillm-8b";
+const THAILLM_PROXY = "/api/thaillm";
+const THAILLM_MODEL = "thaillm-8b";
 // Typhoon text fallback (used when ThaiLLM origin is overloaded)
 const TYPHOON_TEXT_MODEL = "typhoon-v2.5-30b-a3b-instruct";
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
-const TYPHOON_PROXY  = "/api/typhoon";
-const TAVILY_PROXY   = "/api/tavily";
-const PTM_ASR_PROXY  = "/api/ptm-asr";
-const PTM_ASR_MODEL  = "ptm-asr-1";
+const TYPHOON_PROXY = "/api/typhoon";
+const TAVILY_PROXY = "/api/tavily";
+const PTM_ASR_PROXY = "/api/ptm-asr";
+const PTM_ASR_MODEL = "ptm-asr-1";
 
 // Keys are now server-side only — always available
 export function hasApiKey(): boolean { return true; }
@@ -268,7 +268,7 @@ export async function callTextLLM(
 
   // Detect Problem Solving Request (e.g. solve problem, URL, tasks, competitive programming)
   const isProblemSolving = /(solve|แก้โจทย์|คำตอบ|ส่งผ่าน|pass|tasks\/|problem\/|contest\/|toi\d|codecube|leetcode|hackerrank)/i.test(instruction);
-  
+
   // Detect Programming Tutorial (ONLY when explicitly asked to teach/tutorial, NOT when solving a problem)
   const isExplicitTutorial = /(สอน|tutorial|คู่มือ|เรียนรู้|overview|เรียนเขียน)/i.test(instruction);
 
@@ -589,14 +589,14 @@ export async function analyzeSentiment(text: string): Promise<string> {
   if (tagMatch) {
     const tag = tagMatch[1].trim().toLowerCase();
     if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล") ||
-        tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
-        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
-        tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
-        tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
-        tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
+      tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
+      tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
+      tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
+      tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
+      tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
     if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") ||
-        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
-        tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
+      tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
+      tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
   }
 
   // 2. SSense API (primary)
@@ -774,9 +774,9 @@ async function callTyphoonText(
   const messages: { role: string; content: string }[] = Array.isArray(promptOrMessages)
     ? promptOrMessages
     : [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: promptOrMessages },
-      ];
+      { role: "system", content: systemPrompt },
+      { role: "user", content: promptOrMessages },
+    ];
   const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1004,11 +1004,11 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
 
   // Always use ptm-asr-1 via proxy
   try {
-      transcription = await callTyphoonASR(audioBlob);
-      console.debug("[ptm-asr-1] Transcription:", transcription);
-    } catch (err) {
-      console.warn("[ptm-asr-1] Failed, falling back to Pathumma AudioQA:", err);
-    }
+    transcription = await callTyphoonASR(audioBlob);
+    console.debug("[ptm-asr-1] Transcription:", transcription);
+  } catch (err) {
+    console.warn("[ptm-asr-1] Failed, falling back to Pathumma AudioQA:", err);
+  }
 
   // Fallback: Pathumma AudioQA
   if (!transcription) {
@@ -1056,14 +1056,14 @@ export function classifyMoodFromText(text: string): string {
   if (tagMatch) {
     const tag = tagMatch[1].trim().toLowerCase();
     if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล") ||
-        tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
-        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
-        tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
-        tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
-        tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
+      tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
+      tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
+      tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
+      tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
+      tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
     if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") ||
-        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
-        tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
+      tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
+      tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
   }
 
   const lower = text.toLowerCase();

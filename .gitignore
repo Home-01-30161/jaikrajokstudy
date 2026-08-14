@@ -8,6 +8,8 @@ build/
 *.dist
 
 # Environment variables
+howtoPathumma.md
+TeamGivenAcess.md
 .env
 .env.local
 .env.development.local

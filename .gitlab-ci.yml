@@ -2,33 +2,24 @@
 #  .gitlab-ci.yml — team07
 #  base = 20000 + (7-1)*10 = 20060
 #
-#  Runner runs directly on the host with Docker access.
-#  No SSH needed — CI runner IS on the deploy host (per guiderule §8).
+#  The runner is a shell executor on team07.aiforthai.in.th.
+#  Docker is available directly on the host — no DinD, no SSH needed.
 # ============================================================
 
 variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
-  DOCKER_HOST: unix:///var/run/docker.sock
+  # Force Docker CLI to use the host Unix socket, not any injected DinD tcp endpoint
+  DOCKER_HOST: "unix:///var/run/docker.sock"
 
 stages: [check, deploy, ops]
 
-default:
-  image: docker:27.3.1
-  before_script:
-    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
-    - apk add --no-cache curl bash >/dev/null
-    - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
-
 # ------------------------------------------------------------
-#  Validate docker-compose.yml (no Docker daemon needed)
+#  Validate docker-compose.yml before deploy
 # ------------------------------------------------------------
 check:
   stage: check
-  image: alpine:3.19
-  before_script:
-    - apk add --no-cache bash grep sed
   script:
     - |
       LO=$BASE; HI=$((BASE+9)); FAIL=0
@@ -64,7 +55,7 @@ check:
       [ $FAIL -eq 0 ] && echo "All checks passed" || { echo "Fix errors above"; exit 1; }
 
 # ------------------------------------------------------------
-#  Deploy — SSH to host, git pull, docker compose up --build
+#  Deploy — shell executor runs directly on the host
 # ------------------------------------------------------------
 deploy:
   stage: deploy
@@ -74,6 +65,7 @@ deploy:
     name: $TEAM
     url: https://$TEAM.aiforthai.in.th
   script:
+    - export DOCKER_HOST=unix:///var/run/docker.sock
     - printenv | grep '^APP_' > .env || true
     - docker compose -p "$TEAM" up -d --build --remove-orphans
     - |
