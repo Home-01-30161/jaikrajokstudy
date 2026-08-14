@@ -11,6 +11,7 @@ import lineTokenHandler from "./line-token.js";
 import geminiHandler from "./gemini.js";
 import sendOtpHandler from "./send-otp.js";
 import guardianEmailHandler from "./guardian-email.js";
+import adminDbHandler from "./admin-db.js";
 
 // Strip APP_ prefix injected by CI so handlers read env vars normally
 // e.g. APP_DATABASE_URL → DATABASE_URL
@@ -67,6 +68,9 @@ app.all(["/gemini", "/gemini/*"], (req, res) => {
 
 app.post("/send-otp", sendOtpHandler);
 app.post("/guardian-email", guardianEmailHandler);
+
+// ── Admin DB inspection (read-only, secret-protected) ────────────────────────
+app.get("/admin-db", adminDbHandler);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 8000;

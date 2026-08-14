@@ -86,7 +86,11 @@ declare global {
   }
 }
 
-const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
+// NOTE: VITE_FRONTEND_FORGE_API_KEY is a Forge proxy key, not a Google Maps key.
+// It is embedded in the URL of the Maps proxy script — visible in browser network logs.
+// This is intentional: Forge restricts usage by referer/domain, so exposure is low-risk.
+// Do NOT replace with a raw Google Maps API key (that would be a high-risk exposure).
+const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY || "";
 const FORGE_BASE_URL =
   import.meta.env.VITE_FRONTEND_FORGE_API_URL ||
   "https://forge.butterfly-effect.dev";

@@ -4,25 +4,20 @@
  * Uses the TokenMind ThaiLLM API (OpenAI-compatible):
  *   Model:    thaillm-8b
  *   Endpoint: POST https://tokenmind.pathumma.in.th/v1/chat/completions
- *   Auth:     Authorization: Bearer <VITE_TOKENMIND_API_KEY>
+ *   Auth:     Handled server-side by api/thaillm.js (process.env.TOKENMIND_API_KEY)
  *
  * VQA + Audio: Still uses Pathumma API (aiforthai.in.th) since ThaiLLM is text-only.
+ *   Auth:     Handled server-side by api/pathumma.js (process.env.PATHUMMA_API_KEY)
  */
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const THAILLM_PROXY  = "/api/thaillm";
 const THAILLM_MODEL  = "thaillm-8b";
-// TokenMind endpoint hosts thaillm-8b
-const THAILLM_DIRECT = "https://tokenmind.pathumma.in.th/v1/chat/completions";
-// Team API key for TokenMind
-const THAILLM_KEY: string =
-  (import.meta.env.VITE_TOKENMIND_API_KEY as string) || "sk-YKzTabSzMnF8kSpMvSxc1g";
 // Typhoon text fallback (used when ThaiLLM origin is overloaded)
 const TYPHOON_TEXT_MODEL = "typhoon-v2.5-30b-a3b-instruct";
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
-const PATHUMMA_KEY: string = (import.meta.env.VITE_PATHUMMA_API_KEY as string) ?? "";
 const TYPHOON_PROXY  = "/api/typhoon";
 const TAVILY_PROXY   = "/api/tavily";
 const PTM_ASR_PROXY  = "/api/ptm-asr";
@@ -31,15 +26,14 @@ const PTM_ASR_MODEL  = "ptm-asr-1";
 // Keys are now server-side only — always available
 export function hasApiKey(): boolean { return true; }
 
+// Auth headers are added server-side by the backend proxies (typhoon.js / pathumma.js).
+// The browser only needs Content-Type — never sends API keys directly.
 function thaiLLMHeaders(): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${THAILLM_KEY}`,
-  };
+  return { "Content-Type": "application/json" };
 }
 
 function pathummaHeaders(): Record<string, string> {
-  return { Apikey: PATHUMMA_KEY, "X-lib": "jaikrajok-web" };
+  return { "X-lib": "jaikrajok-web" };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

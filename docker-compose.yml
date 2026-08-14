@@ -22,10 +22,11 @@ services:
         VITE_GOOGLE_CLIENT_ID:         "${APP_VITE_GOOGLE_CLIENT_ID:-}"
         VITE_APP_ID:                   "${APP_VITE_APP_ID:-}"
         VITE_OAUTH_PORTAL_URL:         "${APP_VITE_OAUTH_PORTAL_URL:-}"
-        VITE_PATHUMMA_API_KEY:         "${APP_VITE_PATHUMMA_API_KEY:-}"
-        VITE_THAILLM_API_KEY:          "${APP_VITE_THAILLM_API_KEY:-}"
         VITE_FRONTEND_FORGE_API_URL:   "${APP_VITE_FRONTEND_FORGE_API_URL:-}"
+        # Forge proxy key for Maps — domain-restricted, low-risk frontend use
         VITE_FRONTEND_FORGE_API_KEY:   "${APP_VITE_FRONTEND_FORGE_API_KEY:-}"
+        # NOTE: VITE_PATHUMMA_API_KEY and VITE_THAILLM_API_KEY intentionally excluded
+        # (guiderule §12 — secrets must stay server-side; api/ handlers manage auth)
     ports:
       - "127.0.0.1:${BASE}:3000"
     environment:
@@ -50,7 +51,7 @@ services:
       ROOT_PATH: /api
       NODE_ENV: production
       DATABASE_URL: postgresql://app:${TEAM:-team07}pass@db:5432/app
-      TOKENMIND_API_KEY: "${APP_TOKENMIND_API_KEY:-sk-YKzTabSzMnF8kSpMvSxc1g}"
+      TOKENMIND_API_KEY: "${APP_TOKENMIND_API_KEY}"
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:
