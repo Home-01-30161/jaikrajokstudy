@@ -149,7 +149,8 @@ function getRawBody(req) {
 }
 
 function verifySignature(rawBody, sig, secret) {
-  const expected = "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
+  // LINE sends x-line-signature as base64(HMAC-SHA256(body, channel_secret))
+  const expected = createHmac("sha256", secret).update(rawBody).digest("base64");
   return sig === expected;
 }
 
