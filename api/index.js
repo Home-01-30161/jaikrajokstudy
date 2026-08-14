@@ -12,6 +12,7 @@ import geminiHandler from "./gemini.js";
 import sendOtpHandler from "./send-otp.js";
 import guardianEmailHandler from "./guardian-email.js";
 import adminDbHandler from "./admin-db.js";
+import dbSeedTestHandler from "./db-seed-test.js";
 import { runMigrations } from "./migrate.js";
 
 // Strip APP_ prefix injected by CI so handlers read env vars normally
@@ -72,6 +73,9 @@ app.post("/guardian-email", guardianEmailHandler);
 
 // ── Admin DB inspection (read-only, secret-protected) ────────────────────────
 app.get("/admin-db", adminDbHandler);
+
+// ── DB seed test (temp — remove after confirming tables work) ────────────────
+app.get("/db-seed-test", dbSeedTestHandler);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 8000;
