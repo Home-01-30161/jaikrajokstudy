@@ -99,7 +99,15 @@ smoke-test:
   needs: [deploy]
   script:
     - |
-      API="http://127.0.0.1:${BASE_1}"
+      # The CI job runs inside a Docker container (Docker executor).
+      # 127.0.0.1 here is the container's own loopback, not the host.
+      # Connect this container to the compose network and reach the API
+      # container directly on its internal port (8000), bypassing the
+      # host-bound port (${BASE_1}) entirely.
+      NETWORK="${TEAM}_app"
+      docker network connect "$NETWORK" "$(hostname)" || true
+      API_IP=$(docker inspect -f "{{(index .NetworkSettings.Networks \"${NETWORK}\").IPAddress}}" "${TEAM}-api-1")
+      API="http://${API_IP}:8000"
       FAIL=0
       ok()  { echo "  ✅ $1"; }
       fail(){ echo "  ❌ $1 — $2"; FAIL=1; }
