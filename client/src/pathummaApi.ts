@@ -122,26 +122,16 @@ function stripThink(text: string): string {
     if (before) return before;
   }
 
-  // 2. Unclosed <think> tag — model was cut off inside reasoning block.
-  //    Extract the best lines from within the think block instead of returning "".
+  // 2. Unclosed <think> tag — model was cut off mid-reasoning. Return "" so
+  //    the caller can show a fallback instead of leaking half-thoughts to users.
   if (text.trimStart().startsWith("<think>")) {
     const inner = text.replace(/^<think>/i, "").trim();
-    // If there's a </think> somewhere later, take everything after it
     if (inner.includes("</think>")) {
       const after = inner.split("</think>").slice(1).join("</think>").trim();
       if (after) return after;
     }
-    // Think block was truncated — return the last substantive paragraph
-    // (reasoning usually builds toward the answer at the end)
-    const paragraphs = inner.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
-    if (paragraphs.length > 0) {
-      // Return last paragraph that has actual content (not just ellipsis or whitespace)
-      for (let i = paragraphs.length - 1; i >= 0; i--) {
-        if (paragraphs[i].length > 10) return paragraphs[i];
-      }
-      return paragraphs[paragraphs.length - 1];
-    }
-    return inner;
+    // Truncated — no final answer available
+    return "";
   }
 
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>/gi, "").trim();
@@ -840,6 +830,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
 
     if (hasChoices) {
       solvePrompt =
+        `/no_think\n` +
         `ข้อมูลโจทย์และตัวเลือกที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 3000)}\n\n` +
         `คำสั่งเรียบเรียงเฉลย:\n` +
         `1. **โจทย์และข้อมูลในภาพ**: สรุปโจทย์และรายละเอียดสั้น ๆ\n` +
@@ -849,6 +840,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
     } else {
       solvePrompt =
+        `/no_think\n` +
         `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ:\n` +
         `${answer.slice(0, 2000)}\n\n` +
         `เฉลย (ตอบสั้น ไม่เกิน 150 คำ):\n` +
@@ -857,7 +849,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `**คำตอบ:** $$[ผลลัพธ์]$$`;
     }
 
-    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 256, 0.05);
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 1024, 0.05);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
