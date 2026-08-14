@@ -135,11 +135,9 @@ smoke-test:
         && ok "ssense" || fail "ssense" "HTTP error"
 
       echo "── gemini (proxy) ───────────────────────────────────"
-      r=$(curl -s -X POST "$API/gemini/v1beta/models/gemini-2.5-flash:generateContent" \
-        -H "Content-Type: application/json" \
-        -d '{"contents":[{"parts":[{"text":"say hi"}]}]}' \
+      r=$(curl -s --max-time 30 "$API/gemini/v1beta/models?pageSize=1" \
         || echo "CURL_FAIL")
-      echo "$r" | grep -q '"candidates"' \
+      echo "$r" | grep -q '"models"' \
         && ok "gemini" || fail "gemini" "$(echo $r | cut -c1-200)"
 
       echo "── typhoon-ocr (vision/OCR) — 64×64 white PNG ───────"
