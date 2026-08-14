@@ -144,15 +144,7 @@ smoke-test:
 
       echo "── typhoon-ocr (vision/OCR) — 64×64 white PNG ───────"
       # python3 installed above; 1×1 PNG is rejected by the model.
-      TINY_PNG=$(python3 - <<'PYEOF'
-import zlib,struct,base64
-ck=lambda t,d:struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xFFFFFFFF)
-W=H=64
-raw=(bytes([0])+bytes([255])*W)*H
-png=b'\x89PNG\r\n\x1a\n'+ck(b'IHDR',struct.pack('>IIBBBBB',W,H,8,0,0,0,0))+ck(b'IDAT',zlib.compress(raw))+ck(b'IEND',b'')
-print(base64.b64encode(png).decode())
-PYEOF
-)
+      TINY_PNG=$(python3 -c 'import zlib,struct,base64;ck=lambda t,d:struct.pack(">I",len(d))+t+d+struct.pack(">I",zlib.crc32(t+d)&0xFFFFFFFF);W=H=64;raw=(bytes([0])+bytes([255])*W)*H;png=b"\x89PNG\r\n\x1a\n"+ck(b"IHDR",struct.pack(">IIBBBBB",W,H,8,0,0,0,0))+ck(b"IDAT",zlib.compress(raw))+ck(b"IEND",b"");print(base64.b64encode(png).decode())')
       r=$(curl -s --max-time 90 -X POST "$API/typhoon/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${TINY_PNG}\"}},{\"type\":\"text\",\"text\":\"what text is in this image?\"}]}],\"max_tokens\":16}" \
