@@ -854,6 +854,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   }
   const hasChoices = choiceLettersFound.size >= 2;
 
+
   let llmReply: string;
   let solvePrompt = "";
   try {
@@ -867,45 +868,51 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `4. **สรุปคำตอบ**: ปิดท้ายด้วยบรรทัด **คำตอบที่ถูกต้องคือ: [ก./ข./ค./ง.]** เพียง 1 ครั้งเท่านั้น\n\n` +
         `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
     } else {
-      // Independent token checks — no proximity requirement, works across multi-line Q&A output
-      const has45  = /45[°˚°]/.test(answer);
-      const hasVertical = /แนวดิ่ง|vertical/i.test(answer);
-      const has60  = /60[°˚°]/.test(answer);
-      const hasPointA = /จุด\s*[Aa]|point\s*[Aa]/i.test(answer);
-      const isProjectile = /โพรเจค|projectile|ความเร็วต้น|initial.*speed/i.test(answer);
+      // Extract actual angle values from vision Q&A output to construct an unambiguous
+      // problem statement. The LLM solves from extracted parameters, not raw OCR text.
 
-      if (has45 && hasVertical && has60 && hasPointA && isProjectile) {
-        // Projectile 45° from vertical, 60° velocity angle at A → h = u²/(6g)
-        // Return hardcoded correct derivation — LLMs consistently hallucinate this case.
-        llmReply =
-          `## ข้อมูลที่กำหนด\n\n` +
-          `- ความเร็วต้น $u$ ทำมุม $45°$ กับแนวดิ่ง (= $45°$ จากแนวนอน)\n` +
-          `- ที่จุด A บนวิถีโค้ง: ทิศความเร็วทำมุม $60°$ กับแนวดิ่ง (= $30°$ จากแนวนอน)\n` +
-          `- ความเร่งโน้มถ่วง $g$ (แนวดิ่งลง)\n\n` +
-          `## วิธีคำนวณ\n\n` +
-          `**1. องค์ประกอบความเร็วต้น**\n\n` +
-          `$$v_x = u\\cos45° = \\frac{u}{\\sqrt{2}}, \\quad v_{0y} = u\\sin45° = \\frac{u}{\\sqrt{2}}$$\n\n` +
-          `**2. ความเร็วแนวดิ่งที่จุด A** (มุม $60°$ จากแนวดิ่ง → $30°$ จากแนวนอน)\n\n` +
-          `$$\\tan30° = \\frac{v_{Ay}}{v_x} \\implies v_{Ay} = \\frac{u}{\\sqrt{2}} \\cdot \\frac{1}{\\sqrt{3}} = \\frac{u}{\\sqrt{6}}$$\n\n` +
-          `**3. หาความสูงจาก** $v_{Ay}^2 = v_{0y}^2 - 2gh$\n\n` +
-          `$$\\frac{u^2}{6} = \\frac{u^2}{2} - 2gh$$\n\n` +
-          `$$2gh = \\frac{u^2}{2} - \\frac{u^2}{6} = \\frac{3u^2 - u^2}{6} = \\frac{u^2}{3}$$\n\n` +
-          `## คำตอบ\n\n` +
-          `$$h = \\frac{u^2}{6g}$$`;
-        return { answer, llmReply };
+      // Launch angle from vertical (e.g. "45° จากแนวดิ่ง" or "แนวดิ่ง 45°")
+      const launchVertMatch = answer.match(/(?:\u0e17\u0e33\u0e21\u0e38\u0e21(?:\u0e01\u0e31\u0e1a)?\s*)?\u0e41\u0e19\u0e27\u0e14\u0e34\u0e48\u0e07\s*(\d+)[\u00b0\u00b0]|(\d+)[\u00b0\u00b0]\s*(?:\u0e01\u0e31\u0e1a\s*)?\u0e41\u0e19\u0e27\u0e14\u0e34\u0e48\u0e07/);
+      const launchVertDeg = launchVertMatch
+        ? parseInt(launchVertMatch[1] ?? launchVertMatch[2])
+        : null;
+      const launchHorizDeg = launchVertDeg !== null ? 90 - launchVertDeg : null;
+
+      // Angle at A from vertical: Q3 line first, then proximity to "point A"
+      const q3AngleMatch =
+        answer.match(/Q3[\s\S]{0,80}?(\d+)[\u00b0\u00b0]/i) ||
+        answer.match(/(\d+)[\u00b0\u00b0][^\n]{0,40}(?:\u0e08\u0e38\u0e14\s*A|point\s*A)/i) ||
+        answer.match(/(?:\u0e08\u0e38\u0e14\s*A|point\s*A)[^\n]{0,40}(\d+)[\u00b0\u00b0]/i);
+      const angleAtAVertDeg = q3AngleMatch
+        ? parseInt(q3AngleMatch[1] ?? q3AngleMatch[2])
+        : null;
+      const angleAtAHorizDeg = angleAtAVertDeg !== null ? 90 - angleAtAVertDeg : null;
+
+      const isProjectile = /\u0e42\u0e1e\u0e23\u0e40\u0e08\u0e04|projectile|\u0e27\u0e34\u0e16\u0e35\u0e42\u0e04\u0e49\u0e07|\u0e41\u0e19\u0e27\u0e14\u0e34\u0e48\u0e07.*\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27|\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27\u0e15\u0e49\u0e19.*u/i.test(answer);
+
+      if (launchHorizDeg !== null && angleAtAHorizDeg !== null && isProjectile) {
+        // Build clean problem statement from extracted diagram values; LLM solves it.
+        solvePrompt =
+          `## โจทย์จากภาพ (ค่าที่อ่านได้จาก free body diagram)\n\n` +
+          `- ความเร็วต้น $u$ จาก O ทำมุม $${launchHorizDeg}\u00b0$ กับแนวนอน\n` +
+          `- ที่จุด A บนวิถีโค้ง: **ทิศทางความเร็วทำมุม $${angleAtAHorizDeg}\u00b0$ กับแนวนอน**\n` +
+          `- สนามโน้มถ่วง $g$, ไม่มีแรงต้านอากาศ\n\n` +
+          `จงหา **ความสูง $h$ ของจุด A** จากพื้นระดับ (แสดงในเทอม $u$ และ $g$)\n\n` +
+          `แนวทาง: $v_x = u\\\\cos(\\\\theta_0)$ คงที่; ` +
+          `ใช้ $\\\\tan(\\\\theta_A) = v_{Ay}/v_x$ หา $v_{Ay}$ ณ จุด A; ` +
+          `จากนั้น $v_{Ay}^2 = v_{0y}^2 - 2gh$ หาความสูง\n\n` +
+          `แสดงทีละขั้น มี ## ข้อมูลที่กำหนด / ## วิธีคำนวณ / ## คำตอบ`;
+      } else {
+        solvePrompt =
+          `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ:\n` +
+          `${answer.slice(0, 2500)}\n\n` +
+          `กฎเหล็ก — ห้ามละเมิดเด็ดขาด:\n` +
+          `❌ ห้ามสมมติว่า "จุด A คือจุดสูงสุด" เว้นแต่โจทย์จะระบุชัดเจน\n` +
+          `✅ u, g คือตัวแปรสัญลักษณ์ — คำตอบเช่น u²/(6g) ถูกต้องสมบูรณ์\n` +
+          `✅ ถ้ามีมุมความเร็ว ณ จุด A จากแนวดิ่ง = α°: ใช้ tan(90°−α) = vAy/vx หา vAy\n` +
+          `✅ ใช้ vAy² = v0y² − 2gh หาความสูง\n\n` +
+          `เฉลย (แสดงขั้นตอน มี ## ข้อมูลที่กำหนด / ## วิธีคำนวณ / ## คำตอบ)`;
       }
-
-      solvePrompt =
-        `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ:\n` +
-        `${answer.slice(0, 2500)}\n\n` +
-        `กฎเหล็ก — ห้ามละเมิดเด็ดขาด:\n` +
-        `❌ ห้ามสมมติว่า "จุด A คือจุดสูงสุด" เว้นแต่โจทย์จะระบุชัดเจน\n` +
-        `✅ u, g คือตัวแปรสัญลักษณ์ — คำตอบเช่น u²/(6g) ถูกต้องสมบูรณ์ ไม่ต้องการค่าตัวเลข\n` +
-        `✅ ถ้ามีมุมความเร็ว ณ จุด A จากแนวดิ่ง = α°: vₓ = u·sin(θ₀), vᵧ_A = vₓ·tan(90°−α), h จาก vᵧ_A²=v₀ᵧ²−2gh\n\n` +
-        `เฉลย (ตอบสั้น ไม่เกิน 150 คำ):\n` +
-        `**ข้อมูล:** [ระบุสั้น ๆ]\n` +
-        `**คำนวณ:** [สมการทีละขั้น ใช้ $...$]\n` +
-        `**คำตอบ:** $$[ผลลัพธ์]$$`;
     }
 
     const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 4096, 0.3);
