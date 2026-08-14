@@ -111,7 +111,14 @@ smoke-test:
       FAIL=0
       ok()  { echo "  ✅ $1"; }
       fail(){ echo "  ❌ $1 — $2"; FAIL=1; }
-      api() { docker compose -p "$TEAM" exec -T api "$@"; }
+      api() {
+        local i
+        for i in 1 2 3; do
+          docker compose -p "$TEAM" exec -T api "$@" && return 0
+          [ $i -lt 3 ] && { echo "(exec retry ${i}/3…)" >&2; sleep 5; }
+        done
+        return 1
+      }
 
       echo "── /health ──────────────────────────────────────────"
       api curl -sf http://localhost:8000/health >/dev/null \
