@@ -25,6 +25,18 @@ for (const [key, value] of Object.entries(process.env)) {
 
 const app = express();
 
+// ── Security headers (applied to every API response) ─────────────────────────
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  // Narrow CSP for API — JSON/HTML responses only, no asset loading
+  res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+  next();
+});
+
 // ── Health check (required by CI pipeline) ──────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
