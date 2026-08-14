@@ -871,7 +871,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `**คำตอบ:** $$[ผลลัพธ์]$$`;
     }
 
-    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 1024, 0.05);
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 2048, 0.3);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
@@ -880,7 +880,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
     // ThaiLLM failed — fall back to Typhoon text model
     console.warn("ThaiLLM unavailable, using Typhoon fallback:", err);
     try {
-      const rawReply = await callTyphoonText(solvePrompt, MATH_SYSTEM_PROMPT, 1024);
+      const rawReply = await callTyphoonText(solvePrompt, MATH_SYSTEM_PROMPT, 2048);
       llmReply = fixThaiChoices(rawReply, answer);
       if (!llmReply || llmReply.length < 30) {
         llmReply = `## เฉลยการบ้าน\n\n${answer}`;
