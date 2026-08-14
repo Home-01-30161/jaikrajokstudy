@@ -314,25 +314,12 @@ export async function callTextLLM(
     temperature: effectiveTemperature,
   });
 
-  // Try direct browser→thaillm.or.th first (bypasses Cloudflare bot block on server proxy).
-  // Fall back to server proxy if CORS blocks the direct call.
-  let res: Response;
-  try {
-    res = await fetch(THAILLM_DIRECT, {
-      method: "POST",
-      headers: thaiLLMHeaders(),
-      body,
-    });
-    console.debug("[ThaiLLM] direct call status:", res.status);
-  } catch {
-    // CORS or network error on direct call — fall back to proxy
-    console.warn("[ThaiLLM] direct call failed, using proxy");
-    res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
-  }
+  // Always use server proxy — direct HTTP call is blocked by Mixed Content on HTTPS pages.
+  const res = await fetch(`${THAILLM_PROXY}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
