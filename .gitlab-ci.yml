@@ -10,8 +10,17 @@ variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
-  # Force Docker CLI to use the host Unix socket, not any injected DinD tcp endpoint
+  # Point the Docker CLI at the host socket mounted by the runner (no DinD)
   DOCKER_HOST: "unix:///var/run/docker.sock"
+
+# Required by the hackathon runner (Docker executor).
+# docker:27.3.1 provides the Docker CLI; DOCKER_HOST above routes it to the host daemon.
+default:
+  image: docker:27.3.1
+  before_script:
+    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
+    - apk add --no-cache curl bash >/dev/null
+    - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
 
 stages: [check, deploy, smoke, ops]
 
