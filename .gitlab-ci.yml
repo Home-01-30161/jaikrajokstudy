@@ -143,12 +143,26 @@ smoke-test:
       echo "$r" | grep -q '"candidates"' \
         && ok "gemini" || fail "gemini" "$(echo $r | cut -c1-200)"
 
-      echo "── typhoon-ocr (vision/OCR) — 1×1 white PNG ─────────"
-      TINY_PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
-      r=$(api curl -s --max-time 90 -X POST http://localhost:8000/typhoon/v1/chat/completions \
-        -H "Content-Type: application/json" \
-        -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${TINY_PNG}\"}},{\"type\":\"text\",\"text\":\"what text is in this image?\"}]}],\"max_tokens\":16}" \
-        || echo "CURL_FAIL")
+      echo "── typhoon-ocr (vision/OCR) — 64×64 white PNG ───────"
+      # 1×1 PNG causes "An error occurred during model processing" —
+      # the model rejects sub-minimum images. Generate a proper 64×64
+      # grayscale PNG at runtime using Node.js (node:20-alpine container).
+      r=$(api sh -c '
+        node -e "
+          const z=require(\"zlib\"),W=64,H=64,tbl=new Uint32Array(256);
+          for(let i=0;i<256;i++){let v=i;for(let j=0;j<8;j++)v=v&1?(v>>>1)^0xedb88320:v>>>1;tbl[i]=v}
+          const crc=b=>{let r=-1;for(const x of b)r=(r>>>8)^tbl[(r^x)&255];return(r^-1)>>>0};
+          const ck=(t,d)=>{const tb=Buffer.from(t),l=Buffer.alloc(4);l.writeUInt32BE(d.length);const cc=Buffer.concat([tb,d]),cb=Buffer.alloc(4);cb.writeUInt32BE(crc(cc));return Buffer.concat([l,tb,d,cb])};
+          const h=Buffer.alloc(13);h.writeUInt32BE(W,0);h.writeUInt32BE(H,4);h[8]=8;h[9]=0;
+          const rows=[];for(let y=0;y<H;y++){const r=Buffer.alloc(W+1,255);r[0]=0;rows.push(r)}
+          require(\"fs\").writeFileSync(\"/tmp/s.png\",Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),ck(\"IHDR\",h),ck(\"IDAT\",z.deflateSync(Buffer.concat(rows))),ck(\"IEND\",Buffer.alloc(0))]))
+        "
+        B64=$(base64 /tmp/s.png | tr -d "\n")
+        curl -s --max-time 90 -X POST http://localhost:8000/typhoon/v1/chat/completions \
+          -H "Content-Type: application/json" \
+          -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,$B64\"}},{\"type\":\"text\",\"text\":\"what is in this image?\"}]}],\"max_tokens\":16}"
+        rm -f /tmp/s.png
+      ' || echo "CURL_FAIL")
       echo "$r" | grep -q '"choices"' \
         && ok "typhoon-ocr" || fail "typhoon-ocr" "$(echo $r | cut -c1-200)"
 
