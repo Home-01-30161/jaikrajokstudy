@@ -724,7 +724,7 @@ function LineOAuthModal({
   onRedirect: () => void;
 }) {
   const [loading, setLoading] = useState(false);
-  const channelId = import.meta.env.VITE_LINE_CHANNEL_ID as string;
+  const channelId = (import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID || import.meta.env.VITE_LINE_CHANNEL_ID) as string;
 
   const startOAuth = () => {
     setLoading(true);
