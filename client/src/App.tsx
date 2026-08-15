@@ -868,14 +868,13 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
   const handleGoogleLogin = () => {
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
     if (!googleClientId) {
-      console.error("VITE_GOOGLE_CLIENT_ID is not set in .env");
-      setShowGoogleModal(true);
+      toast("⚠️ Google Client ID is not configured");
       return;
     }
 
     const google = (window as unknown as { google: { accounts: { oauth2: { initTokenClient: (opts: Record<string, unknown>) => { requestAccessToken: (opts?: Record<string, unknown>) => void } } } } }).google;
     if (!google?.accounts?.oauth2) {
-      setShowGoogleModal(true);
+      toast("⚠️ Google Sign-In SDK is loading. Please try again in a moment.");
       return;
     }
 
@@ -886,7 +885,7 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
       callback: async (tokenResponse: { error?: string; access_token?: string }) => {
         if (tokenResponse.error) {
           console.error("Google OAuth error:", tokenResponse.error);
-          setShowGoogleModal(true);
+          toast(`❌ Google Sign-In Failed: ${tokenResponse.error}`);
           return;
         }
         try {
@@ -905,7 +904,7 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
           handleSelectGoogleAccount(googleUser);
         } catch (err) {
           console.error("Google userinfo fetch failed", err);
-          setShowGoogleModal(true);
+          toast("❌ Failed to retrieve Google profile details");
         }
       },
     });
