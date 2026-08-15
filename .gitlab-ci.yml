@@ -13,6 +13,7 @@ variables:
 # Docker socket via its own config.toml; overriding it breaks connectivity.
 default:
   image: docker:27.3.1
+  tags: [team-07]
   before_script:
     - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
     - apk add --no-cache curl bash >/dev/null
