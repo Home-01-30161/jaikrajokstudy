@@ -47,6 +47,7 @@ const isTrend     = (t) => /^(แนวโน้ม|trend|ดูแนวโน�
 const isHelp      = (t) => /^(ช่วยเหลือ|help|วิธีใช้|\?)$/i.test(t.trim());
 const isSelfie    = (t) => /^(เซลฟี่|selfie)$/i.test(t.trim());
 const isHomework  = (t) => /^(การบ้าน|homework|เฉลย)$/i.test(t.trim());
+const isHistory   = (t) => /^(ประวัติ|history|ดูประวัติ|บทสนทนา)$/i.test(t.trim());
 
 // ── Database ──────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,22 @@ async function updateUserState(userId, updates) {
     `UPDATE line_user_state SET ${fields.join(", ")} WHERE line_user_id = $${idx}`,
     vals
   );
+}
+
+async function getRecentMessages(userId, limit = 10) {
+  if (!process.env.DATABASE_URL) return [];
+  try {
+    const { rows } = await pool.query(
+      `SELECT role, text FROM chat_messages
+       WHERE line_user_id = $1 AND source = 'line'
+       ORDER BY created_at DESC LIMIT $2`,
+      [userId, limit]
+    );
+    return rows.reverse();
+  } catch (err) {
+    console.error("getRecentMessages error:", err?.message);
+    return [];
+  }
 }
 
 async function saveToDB(userId, role, text, sessionId, sessionTitle) {
@@ -445,6 +462,234 @@ function buildTrendFlex(trendPoints) {
   };
 }
 
+/** Welcome Flex — sent on follow event. */
+function buildWelcomeFlex() {
+  const features = [
+    { icon: "📝", label: "พิมพ์ความรู้สึก",   sub: "AI ตอบโต้และวิเคราะห์ sentiment" },
+    { icon: "📸", label: "ส่งเซลฟี่",          sub: "วิเคราะห์อารมณ์จากใบหน้า" },
+    { icon: "🎙️", label: "ส่งเสียงพูด",        sub: "Speech-to-Text + LLM ตอบโต้" },
+    { icon: "📚", label: "ถ่ายรูปการบ้าน",     sub: "OCR + อธิบายขั้นตอนการแก้โจทย์" },
+  ];
+  return {
+    type: "bubble", size: "kilo",
+    header: {
+      type: "box", layout: "vertical",
+      backgroundColor: "#3D6B5A", paddingAll: "16px",
+      contents: [
+        { type: "text", text: "💙 ใจกระจก", weight: "bold", color: "#FFFFFF", size: "xl" },
+        { type: "text", text: "เพื่อนช่วยเรียนที่ใส่ใจอารมณ์คุณ", color: "#FFFFFF99", size: "sm", wrap: true },
+      ],
+    },
+    body: {
+      type: "box", layout: "vertical", spacing: "sm", paddingAll: "14px",
+      contents: [
+        { type: "text", text: "ใช้งานได้ 4 โหมด:", size: "xs", weight: "bold", color: "#1A1208", margin: "none" },
+        ...features.map((f) => ({
+          type: "box", layout: "horizontal", spacing: "sm", margin: "sm",
+          contents: [
+            { type: "text", text: f.icon, size: "lg", flex: 1, align: "center" },
+            {
+              type: "box", layout: "vertical", flex: 6,
+              contents: [
+                { type: "text", text: f.label, size: "sm", weight: "bold", color: "#1A1208" },
+                { type: "text", text: f.sub,   size: "xxs", color: "#6B6156", wrap: true },
+              ],
+            },
+          ],
+        })),
+      ],
+    },
+    footer: {
+      type: "box", layout: "vertical", spacing: "sm", paddingAll: "12px",
+      contents: [
+        {
+          type: "button",
+          action: { type: "message", label: "📖 ดูคำสั่งทั้งหมด", text: "ช่วยเหลือ" },
+          style: "primary", color: "#3D6B5A", height: "sm",
+        },
+        { type: "text", text: "🔒 ไม่ระบุตัวตน · ไม่ต้องลงทะเบียน · ฟรี 24/7", size: "xxs", color: "#C4B88A", align: "center", margin: "sm" },
+      ],
+    },
+  };
+}
+
+/** Help Flex — full command reference. */
+function buildHelpFlex() {
+  const commands = [
+    { cmd: "พิมพ์ข้อความ",  desc: "คุยกับ AI / บอกความรู้สึก" },
+    { cmd: "ส่งรูปภาพ",     desc: "เซลฟี่อารมณ์ หรือ เฉลยการบ้าน" },
+    { cmd: "ส่งเสียง",      desc: "แปลงเสียงและตอบโต้" },
+    { cmd: "แนวโน้ม",       desc: "กราฟอารมณ์ย้อนหลัง" },
+    { cmd: "ประวัติ",       desc: "ดูบทสนทนาล่าสุด" },
+    { cmd: "เซสชันใหม่",    desc: "เริ่มการสนทนาใหม่" },
+    { cmd: "ช่วยเหลือ",     desc: "แสดงคำสั่งนี้" },
+  ];
+  return {
+    type: "bubble", size: "kilo",
+    header: {
+      type: "box", layout: "vertical",
+      backgroundColor: "#1A1208", paddingAll: "14px",
+      contents: [{ type: "text", text: "📖 คำสั่งที่ใช้ได้", weight: "bold", color: "#FFFFFF", size: "md" }],
+    },
+    body: {
+      type: "box", layout: "vertical", spacing: "none", paddingAll: "12px",
+      contents: commands.map((c, i) => ({
+        type: "box", layout: "horizontal", paddingTop: i === 0 ? "none" : "sm",
+        contents: [
+          { type: "text", text: c.cmd,  size: "sm", weight: "bold", color: "#3D6B5A", flex: 3 },
+          { type: "text", text: c.desc, size: "sm", color: "#1A1208", flex: 5, wrap: true },
+        ],
+      })),
+    },
+    footer: {
+      type: "box", layout: "vertical", paddingAll: "12px",
+      contents: [{
+        type: "button",
+        action: { type: "uri", label: "🆘 สายด่วนสุขภาพจิต 1323", uri: "tel:1323" },
+        style: "primary", color: "#C8382A", height: "sm",
+      }],
+    },
+  };
+}
+
+/** New-session confirmation Flex. */
+function buildNewSessionFlex(sessionNum) {
+  return {
+    type: "bubble", size: "kilo",
+    body: {
+      type: "box", layout: "vertical", spacing: "sm", paddingAll: "20px",
+      contents: [
+        { type: "text", text: "✅", size: "3xl", align: "center" },
+        { type: "text", text: `เซสชัน #${sessionNum}`, weight: "bold", size: "lg", color: "#1A1208", align: "center", margin: "md" },
+        { type: "text", text: "เริ่มการสนทนาใหม่แล้วนะ ลืมเรื่องเก่าได้เลย 💙", size: "sm", color: "#6B6156", wrap: true, align: "center", margin: "sm" },
+        { type: "separator", margin: "lg" },
+        {
+          type: "button",
+          action: { type: "message", label: "💬 เริ่มพูดคุย", text: "สวัสดี" },
+          style: "primary", color: "#3D6B5A", height: "sm", margin: "md",
+        },
+      ],
+    },
+  };
+}
+
+/** Selfie / emotion-analysis result Flex. */
+function buildSelfieFlex(visionResult, mood) {
+  const moodConfig = {
+    positive: { color: "#3D6B5A", emoji: "🟢", label: "อารมณ์ดี / ผ่อนคลาย" },
+    negative: { color: "#C8382A", emoji: "🔴", label: "รู้สึกหนักใจ / เครียด" },
+    neutral:  { color: "#8B7355", emoji: "🟡", label: "อารมณ์ปกติ" },
+  };
+  const cfg = moodConfig[mood] || moodConfig.neutral;
+  const footerContents = mood === "negative"
+    ? [
+        { type: "button", action: { type: "uri", label: "📞 สายด่วน 1323", uri: "tel:1323" }, style: "primary", color: "#C8382A", height: "sm" },
+        { type: "button", action: { type: "message", label: "📊 ดูแนวโน้มอารมณ์", text: "แนวโน้ม" }, style: "secondary", height: "sm", margin: "sm" },
+      ]
+    : [{ type: "button", action: { type: "message", label: "📊 ดูแนวโน้มอารมณ์", text: "แนวโน้ม" }, style: "secondary", height: "sm" }];
+  return {
+    type: "bubble", size: "kilo",
+    header: {
+      type: "box", layout: "horizontal", backgroundColor: cfg.color, paddingAll: "14px",
+      contents: [
+        { type: "text", text: cfg.emoji, size: "xl", flex: 1 },
+        {
+          type: "box", layout: "vertical", flex: 8,
+          contents: [
+            { type: "text", text: "📸 ผลวิเคราะห์อารมณ์", weight: "bold", color: "#FFFFFF", size: "md" },
+            { type: "text", text: cfg.label, color: "#FFFFFF99", size: "xs" },
+          ],
+        },
+      ],
+    },
+    body: {
+      type: "box", layout: "vertical", paddingAll: "14px",
+      contents: [{ type: "text", text: visionResult.slice(0, 2000), wrap: true, size: "sm", color: "#1A1208" }],
+    },
+    footer: { type: "box", layout: "vertical", paddingAll: "12px", contents: footerContents },
+  };
+}
+
+/** Homework result Flex — first chunk; overflow continues as plain text. */
+function buildHomeworkFlex(visionResult) {
+  const preview = visionResult.slice(0, 2000);
+  const hasMore = visionResult.length > 2000;
+  return {
+    type: "bubble", size: "kilo",
+    header: {
+      type: "box", layout: "vertical", backgroundColor: "#1A1208", paddingAll: "14px",
+      contents: [{ type: "text", text: "📚 เฉลยการบ้าน", weight: "bold", color: "#FFFFFF", size: "md" }],
+    },
+    body: {
+      type: "box", layout: "vertical", paddingAll: "14px",
+      contents: [
+        { type: "text", text: preview, wrap: true, size: "sm", color: "#1A1208" },
+        ...(hasMore ? [
+          { type: "separator", margin: "md" },
+          { type: "text", text: "มีเนื้อหาเพิ่มเติม — ส่งมาด้านล่างค่ะ", size: "xxs", color: "#C4B88A", margin: "sm" },
+        ] : []),
+      ],
+    },
+  };
+}
+
+/** ASR result Flex — transcription header + LLM response body. */
+function buildASRFlex(transcription, llmResponse) {
+  return {
+    type: "bubble", size: "kilo",
+    header: {
+      type: "box", layout: "vertical", backgroundColor: "#3D6B5A", paddingAll: "14px",
+      contents: [
+        { type: "text", text: "🎙️ ได้ยินว่า...", weight: "bold", color: "#FFFFFF", size: "md" },
+        { type: "text", text: `"${transcription.slice(0, 200)}"`, color: "#FFFFFF99", size: "sm", wrap: true, margin: "sm" },
+      ],
+    },
+    body: {
+      type: "box", layout: "vertical", paddingAll: "14px",
+      contents: [{ type: "text", text: llmResponse.slice(0, 2000), wrap: true, size: "sm", color: "#1A1208" }],
+    },
+  };
+}
+
+/** History Flex — last N chat messages from DB. */
+function buildHistoryFlex(messages) {
+  if (!messages || messages.length === 0) return null;
+  const items = messages.slice(-6).map((m) => ({
+    type: "box", layout: "vertical", margin: "sm",
+    contents: [
+      {
+        type: "text",
+        text: m.role === "user" ? "👤 คุณ" : "💙 ใจกระจก",
+        size: "xxs", weight: "bold",
+        color: m.role === "user" ? "#3D6B5A" : "#8B7355",
+      },
+      { type: "text", text: m.text.slice(0, 300), size: "xs", color: "#1A1208", wrap: true, margin: "none" },
+    ],
+  }));
+  return {
+    type: "bubble", size: "kilo",
+    header: {
+      type: "box", layout: "vertical", backgroundColor: "#1A1208", paddingAll: "14px",
+      contents: [
+        { type: "text", text: "📜 ประวัติการสนทนา", weight: "bold", color: "#FFFFFF", size: "md" },
+        { type: "text", text: `${messages.length} ข้อความล่าสุด`, color: "#FFFFFF88", size: "xs" },
+      ],
+    },
+    body: {
+      type: "box", layout: "vertical", paddingAll: "12px", spacing: "sm",
+      contents: items,
+    },
+    footer: {
+      type: "box", layout: "vertical", paddingAll: "12px",
+      contents: [{
+        type: "button",
+        action: { type: "message", label: "🆕 เซสชันใหม่", text: "เซสชันใหม่" },
+        style: "secondary", height: "sm",
+      }],
+    },
+  };
+}
+
 // ── Mood / trend helpers ──────────────────────────────────────────────────────
 
 function detectMood(text) {
@@ -471,7 +716,9 @@ function splitText(text, maxLen = 4900) {
 // ── Event handlers ────────────────────────────────────────────────────────────
 
 async function handleFollow(event) {
-  await lineReply(event.replyToken, [{ type: "text", text: WELCOME }]);
+  await lineReply(event.replyToken, [
+    { type: "flex", altText: "ยินดีต้อนรับสู่ JaiKrajok 💙", contents: buildWelcomeFlex() },
+  ]);
 }
 
 async function handleTextMessage(event) {
@@ -495,18 +742,9 @@ async function handleTextMessage(event) {
 
   // ── COMMAND: help ───────────────────────────────────────────────────────────
   if (isHelp(text)) {
-    await lineReply(event.replyToken, [{
-      type: "text",
-      text:
-        "📖 คำสั่งที่ใช้ได้\n\n" +
-        "• พิมพ์คำถามหรือความรู้สึก → กระจกตอบโต้\n" +
-        "• ส่งรูปภาพ → เลือกวิเคราะห์เซลฟี่หรือเฉลยการบ้าน\n" +
-        "• ส่งข้อความเสียง → แปลงเป็นข้อความและตอบโต้\n" +
-        "• แนวโน้ม → ดูกราฟอารมณ์ย้อนหลัง\n" +
-        "• เซสชันใหม่ → เริ่มการสนทนาใหม่\n" +
-        "• ช่วยเหลือ → แสดงคำสั่งนี้\n\n" +
-        "🆘 สายด่วนสุขภาพจิต: 1323 (ฟรี 24 ชม.)",
-    }]);
+    await lineReply(event.replyToken, [
+      { type: "flex", altText: "📖 คำสั่งที่ใช้ได้", contents: buildHelpFlex() },
+    ]);
     return;
   }
 
@@ -520,10 +758,22 @@ async function handleTextMessage(event) {
       concern_streak:      0,
       pending_image_msgid: null,
     });
-    await lineReply(event.replyToken, [{
-      type: "text",
-      text: `✅ เริ่มการสนทนาใหม่แล้วนะ (เซสชัน #${newNum})\n\nพูดคุยได้เลยค่ะ 💙`,
-    }]);
+    await lineReply(event.replyToken, [
+      { type: "flex", altText: `เริ่มเซสชัน #${newNum} แล้ว ✅`, contents: buildNewSessionFlex(newNum) },
+    ]);
+    return;
+  }
+
+  // ── COMMAND: history ────────────────────────────────────────────────────────
+  if (isHistory(text)) {
+    const msgs = await getRecentMessages(userId, 10);
+    if (!msgs.length) {
+      await lineReply(event.replyToken, [{ type: "text", text: "ยังไม่มีประวัติการสนทนานะคะ ลองพูดคุยกับกระจกสักพักก่อนค่ะ 😊" }]);
+    } else {
+      await lineReply(event.replyToken, [
+        { type: "flex", altText: "📜 ประวัติการสนทนา", contents: buildHistoryFlex(msgs) },
+      ]);
+    }
     return;
   }
 
@@ -569,22 +819,20 @@ async function handleTextMessage(event) {
           saveToDB(userId, "bot", `[เซลฟี่] ${visionResult}`, state.session_id, sessionTitle),
         ]);
 
-        const messages = [{ type: "text", text: `📸 ผลวิเคราะห์อารมณ์:\n\n${visionResult}`.slice(0, 5000) }];
+        const messages = [{ type: "flex", altText: `📸 ผลวิเคราะห์อารมณ์`, contents: buildSelfieFlex(visionResult, mood) }];
         if (newStreak >= 3) {
           messages.push({ type: "flex", altText: "กระจกเป็นห่วงคุณ", contents: buildEscalationFlex() });
-        } else if (mood === "negative") {
-          messages.push({ type: "text", text: "💙 หากรู้สึกหนักใจมาก สายด่วน 1323 พร้อมรับฟังตลอด 24 ชม. นะคะ" });
         }
         await lineReply(event.replyToken, messages);
 
       } else {
-        // homework — may be long, split into ≤5 messages
+        // homework — flex card for first chunk, plain text for overflow
         await saveToDB(userId, "bot", `[เฉลยการบ้าน] ${visionResult.slice(0, 200)}`, state.session_id, sessionTitle);
-        const chunks   = splitText(visionResult, 4900);
-        const messages = chunks.map((chunk, i) => ({
-          type: "text",
-          text: i === 0 ? `📚 เฉลยการบ้าน:\n\n${chunk}` : chunk,
-        }));
+        const messages = [{ type: "flex", altText: "📚 เฉลยการบ้าน", contents: buildHomeworkFlex(visionResult) }];
+        if (visionResult.length > 2000) {
+          const overflow = splitText(visionResult.slice(2000), 4900);
+          overflow.slice(0, 4).forEach((chunk) => messages.push({ type: "text", text: chunk }));
+        }
         await lineReply(event.replyToken, messages.slice(0, 5));
       }
 
@@ -712,8 +960,7 @@ async function handleAudioMessage(event) {
   }
 
   const messages = [
-    { type: "text", text: `🎙️ กระจกได้ยินว่า:\n"${transcription}"` },
-    { type: "text", text: llmResponse.slice(0, 5000) },
+    { type: "flex", altText: `🎙️ "${transcription.slice(0, 60)}..."`, contents: buildASRFlex(transcription, llmResponse) },
   ];
 
   if (mood === "negative") {
