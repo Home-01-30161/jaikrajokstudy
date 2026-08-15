@@ -17,8 +17,8 @@ export default async function handler(req, res) {
         return;
       }
 
-      const clientId = process.env.VITE_LINE_CHANNEL_ID || process.env.LINE_CHANNEL_ID;
-      const clientSecret = process.env.LINE_CHANNEL_SECRET;
+      const clientId = process.env.LINE_LOGIN_CHANNEL_ID || process.env.VITE_LINE_CHANNEL_ID || process.env.LINE_CHANNEL_ID;
+      const clientSecret = process.env.LINE_LOGIN_CHANNEL_SECRET || process.env.LINE_CHANNEL_SECRET;
 
       if (!clientId || !clientSecret) {
         res.status(500).json({ error: "LINE Channel configuration missing on server" });
