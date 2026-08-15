@@ -51,7 +51,12 @@ services:
       ROOT_PATH: /api
       NODE_ENV: production
       DATABASE_URL: postgresql://app:${TEAM:-team07}pass@db:5432/app
-      TOKENMIND_API_KEY: "${APP_TOKENMIND_API_KEY}"
+      TOKENMIND_API_KEY:           "${APP_TOKENMIND_API_KEY}"
+      TYPHOON_ASR_KEY:             "${APP_TYPHOON_ASR_KEY}"
+      LINE_CHANNEL_SECRET:         "${APP_LINE_CHANNEL_SECRET}"
+      LINE_CHANNEL_ACCESS_TOKEN:   "${APP_LINE_CHANNEL_ACCESS_TOKEN}"
+      PATHUMMA_API_KEY:            "${APP_PATHUMMA_API_KEY}"
+      TAVILY_API_KEY:              "${APP_TAVILY_API_KEY}"
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:
