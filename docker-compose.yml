@@ -14,11 +14,11 @@ x-common: &common
 services:
   searxng:
     <<: *common
-    image: searxng/searxng:latest
+    build:
+      context: ./searxng
+      dockerfile: Dockerfile
     environment:
       SEARXNG_SETTINGS_PATH: /etc/searxng/settings.yml
-    volumes:
-      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
     expose:
       - "8080"
     deploy:
