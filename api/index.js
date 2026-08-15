@@ -42,6 +42,7 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 // ── Raw-body handlers — register BEFORE express.json() ───────────────────────
 // webhook reads raw body itself for LINE signature verification
 app.post("/webhook", webhookHandler);
+app.post("/webhooks/line", webhookHandler);  // canonical URL: /api/webhooks/line
 
 // line-token reads raw body manually via req.on("data")
 app.post("/line-token", lineTokenHandler);
