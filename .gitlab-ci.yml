@@ -92,14 +92,18 @@ deploy:
 # ------------------------------------------------------------
 #  Smoke test — runs automatically after deploy on main
 #  Tests every AI model the project uses.
-#  typhoon-ocr and ptm-asr-1 are skipped (require file upload).
+#  typhoon-ocr uses a 64×64 PNG; ptm-asr-1 uses a 1-second silent WAV (16kHz mono PCM).
 # ------------------------------------------------------------
 smoke-test:
   stage: smoke
   needs: [deploy]
   script:
+    - apk add --no-cache python3 >/dev/null
     - |
-      API="http://127.0.0.1:${BASE_1}"
+      # The smoke-test job may run on a different host than the deploy job,
+      # so docker exec and 127.0.0.1 are both unreliable. Use the public
+      # HTTPS URL — reachable from any runner on the hackathon network.
+      API="https://${TEAM}.aiforthai.in.th/api"
       FAIL=0
       ok()  { echo "  ✅ $1"; }
       fail(){ echo "  ❌ $1 — $2"; FAIL=1; }
@@ -130,11 +134,10 @@ smoke-test:
         -d '{"text":"วันนี้ดีใจมาก"}' >/dev/null \
         && ok "ssense" || fail "ssense" "HTTP error"
 
-      echo "── typhoon-ocr (vision/OCR) — 1×1 white PNG ─────────"
-      # Minimal 1×1 white PNG as base64 — just enough for the model to accept
-      TINY_PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
-      # Drop -f so HTTP error bodies are captured instead of CURL_FAIL
-      r=$(curl -s -X POST "$API/typhoon/v1/chat/completions" \
+      echo "── typhoon-ocr (vision/OCR) — 64×64 white PNG ───────"
+      # python3 installed above; 1×1 PNG is rejected by the model.
+      TINY_PNG=$(python3 -c 'import zlib,struct,base64;ck=lambda t,d:struct.pack(">I",len(d))+t+d+struct.pack(">I",zlib.crc32(t+d)&0xFFFFFFFF);W=H=64;raw=(bytes([0])+bytes([255])*W)*H;png=b"\x89PNG\r\n\x1a\n"+ck(b"IHDR",struct.pack(">IIBBBBB",W,H,8,0,0,0,0))+ck(b"IDAT",zlib.compress(raw))+ck(b"IEND",b"");print(base64.b64encode(png).decode())')
+      r=$(curl -s --max-time 90 -X POST "$API/typhoon/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${TINY_PNG}\"}},{\"type\":\"text\",\"text\":\"what text is in this image?\"}]}],\"max_tokens\":16}" \
         || echo "CURL_FAIL")
@@ -142,17 +145,14 @@ smoke-test:
         && ok "typhoon-ocr" || fail "typhoon-ocr" "$(echo $r | cut -c1-200)"
 
       echo "── ptm-asr-1 (speech-to-text) — silent WAV ──────────"
-      # BusyBox mktemp (Alpine) does not support filename suffixes — drop .wav extension;
-      # the MIME type is set explicitly in the -F flag so the filename extension is irrelevant
       WAV_FILE=$(mktemp /tmp/smoke-asr-XXXXXX)
-      # 44-byte minimal WAV: RIFF header + fmt chunk + empty data chunk (0 samples, 16kHz mono PCM)
-      printf '\122\111\106\106\044\000\000\000\127\101\126\105\146\155\164\040\020\000\000\000\001\000\001\000\200\076\000\000\000\175\000\000\002\000\020\000\144\141\164\141\000\000\000\000' > "$WAV_FILE"
-      r=$(curl -sf -X POST "$API/ptm-asr/audio/transcriptions" \
+      printf '\122\111\106\106\044\175\000\000\127\101\126\105\146\155\164\040\020\000\000\000\001\000\001\000\200\076\000\000\000\175\000\000\002\000\020\000\144\141\164\141\000\175\000\000' > "$WAV_FILE"
+      dd if=/dev/zero bs=32000 count=1 >> "$WAV_FILE" 2>/dev/null
+      r=$(curl -s --max-time 90 -X POST "$API/ptm-asr/audio/transcriptions" \
         -F "file=@${WAV_FILE};type=audio/wav" \
         -F "model=ptm-asr-1" \
         || echo "CURL_FAIL")
       rm -f "$WAV_FILE"
-      # Accept either a transcription (even empty "") or the known "no speech" response
       echo "$r" | grep -qE '"text"' \
         && ok "ptm-asr-1" || fail "ptm-asr-1" "$(echo $r | cut -c1-200)"
 

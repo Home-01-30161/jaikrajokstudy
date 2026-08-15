@@ -1,6 +1,8 @@
 # Dependencies
 **/node_modules
 .pnpm-store/
+# npm lockfile — project uses pnpm (pnpm-lock.yaml); committing package-lock.json breaks Docker builds
+package-lock.json
 
 # Build outputs
 dist/
