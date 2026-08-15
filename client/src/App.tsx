@@ -3334,13 +3334,10 @@ export default function App() {
             return;
           }
 
-          // Fetch user profile from LINE using access_token
+          // Profile is returned by /api/line-token (fetched server-side to stay within connect-src 'self')
           try {
-            const profileRes = await fetch("https://api.line.me/v2/profile", {
-              headers: { Authorization: `Bearer ${data.access_token}` },
-            });
-            const profile = await profileRes.json();
-            if (!profile.userId) {
+            const profile = data.profile;
+            if (!profile?.userId) {
               toast.error("ไม่สามารถดึงข้อมูลโปรไฟล์ LINE ได้");
               return;
             }

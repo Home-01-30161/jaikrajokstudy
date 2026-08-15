@@ -42,7 +42,18 @@ export default async function handler(req, res) {
       });
 
       const data = await response.json();
-      res.status(response.status).json(data);
+      if (!data.access_token) {
+        res.status(response.status).json(data);
+        return;
+      }
+
+      // Fetch LINE profile server-side so the browser never needs connect-src api.line.me
+      const profileRes = await fetch("https://api.line.me/v2/profile", {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      });
+      const profile = await profileRes.json();
+
+      res.status(profileRes.status).json({ ...data, profile });
     } catch (err) {
       res.status(500).json({ error: err.message || String(err) });
     }
