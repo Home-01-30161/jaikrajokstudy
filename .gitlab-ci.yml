@@ -1,20 +1,16 @@
 # ============================================================
 #  .gitlab-ci.yml — team07
 #  base = 20000 + (7-1)*10 = 20060
-#
-#  The runner is a shell executor on team07.aiforthai.in.th.
-#  Docker is available directly on the host — no DinD, no SSH needed.
 # ============================================================
 
 variables:
   TEAM:   "team07"
   BASE:   "20060"
   BASE_1: "20061"
-  # Point the Docker CLI at the host socket mounted by the runner (no DinD)
-  DOCKER_HOST: "unix:///var/run/docker.sock"
 
-# Required by the hackathon runner (Docker executor).
-# docker:27.3.1 provides the Docker CLI; DOCKER_HOST above routes it to the host daemon.
+# docker:27.3.1 matches the official guiderule template.
+# DOCKER_HOST is intentionally unset — the runner mounts the host
+# Docker socket via its own config.toml; overriding it breaks connectivity.
 default:
   image: docker:27.3.1
   before_script:
