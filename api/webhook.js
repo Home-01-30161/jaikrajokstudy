@@ -48,6 +48,7 @@ const isHelp      = (t) => /^(ช่วยเหลือ|help|วิธีใ�
 const isSelfie    = (t) => /^(เซลฟี่|selfie)$/i.test(t.trim());
 const isHomework  = (t) => /^(การบ้าน|homework|เฉลย)$/i.test(t.trim());
 const isHistory   = (t) => /^(ประวัติ|history|ดูประวัติ|บทสนทนา)$/i.test(t.trim());
+const isVoiceHint = (t) => /^(อยากส่งเสียง)$/i.test(t.trim());
 
 // ── Database ──────────────────────────────────────────────────────────────────
 
@@ -739,6 +740,15 @@ async function handleTextMessage(event) {
   }
 
   const sessionTitle = `เซสชัน #${state.session_num}`;
+
+  // ── COMMAND: voice hint (from rich menu) ────────────────────────────────────
+  if (isVoiceHint(text)) {
+    await lineReply(event.replyToken, [{
+      type: "text",
+      text: "🎙️ กดค้างที่ไอคอนไมค์ในช่องพิมพ์ข้อความเพื่อบันทึกเสียงได้เลยค่ะ\n\nกระจกจะแปลงเสียงและตอบโต้ให้นะ 💙",
+    }]);
+    return;
+  }
 
   // ── COMMAND: help ───────────────────────────────────────────────────────────
   if (isHelp(text)) {
