@@ -3327,7 +3327,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
             </div>
             <div className="saf-item p-6 space-y-4" style={{ backgroundColor: T.white, border: `1.5px solid #1A1208` }}>
               <h4 style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: T.ink }}>การควบคุมข้อมูลของฉัน</h4>
-              <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 12, color: `${T.ink}88` }}>คุณสามารถเข้าถึง ส่งออก หรือลบข้อมูลของตนเองได้ทุกเมื่อ</p>
+              <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 12, color: `${T.ink}88` }}>คุณสามารถเข้าถึง ส่งออก หรือลบข้อมูลของตนเองได้ทุกเมื่อ ตามสิทธิ์ภายใต้ PDPA พ.ศ. 2562</p>
               <div className="flex gap-3">
                 <button onClick={onExport} style={{ padding: "9px 20px", border: `1.5px solid ${T.teal}`, color: T.teal, background: "transparent", cursor: "pointer", fontFamily: "monospace", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", transition: "all 0.18s", borderRadius: 0 }}
                   onMouseEnter={e => { const b = e.currentTarget; b.style.background = T.teal; b.style.color = T.white; }}
@@ -3343,9 +3343,9 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
             </div>
             <div className="space-y-2">
               {[
-                { title: "พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA)", content: "ระบบปฏิบัติตาม PDPA อย่างเคร่งครัด ภาพใบหน้าประมวลผลแบบเรียลไทม์และไม่ถูกจัดเก็บลงเซิร์ฟเวอร์ ข้อมูลแนวโน้มอารมณ์จัดเก็บในเครื่องของผู้ใช้เท่านั้น" },
-                { title: "นโยบายความเป็นส่วนตัว (สรุป)", content: "ข้อมูลที่เก็บมีเพียงแนวโน้มอารมณ์แบบไม่ระบุตัวตนเพื่อแสดงพัฒนาการของผู้ใช้เท่านั้น ไม่มีการขายหรือแบ่งปันข้อมูลส่วนบุคคลให้บุคคลที่สาม" },
-                { title: "ข้อกำหนดการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 18 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้งาน ระบบมีการจำกัดอัตราการใช้งาน" },
+                { title: "พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA พ.ศ. 2562)", content: "ระบบปฏิบัติตาม PDPA อย่างเคร่งครัด ผู้ใช้อายุต่ำกว่า 20 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้งาน ภาพใบหน้าประมวลผลแบบ Real-time และไม่ถูกจัดเก็บลงเซิร์ฟเวอร์ ข้อมูลแนวโน้มอารมณ์จัดเก็บแบบไม่ระบุตัวตน (Anonymous) เข้ารหัสมาตรฐาน AES-256" },
+                { title: "นโยบายความเป็นส่วนตัว (สรุป)", content: "เก็บเฉพาะประวัติแนวโน้มอารมณ์แบบไม่ระบุตัวตนเพื่อแสดงพัฒนาการของผู้ใช้เท่านั้น ไม่มีการขายหรือแบ่งปันข้อมูลส่วนบุคคลให้บุคคลที่สาม ผู้ใช้สามารถเข้าถึง แก้ไข หรือลบข้อมูลของตนเองได้ทุกเมื่อ" },
+                { title: "ข้อกำหนดการใช้งาน (สรุป)", content: "ผู้ใช้อายุต่ำกว่า 13 ปีไม่สามารถใช้งานได้ ผู้ใช้อายุต่ำกว่า 20 ปีต้องได้รับความยินยอมจากผู้ปกครองก่อนใช้งาน ระบบมี Rate Limiting เพื่อป้องกันการใช้งานในทางที่ผิด" },
               ].map((acc, i) => (
                 <details key={i} className="saf-item group" style={{ backgroundColor: T.white, border: `1.5px solid ${T.khaki}` }}>
                   <summary style={{ padding: "14px 18px", fontFamily: "monospace", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center", color: T.ink }}>
@@ -3362,7 +3362,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
         {subTab === "ethics" && (
           <div className="space-y-4">
             <div className="p-6 space-y-2" style={{ backgroundColor: T.white, border: `1.5px solid #1A1208` }}>
-              {["ระบบแสดงข้อความแจ้งเตือนทุกครั้งที่กำลังวิเคราะห์ข้อมูล (Transparent AI)", "AI ไม่มีหน้าที่วินิจฉัยโรคซึมเศร้าหรือโรคทางจิตเวชไม่ว่ากรณีใดๆ", "มี Human-in-the-loop — กรณีฉุกเฉินจะแจ้งเตือนไปยังผู้ดูแลระบบที่เป็นมนุษย์แบบไม่ระบุตัวตน", "ผลลัพธ์จากการวิเคราะห์เป็นข้อเสนอแนะเชิงบวก ไม่ใช่การตัดสิน ตีตรา หรือประเมินค่า", "มี Rate Limiting และระบบตรวจจับกรองเนื้อหาที่ไม่เหมาะสม เพื่อป้องกันการใช้งานในทางที่ผิด"].map((text, i) => (
+              {["ระบบแสดงข้อความแจ้งเตือนทุกครั้งที่กำลังวิเคราะห์ข้อมูล (Transparent AI) เช่น "กำลังวิเคราะห์อารมณ์จากใบหน้าของคุณ"", "AI ไม่มีหน้าที่วินิจฉัยโรคซึมเศร้าหรือโรคทางจิตเวชไม่ว่ากรณีใดๆ", "มี Human-in-the-loop — กรณีฉุกเฉิน (เช่น ตรวจพบสัญญาณซึมเศร้าต่อเนื่อง) ระบบจะแนะนำสายด่วน 1323 และครูที่ปรึกษาทันที", "ผลลัพธ์จากการวิเคราะห์เป็นข้อเสนอแนะเชิงบวก ไม่ใช่การตัดสิน ตีตรา หรือประเมินค่า", "มี Rate Limiting และระบบตรวจจับกรองเนื้อหาที่ไม่เหมาะสม เพื่อป้องกันการใช้งานในทางที่ผิด", "ผู้ใช้อายุต่ำกว่า 13 ปีไม่สามารถใช้งานได้ โดยมีระบบยืนยันอายุและขอความยินยอมผู้ปกครองก่อนเข้าใช้"].map((text, i) => (
                 <div key={i} className="saf-item flex items-start gap-3 p-3.5" style={{ backgroundColor: T.smoke, border: `1px solid ${T.khaki}44` }}>
                   <span style={{ fontFamily: "monospace", fontSize: 10, color: T.teal, fontWeight: 700, marginTop: 2, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
                   <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 12, color: T.ink, lineHeight: 1.65 }}>{text}</p>
@@ -3386,10 +3386,10 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
         {subTab === "arch" && (
           <div className="space-y-2">
             {[
-              { layer: "ชั้น 1", title: "User Interface", desc: "เว็บแอปพลิเคชัน (React) — พิมพ์ ถ่ายเซลฟี่ พูด หรือถ่ายรูปการบ้าน" },
-              { layer: "ชั้น 2", title: "API Gateway", desc: "ตรวจสอบสิทธิ์ กระจายคำขอไปยังบริการที่ถูกต้อง บันทึก Log แบบไม่ระบุตัวตน" },
-              { layer: "ชั้น 3", title: "AI Services", desc: "Typhoon (OpenTyphoon) · Pathumma (AI for Thai) · Tavily Search — วิเคราะห์อารมณ์ สรุปแนวโน้ม ค้นหาข้อมูล" },
-              { layer: "ชั้น 4", title: "Data Storage", desc: "เก็บประวัติแนวโน้มอารมณ์ใน localStorage ของเครื่องผู้ใช้ ปฏิบัติตาม PDPA" },
+              { layer: "ชั้น 1", title: "User Interface", desc: "เข้าถึงได้ 2 ช่องทาง: LINE Official Account (แชทบอท) และ Web Application — พิมพ์ข้อความ ส่งเซลฟี่ พูด หรือถ่ายรูปการบ้าน" },
+              { layer: "ชั้น 2", title: "API Gateway", desc: "รับ request จากผู้ใช้ ตรวจสอบสิทธิ์ (Authentication/Authorization) กระจายคำขอไปยัง AI Service ที่ถูกต้อง บันทึก Log แบบไม่ระบุตัวตน" },
+              { layer: "ชั้น 3", title: "AI Services (AI for Thai Platform)", desc: "Pathumma LLM · Face Recognition API · Sentiment Analysis API · Speech-to-Text API · Text-to-Speech API · OCR API — พัฒนาโดย NECTEC / AINRG" },
+              { layer: "ชั้น 4", title: "Data Storage", desc: "จัดเก็บประวัติแนวโน้มอารมณ์ (Emotion Trend) แบบไม่ระบุตัวตน เข้ารหัสมาตรฐาน AES-256 ปฏิบัติตาม PDPA พ.ศ. 2562" },
             ].map((item, i) => (
               <div key={i} className="saf-item saf-arch-row flex items-center gap-4 p-5" style={{ backgroundColor: T.white, border: `1.5px solid ${T.khaki}`, transition: "background 0.18s" }}>
                 <span style={{ fontFamily: "monospace", fontSize: 9, fontWeight: 700, color: T.paper, backgroundColor: T.teal, padding: "4px 10px", flexShrink: 0, letterSpacing: "0.08em" }}>{item.layer}</span>
@@ -3404,7 +3404,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
 
         {subTab === "limits" && (
           <div className="p-6 space-y-2" style={{ backgroundColor: T.white, border: `1.5px solid #1A1208` }}>
-            {["การวิเคราะห์อารมณ์จากใบหน้าอาจคลาดเคลื่อนในสภาพแสงน้อย หรือเมื่อใส่หน้ากากอนามัย", "การวิเคราะห์ความรู้สึกจากข้อความอาจไม่ครอบคลุมภาษาเฉพาะกลุ่มหรือภาษาถิ่นบางรูปแบบ", "ระบบนี้เป็นเครื่องมือเสริม ไม่สามารถแทนที่การปรึกษาจิตแพทย์หรือนักจิตวิทยา", "อาจยังไม่สามารถตรวจจับอารมณ์เชิงซ้อนที่เกิดจากหลายสาเหตุพร้อมกันได้อย่างแม่นยำ", "ประสิทธิภาพขึ้นอยู่กับคุณภาพการเชื่อมต่ออินเทอร์เน็ต เนื่องจากเรียกใช้ API แบบเรียลไทม์"].map((text, i) => (
+            {["การวิเคราะห์อารมณ์จากใบหน้าอาจคลาดเคลื่อนในสภาพแสงน้อย หรือเมื่อใส่หน้ากากอนามัย", "การวิเคราะห์ความรู้สึกจากข้อความอาจไม่ครอบคลุมภาษาเฉพาะกลุ่ม ภาษาถิ่น หรือคำสแลงบางรูปแบบ", "ระบบนี้เป็นเครื่องมือเสริมเท่านั้น ไม่สามารถแทนที่การปรึกษาจิตแพทย์หรือนักจิตวิทยาวิชาชีพ", "อาจยังไม่สามารถตรวจจับอารมณ์เชิงซ้อนที่เกิดจากหลายสาเหตุพร้อมกันได้อย่างแม่นยำ", "ประสิทธิภาพขึ้นอยู่กับคุณภาพการเชื่อมต่ออินเทอร์เน็ต เนื่องจากเรียกใช้ API แบบ Real-time", "ชุดข้อมูลฝึกสอนอาจยังไม่ครอบคลุมความหลากหลายทางวัฒนธรรมและบริบทของนักเรียนไทยทุกกลุ่ม"].map((text, i) => (
               <div key={i} className="saf-item flex items-start gap-3 p-3.5" style={{ backgroundColor: "#F3E6C8", border: "1px solid #C4B88A55" }}>
                 <span style={{ fontFamily: "monospace", fontSize: 10, color: "#8B6914", fontWeight: 700, flexShrink: 0, marginTop: 1 }}>Warning:</span>
                 <p style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 12, color: "#6E4F1F", lineHeight: 1.65 }}>{text}</p>
