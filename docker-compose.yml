@@ -57,6 +57,7 @@ services:
       LINE_CHANNEL_ACCESS_TOKEN:   "${APP_LINE_CHANNEL_ACCESS_TOKEN}"
       PATHUMMA_API_KEY:            "${APP_PATHUMMA_API_KEY}"
       TAVILY_API_KEY:              "${APP_TAVILY_API_KEY}"
+      GEMINI_API_KEY:              "${APP_GEMINI_API_KEY}"
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:
