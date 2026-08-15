@@ -3,6 +3,7 @@ import webhookHandler from "./webhook.js";
 import historyHandler from "./history.js";
 import ssenseHandler from "./ssense.js";
 import tavilyHandler from "./tavily.js";
+import searchHandler from "./search.js";
 import pathummaHandler from "./pathumma.js";
 import typhoonHandler from "./typhoon.js";
 import thaillmHandler from "./thaillm.js";
@@ -70,7 +71,8 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // ── JSON-body handlers ────────────────────────────────────────────────────────
 app.all("/history", historyHandler);
 app.post("/ssense", ssenseHandler);
-app.post("/tavily", tavilyHandler);
+app.post("/tavily", tavilyHandler);       // kept for backward compat
+app.post("/search", searchHandler);       // SearXNG primary + Tavily fallback
 app.all(["/thaillm", "/thaillm/*"], thaillmHandler);
 
 app.post("/send-otp", sendOtpHandler);

@@ -1,0 +1,58 @@
+use_default_settings: true
+
+general:
+  instance_name: "JaiKrajok Search"
+  debug: false
+  donation_url: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "th"
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "jaikrajok-searxng-secret-key-change-in-prod"
+  limiter: false
+  image_proxy: false
+  bind_address: "0.0.0.0"
+  port: 8080
+  base_url: false
+
+ui:
+  static_use_hash: true
+  default_locale: "th"
+  theme_args:
+    simple_style: light
+
+# Only enable reliable engines
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: w
+    disabled: false
+    language: th
+
+outgoing:
+  request_timeout: 8.0
+  max_request_timeout: 15.0
+  useragent_suffix: ""
+  pool_connections: 100
+  pool_maxsize: 20

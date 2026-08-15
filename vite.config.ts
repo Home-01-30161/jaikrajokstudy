@@ -439,6 +439,11 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
+        '/api/search': {
+          target: 'http://localhost:8000',
+          changeOrigin: false,
+          rewrite: (path: string) => path.replace(/^\/api/, ''),
+        },
         '/api/tavily': {
           target: 'https://api.tavily.com',
           changeOrigin: true,

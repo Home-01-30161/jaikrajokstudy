@@ -19,7 +19,7 @@ const TYPHOON_TEXT_MODEL = "typhoon-v2.5-30b-a3b-instruct";
 
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
-const TAVILY_PROXY = "/api/tavily";
+const TAVILY_PROXY = "/api/search";  // SearXNG primary + Tavily fallback
 const PTM_ASR_PROXY = "/api/ptm-asr";
 const PTM_ASR_MODEL = "ptm-asr-1";
 
