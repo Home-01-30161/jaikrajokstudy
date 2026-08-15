@@ -8,7 +8,6 @@ import typhoonHandler from "./typhoon.js";
 import thaillmHandler from "./thaillm.js";
 import ptmAsrHandler from "./ptm-asr.js";
 import lineTokenHandler from "./line-token.js";
-import geminiHandler from "./gemini.js";
 import sendOtpHandler from "./send-otp.js";
 import guardianEmailHandler from "./guardian-email.js";
 import adminDbHandler from "./admin-db.js";
@@ -72,12 +71,6 @@ app.all("/history", historyHandler);
 app.post("/ssense", ssenseHandler);
 app.post("/tavily", tavilyHandler);
 app.all(["/thaillm", "/thaillm/*"], thaillmHandler);
-
-// gemini uses req.url for path + req.body for JSON payload
-app.all(["/gemini", "/gemini/*"], (req, res) => {
-  req.url = "/api" + req.url;
-  geminiHandler(req, res);
-});
 
 app.post("/send-otp", sendOtpHandler);
 app.post("/guardian-email", guardianEmailHandler);

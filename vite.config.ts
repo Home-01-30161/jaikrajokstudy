@@ -428,16 +428,6 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
-        '/api/gemini': {
-          target: 'https://generativelanguage.googleapis.com',
-          changeOrigin: true,
-          secure: true,
-          rewrite: (path: string) => {
-            const stripped = path.replace(/^\/api\/gemini/, '');
-            const sep = stripped.includes('?') ? '&' : '?';
-            return `${stripped}${sep}key=${env.GEMINI_API_KEY ?? ''}`;
-          },
-        },
         '/api/typhoon': {
           target: 'https://api.opentyphoon.ai',
           changeOrigin: true,

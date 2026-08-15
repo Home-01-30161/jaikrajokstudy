@@ -130,15 +130,6 @@ smoke-test:
         -d '{"text":"วันนี้ดีใจมาก"}' >/dev/null \
         && ok "ssense" || fail "ssense" "HTTP error"
 
-      echo "── gemini (proxy) ───────────────────────────────────"
-      # Drop -f so HTTP error bodies are captured instead of CURL_FAIL
-      r=$(curl -s -X POST "$API/gemini/v1beta/models/gemini-2.0-flash:generateContent" \
-        -H "Content-Type: application/json" \
-        -d '{"contents":[{"parts":[{"text":"say hi"}]}]}' \
-        || echo "CURL_FAIL")
-      echo "$r" | grep -q '"candidates"' \
-        && ok "gemini" || fail "gemini" "$(echo $r | cut -c1-200)"
-
       echo "── typhoon-ocr (vision/OCR) — 1×1 white PNG ─────────"
       # Minimal 1×1 white PNG as base64 — just enough for the model to accept
       TINY_PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="

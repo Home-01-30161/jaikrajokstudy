@@ -12,16 +12,16 @@
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const THAILLM_PROXY = "/api/thaillm";
-const THAILLM_MODEL = "thaillm-8b";
+const THAILLM_PROXY  = "/api/thaillm";
+const THAILLM_MODEL  = "thaillm-8b";
 // Typhoon text fallback (used when ThaiLLM origin is overloaded)
 const TYPHOON_TEXT_MODEL = "typhoon-v2.5-30b-a3b-instruct";
 const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
-const TYPHOON_PROXY = "/api/typhoon";
-const TAVILY_PROXY = "/api/tavily";
-const PTM_ASR_PROXY = "/api/ptm-asr";
-const PTM_ASR_MODEL = "ptm-asr-1";
+const TYPHOON_PROXY  = "/api/typhoon";
+const TAVILY_PROXY   = "/api/tavily";
+const PTM_ASR_PROXY  = "/api/ptm-asr";
+const PTM_ASR_MODEL  = "ptm-asr-1";
 
 // Keys are now server-side only — always available
 export function hasApiKey(): boolean { return true; }
@@ -268,7 +268,7 @@ export async function callTextLLM(
 
   // Detect Problem Solving Request (e.g. solve problem, URL, tasks, competitive programming)
   const isProblemSolving = /(solve|แก้โจทย์|คำตอบ|ส่งผ่าน|pass|tasks\/|problem\/|contest\/|toi\d|codecube|leetcode|hackerrank)/i.test(instruction);
-
+  
   // Detect Programming Tutorial (ONLY when explicitly asked to teach/tutorial, NOT when solving a problem)
   const isExplicitTutorial = /(สอน|tutorial|คู่มือ|เรียนรู้|overview|เรียนเขียน)/i.test(instruction);
 
@@ -589,14 +589,14 @@ export async function analyzeSentiment(text: string): Promise<string> {
   if (tagMatch) {
     const tag = tagMatch[1].trim().toLowerCase();
     if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล") ||
-      tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
-      tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
-      tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
-      tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
-      tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
+        tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
+        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
+        tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
+        tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
+        tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
     if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") ||
-      tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
-      tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
+        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
+        tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
   }
 
   // 2. SSense API (primary)
@@ -774,9 +774,9 @@ async function callTyphoonText(
   const messages: { role: string; content: string }[] = Array.isArray(promptOrMessages)
     ? promptOrMessages
     : [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: promptOrMessages },
-    ];
+        { role: "system", content: systemPrompt },
+        { role: "user", content: promptOrMessages },
+      ];
   const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -868,26 +868,57 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `4. **สรุปคำตอบ**: ปิดท้ายด้วยบรรทัด **คำตอบที่ถูกต้องคือ: [ก./ข./ค./ง.]** เพียง 1 ครั้งเท่านั้น\n\n` +
         `❌ ห้ามใส่ตัวเลือกที่ไม่ได้ปรากฏในข้อความด้านบนเด็ดขาด`;
     } else {
-      // Generic solver: pass all vision-extracted Q&A directly to the LLM.
-      // No problem-specific pattern matching — works for any diagram type.
-      solvePrompt =
-        `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ (อ่านโดย AI อาจมีข้อผิดพลาด):\n` +
-        `${answer.slice(0, 2500)}\n\n` +
-        `กฎ — ห้ามละเมิด:\n` +
-        `❌ ห้ามสมมติว่าจุดใดเป็นจุดสูงสุดเว้นจะระบุชัดเจน\n` +
-        `✅ ตัวแปรสัญลักษณ์ (u, g, m ฯลฯ) คือคำตอบที่สมบูรณ์ ไม่ต้องการตัวเลข\n` +
-        `✅ ใช้สมการที่ตรงกับข้อมูลที่อ่านได้จากภาพเท่านั้น\n\n` +
-        `แสดงการแก้โจทย์ทีละขั้น พร้อม ## ข้อมูลที่กำหนด / ## วิธีคำนวณ / ## คำตอบ`;
+      // Extract actual angle values from vision Q&A output to construct an unambiguous
+      // problem statement. The LLM solves from extracted parameters, not raw OCR text.
+
+      // Launch angle from vertical (e.g. "45° จากแนวดิ่ง" or "แนวดิ่ง 45°")
+      const launchVertMatch = answer.match(/(?:\u0e17\u0e33\u0e21\u0e38\u0e21(?:\u0e01\u0e31\u0e1a)?\s*)?\u0e41\u0e19\u0e27\u0e14\u0e34\u0e48\u0e07\s*(\d+)[\u00b0\u00b0]|(\d+)[\u00b0\u00b0]\s*(?:\u0e01\u0e31\u0e1a\s*)?\u0e41\u0e19\u0e27\u0e14\u0e34\u0e48\u0e07/);
+      const launchVertDeg = launchVertMatch
+        ? parseInt(launchVertMatch[1] ?? launchVertMatch[2])
+        : null;
+      const launchHorizDeg = launchVertDeg !== null ? 90 - launchVertDeg : null;
+
+      // Angle at A from vertical: Q3 line first, then proximity to "point A"
+      const q3AngleMatch =
+        answer.match(/Q3[\s\S]{0,80}?(\d+)[\u00b0\u00b0]/i) ||
+        answer.match(/(\d+)[\u00b0\u00b0][^\n]{0,40}(?:\u0e08\u0e38\u0e14\s*A|point\s*A)/i) ||
+        answer.match(/(?:\u0e08\u0e38\u0e14\s*A|point\s*A)[^\n]{0,40}(\d+)[\u00b0\u00b0]/i);
+      const angleAtAVertDeg = q3AngleMatch
+        ? parseInt(q3AngleMatch[1] ?? q3AngleMatch[2])
+        : null;
+      const angleAtAHorizDeg = angleAtAVertDeg !== null ? 90 - angleAtAVertDeg : null;
+
+      const isProjectile = /\u0e42\u0e1e\u0e23\u0e40\u0e08\u0e04|projectile|\u0e27\u0e34\u0e16\u0e35\u0e42\u0e04\u0e49\u0e07|\u0e41\u0e19\u0e27\u0e14\u0e34\u0e48\u0e07.*\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27|\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27\u0e15\u0e49\u0e19.*u/i.test(answer);
+
+      if (launchHorizDeg !== null && angleAtAHorizDeg !== null && isProjectile) {
+        // Build clean problem statement from extracted diagram values; LLM solves it.
+        solvePrompt =
+          `## โจทย์จากภาพ (ค่าที่อ่านได้จาก free body diagram)\n\n` +
+          `- ความเร็วต้น $u$ จาก O ทำมุม $${launchHorizDeg}\u00b0$ กับแนวนอน\n` +
+          `- ที่จุด A บนวิถีโค้ง: **ทิศทางความเร็วทำมุม $${angleAtAHorizDeg}\u00b0$ กับแนวนอน**\n` +
+          `- สนามโน้มถ่วง $g$, ไม่มีแรงต้านอากาศ\n\n` +
+          `จงหา **ความสูง $h$ ของจุด A** จากพื้นระดับ (แสดงในเทอม $u$ และ $g$)\n\n` +
+          `แนวทาง: $v_x = u\\\\cos(\\\\theta_0)$ คงที่; ` +
+          `ใช้ $\\\\tan(\\\\theta_A) = v_{Ay}/v_x$ หา $v_{Ay}$ ณ จุด A; ` +
+          `จากนั้น $v_{Ay}^2 = v_{0y}^2 - 2gh$ หาความสูง\n\n` +
+          `แสดงทีละขั้น มี ## ข้อมูลที่กำหนด / ## วิธีคำนวณ / ## คำตอบ`;
+      } else {
+        solvePrompt =
+          `โจทย์ฟิสิกส์/คณิตศาสตร์จากภาพ:\n` +
+          `${answer.slice(0, 2500)}\n\n` +
+          `กฎเหล็ก — ห้ามละเมิดเด็ดขาด:\n` +
+          `❌ ห้ามสมมติว่า "จุด A คือจุดสูงสุด" เว้นแต่โจทย์จะระบุชัดเจน\n` +
+          `✅ u, g คือตัวแปรสัญลักษณ์ — คำตอบเช่น u²/(6g) ถูกต้องสมบูรณ์\n` +
+          `✅ ถ้ามีมุมความเร็ว ณ จุด A จากแนวดิ่ง = α°: ใช้ tan(90°−α) = vAy/vx หา vAy\n` +
+          `✅ ใช้ vAy² = v0y² − 2gh หาความสูง\n\n` +
+          `เฉลย (แสดงขั้นตอน มี ## ข้อมูลที่กำหนด / ## วิธีคำนวณ / ## คำตอบ)`;
+      }
     }
 
     const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 4096, 0.3);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
-    }
-    // Append AI disclaimer for non-choice (open-ended) problems
-    if (!hasChoices) {
-      llmReply += `\n\n---\n> ⚠️ **คำเตือน**: เฉลยนี้ผลิตโดย AI ซึ่งอ่านภาพและวิเคราะห์โจทย์โดยอัตโนมัติ สำหรับโจทย์ฟิสิกส์/คณิตศาสตร์ที่ซับซ้อน AI อาจแปลค่าหรือใช้สมมติฐานผิด กรุณาตรวจสอบคำตอบกับครู/แบบเรียนอีกครั้ง`;
     }
   } catch (err) {
     // ThaiLLM failed — fall back to Typhoon text model
@@ -897,9 +928,6 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
       llmReply = fixThaiChoices(rawReply, answer);
       if (!llmReply || llmReply.length < 30) {
         llmReply = `## เฉลยการบ้าน\n\n${answer}`;
-      }
-      if (!hasChoices) {
-        llmReply += `\n\n---\n> ⚠️ **คำเตือน**: เฉลยนี้ผลิตโดย AI ซึ่งอ่านภาพและวิเคราะห์โจทย์โดยอัตโนมัติ สำหรับโจทย์ฟิสิกส์/คณิตศาสตร์ที่ซับซ้อน AI อาจแปลค่าหรือใช้สมมติฐานผิด กรุณาตรวจสอบคำตอบกับครู/แบบเรียนอีกครั้ง`;
       }
     } catch (err2) {
       console.error("Homework text LLM failed (both ThaiLLM and Typhoon):", err2);
@@ -1004,11 +1032,11 @@ export async function analyzeAudio(audioBlob: Blob): Promise<AudioResult> {
 
   // Always use ptm-asr-1 via proxy
   try {
-    transcription = await callTyphoonASR(audioBlob);
-    console.debug("[ptm-asr-1] Transcription:", transcription);
-  } catch (err) {
-    console.warn("[ptm-asr-1] Failed, falling back to Pathumma AudioQA:", err);
-  }
+      transcription = await callTyphoonASR(audioBlob);
+      console.debug("[ptm-asr-1] Transcription:", transcription);
+    } catch (err) {
+      console.warn("[ptm-asr-1] Failed, falling back to Pathumma AudioQA:", err);
+    }
 
   // Fallback: Pathumma AudioQA
   if (!transcription) {
@@ -1056,14 +1084,14 @@ export function classifyMoodFromText(text: string): string {
   if (tagMatch) {
     const tag = tagMatch[1].trim().toLowerCase();
     if (tag.includes("เครียด") || tag.includes("ตึง") || tag.includes("กังวล") ||
-      tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
-      tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
-      tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
-      tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
-      tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
+        tag.includes("เศร้า") || tag.includes("ท้อ") || tag.includes("เสียใจ") ||
+        tag.includes("เหนื่อย") || tag.includes("เพลีย") || tag.includes("ล้า") ||
+        tag.includes("โกรธ") || tag.includes("หดหู่") || tag.includes("หงุดหงิด") ||
+        tag.includes("รำคาญ") || tag.includes("เบื่อ") || tag.includes("กลัว") ||
+        tag.includes("วิตก") || tag.includes("ผิดหวัง") || tag.includes("สิ้นหวัง")) return "negative";
     if (tag.includes("สดใส") || tag.includes("ยิ้ม") || tag.includes("สุข") ||
-      tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
-      tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
+        tag.includes("ดีใจ") || tag.includes("สงบ") || tag.includes("ผ่อนคลาย") ||
+        tag.includes("ร่าเริง") || tag.includes("เบิกบาน") || tag.includes("มีความสุข")) return "positive";
   }
 
   const lower = text.toLowerCase();
