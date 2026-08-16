@@ -1005,16 +1005,19 @@ export async function chatWithSearch(
   userMessage: string,
   history?: { role: string; text: string }[]
 ): Promise<ChatResult> {
-  const [reply, emotionKey, searchData] = await Promise.all([
-    callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history),
-    analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
+  // Fetch search results and emotion in parallel
+  const [searchData, emotionKey] = await Promise.all([
     searchWeb(userMessage, 5, "basic").catch(() => ({ results: [], query: userMessage })),
+    analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
   ]);
 
   if (searchData.results.length === 0) {
+    // No search results — fall back to regular LLM
+    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history);
     return { reply, emotionKey, searchUsed: false, sources: [] };
   }
 
+  // Build search context with results
   const sources = searchData.results.map(r => ({ title: r.title, url: r.url }));
   const snippets = searchData.results
     .map((r, i) => `[${i + 1}] **${r.title}** (${r.url})\n${r.content.slice(0, 400)}`)
@@ -1027,6 +1030,7 @@ export async function chatWithSearch(
   const augmentedInstruction = userMessage + searchCtx;
   const searchReply = await callTextLLM(augmentedInstruction, SEARCH_SYSTEM_PROMPT, 3072, 0.4, history);
 
+  // Append clickable source links
   const sourcesBlock =
     "\n\n---\n**แหล่งข้อมูล:**\n" +
     sources.map((s, idx) => `[${idx + 1}] [${s.title}](${s.url})`).join("\n");
