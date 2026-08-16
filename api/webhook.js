@@ -141,7 +141,39 @@ async function getRecentMessages(userId, limit = 10) {
   }
 }
 
-async function saveToDB(userId, role, text, sessionId, sessionTitle) {
+async function saveToDB(userId, role, text, sessionId, sessionTitle, responseTimeMs = null) {
+  if (!process.env.DATABASE_URL) return null;
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO chat_messages
+         (line_user_id, role, text, source, session_id, session_title, response_time_ms)
+         VALUES ($1, $2, $3, 'line', $4, $5, $6)
+         RETURNING id`,
+      [userId, role, text, sessionId, sessionTitle, responseTimeMs]
+    );
+    return rows[0]?.id || null;
+  } catch (err) {
+    console.error("saveToDB error:", err?.message);
+    return null;
+  }
+}
+
+/** Update chat message with performance metrics (response_time_ms, tokens_used) */
+async function updateMessageMetrics(messageId, responseTimeMs, tokensUsed = null) {
+  if (!process.env.DATABASE_URL || !messageId) return;
+  try {
+    await pool.query(
+      `UPDATE chat_messages
+       SET response_time_ms = $1, tokens_used = $2
+       WHERE id = $3`,
+      [responseTimeMs, tokensUsed, messageId]
+    );
+  } catch (err) {
+    console.error("updateMessageMetrics error:", err?.message);
+  }
+}
+
+async function saveToDBOld(userId, role, text, sessionId, sessionTitle) {
   if (!process.env.DATABASE_URL) return;
   try {
     await pool.query(
@@ -792,6 +824,7 @@ async function handleFollow(event) {
 }
 
 async function handleTextMessage(event) {
+  const startTime = Date.now();
   const userId = event.source?.userId || "unknown";
   const text   = (event.message?.text || "").trim();
 
@@ -918,14 +951,15 @@ async function handleTextMessage(event) {
     ? 0
     : (state.concern_streak || 0);
 
-  await Promise.all([
-    saveToDB(userId, "user", text,  state.session_id, sessionTitle),
-    saveToDB(userId, "bot",  reply, state.session_id, sessionTitle),
-    updateUserState(userId, {
-      trend_json:     JSON.stringify(newTrend),
-      concern_streak: newStreak,
-    }),
-  ]);
+  // Save to database and track performance
+  const userMsgId = await saveToDB(userId, "user", text, state.session_id, sessionTitle);
+  const responseTime = Date.now() - startTime;
+  const botMsgId = await saveToDB(userId, "bot", reply, state.session_id, sessionTitle, responseTime);
+
+  await updateUserState(userId, {
+    trend_json:     JSON.stringify(newTrend),
+    concern_streak: newStreak,
+  });
 
   // Build reply messages
   const messages = [{ type: "text", text: reply.slice(0, 5000) }];
@@ -944,13 +978,14 @@ async function handleTextMessage(event) {
 }
 
 async function handleImageMessage(event) {
+  const startTime = Date.now();
   const userId = event.source?.userId || "unknown";
   const msgId  = event.message?.id;
   if (!msgId) return;
 
   let state;
   try { state = await getUserState(userId); } catch { state = null; }
-  const sessionTitle = state ? `เซสชัน #${state.session_num}` : null;
+  const sessionTitle = state ? `เซスชัน #${state.session_num}` : null;
 
   // Download image
   let imageBuffer, contentType;
@@ -1017,6 +1052,7 @@ async function handleImageMessage(event) {
 
     // Process image with detected mode
     const visionResult = await visionAnalyze(imageBuffer, contentType, mode);
+    const responseTime = Date.now() - startTime;
 
     await saveToDB(userId, "user", `[รูปภาพ] ${mode === "selfie" ? "เซลฟี่" : "การบ้าน"}`, state.session_id, sessionTitle);
 
@@ -1033,13 +1069,11 @@ async function handleImageMessage(event) {
       const newTrend = pushTrend(state.trend_json, mood);
       const newStreak = mood === "negative" ? (state.concern_streak || 0) + 1 : mood === "positive" ? 0 : (state.concern_streak || 0);
 
-      await Promise.all([
-        saveToDB(userId, "bot", visionResult, state.session_id, sessionTitle),
-        updateUserState(userId, {
-          trend_json: JSON.stringify(newTrend),
-          concern_streak: newStreak,
-        }),
-      ]);
+      const botMsgId = await saveToDB(userId, "bot", visionResult, state.session_id, sessionTitle, responseTime);
+      await updateUserState(userId, {
+        trend_json: JSON.stringify(newTrend),
+        concern_streak: newStreak,
+      });
 
       const messages = [{ type: "text", text: visionResult.slice(0, 5000) }];
       if (mood === "negative" && newStreak >= 3) {
@@ -1053,7 +1087,7 @@ async function handleImageMessage(event) {
 
     } else {
       // Homework mode
-      await saveToDB(userId, "bot", visionResult, state.session_id, sessionTitle);
+      const botMsgId = await saveToDB(userId, "bot", visionResult, state.session_id, sessionTitle, responseTime);
 
       const messages = [{ type: "text", text: visionResult.slice(0, 5000) }];
       if (visionResult.length > 5000) {
@@ -1085,6 +1119,7 @@ async function handleImageMessage(event) {
 }
 
 async function handleAudioMessage(event) {
+  const startTime = Date.now();
   const userId = event.source?.userId || "unknown";
   const msgId  = event.message?.id;
   if (!msgId) return;
@@ -1108,6 +1143,7 @@ async function handleAudioMessage(event) {
 
   // Reply with transcription and LLM response
   const llmResponse = (await llmReply(transcription)) || FALLBACK;
+  const responseTime = Date.now() - startTime;
 
   // Mood tracking
   const mood      = detectMood(transcription + " " + llmResponse);
@@ -1117,14 +1153,12 @@ async function handleAudioMessage(event) {
     : mood === "positive" ? 0 : (state?.concern_streak || 0);
 
   if (state) {
-    await Promise.all([
-      saveToDB(userId, "user", `[เสียง] ${transcription}`, state.session_id, sessionTitle),
-      saveToDB(userId, "bot",  llmResponse,                 state.session_id, sessionTitle),
-      updateUserState(userId, {
-        trend_json:     JSON.stringify(newTrend),
-        concern_streak: newStreak,
-      }),
-    ]);
+    await saveToDB(userId, "user", `[เสียง] ${transcription}`, state.session_id, sessionTitle);
+    await saveToDB(userId, "bot", llmResponse, state.session_id, sessionTitle, responseTime);
+    await updateUserState(userId, {
+      trend_json:     JSON.stringify(newTrend),
+      concern_streak: newStreak,
+    });
   }
 
   const messages = [
