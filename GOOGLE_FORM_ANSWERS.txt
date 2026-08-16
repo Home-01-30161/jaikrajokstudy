@@ -1,0 +1,94 @@
+========================================================
+JaiKraJok (ทีม 07) — AI for Thai Hackathon 2026
+คำตอบสำหรับ Google Form (คัดลอกข้อความใต้แต่ละข้อไปวางได้เลย)
+========================================================
+
+--------------------------------------------------------
+ข้อ 1) Service ถูก deploy บน infra ของ AI for Thai แล้ว
+       (ระบุ link repository + active pipeline ล่าสุด)
+--------------------------------------------------------
+Repository: https://gitlab.nectec.or.th/ai4thai-service-hackathon/07/jaikrajok.git
+เว็บแอป: https://team07.aiforthai.in.th
+Active pipeline ล่าสุด: commit 4a39935 (main branch) — ผ่านทุกขั้นตอน
+check -> deploy -> smoke test -> ops โดยอัตโนมัติทุกครั้งที่ push main
+
+--------------------------------------------------------
+ข้อ 2) เรียกใช้งานผ่าน Endpoint / API สาธารณะได้จริง
+--------------------------------------------------------
+Base URL: https://team07.aiforthai.in.th/api
+ตัวอย่าง:
+- GET /health  -> เช็คระบบ + ฐานข้อมูล
+- POST /webhooks/line -> Webhook LINE Bot
+- POST /thaillm/v1/chat/completions -> แชทด้วย ThaiLLM-8b
+- POST /typhoon/v1/chat/completions -> Typhoon (OCR)
+- POST /ptm-asr/audio/transcriptions -> เสียงเป็นข้อความ
+- POST /ssense -> วิเคราะห์อารมณ์
+- POST /search -> ค้นหาเว็บ
+- GET /user-data/export -> ส่งออกข้อมูลผู้ใช้ (PDPA)
+ทดสอบด้วย curl: curl https://team07.aiforthai.in.th/api/health
+ตอบกลับ: {"status":"ok","db":"ok"}
+
+--------------------------------------------------------
+ข้อ 3) ใช้ Pathumma LLM หรือบริการ AI for Thai
+--------------------------------------------------------
+ใช้บริการ AI for Thai หลายตัว:
+1) Pathumma LLM (api.aiforthai.in.th)
+2) ThaiLLM-8b (tokenmind.pathumma.in.th) - LLM หลักของบอท
+3) ptm-asr-1 (tokenmind.pathumma.in.th) - Speech-to-Text
+4) ssense (api.aiforthai.in.th/ssense) - วิเคราะห์อารมณ์
+5) Vaja9 (api.aiforthai.in.th/vaja9) - Text-to-Speech
+และใช้ Typhoon (api.opentyphoon.ai) สำหรับ OCR รูปการบ้าน
+
+--------------------------------------------------------
+ข้อ 4) ผ่านการทดสอบ Smoke Test / ใช้งาน end-to-end
+--------------------------------------------------------
+ผ่านทุกครั้ง (อัตโนมัติหลัง deploy ใน GitLab pipeline):
+- /health ✅ / db-health ✅ / LINE webhook signature (401) ✅
+- thaillm-8b ✅ / typhoon-text ✅ / typhoon-ocr ✅
+- ssense ✅ / ptm-asr-1 ✅ / search (SearXNG) ✅
+ผลลัพธ์: "All smoke tests passed"
+ทดสอบ end-to-end จริง: ส่งข้อความ/รูปการบ้าน/เสียงผ่าน LINE Bot
+แล้วระบบตอบกลับบน LINE ได้จริง (แชท, เฉลยการบ้าน, วิเคราะห์อารมณ์)
+
+--------------------------------------------------------
+ข้อ 5) มี API Key/Auth และตั้งค่า Security เรียบร้อย
+--------------------------------------------------------
+- LINE Signature verification (HMAC-SHA256) ทุก webhook -> signature ผิด = 401
+- Rate limiting (120 req/15นาที/IP, 10 req สำหรับ endpoint แพง)
+- Admin dashboard /admin-db ป้องกันด้วย ADMIN_SECRET
+- เข้ารหัสข้อมูลผู้ใช้ AES-256-GCM + hash line_user_id
+- PDPA: ผู้ใช้ส่งออก/ลบข้อมูลได้ (/user-data/export, DELETE /user-data)
+- Security headers: CSP, HSTS, nosniff, frame-ancestors
+- API keys เก็บใน GitLab CI/CD Variables (APP_*) ไม่มีใน repo
+
+--------------------------------------------------------
+ข้อ 6) มีเอกสาร Deploy + วิธีเรียกใช้ API
+--------------------------------------------------------
+เอกสารอยู่ใน repository:
+- README.md: ภาพรวม, สถาปัตยกรรม, วิธีรัน, การ deploy, API, ความปลอดภัย
+- .gitlab-ci.yml: pipeline check -> deploy -> smoke -> ops
+- docker-compose.yml: web + api + db (postgres 16) + healthcheck
+- SUBMISSION.md: เอกสารยืนยันครบ 8 ข้อ
+วิธีเรียกใช้ API: REST ปกติ ใช้ curl หรือ Postman ตามตารางในข้อ 2
+
+--------------------------------------------------------
+ข้อ 7) ระบบเสถียร ไม่ล่มระหว่างทดสอบ
+--------------------------------------------------------
+- Healthcheck ทุก 15 วินาที + restart อัตโนมัติ (unless-stopped)
+- /health เช็คฐานข้อมูลด้วย (SELECT 1) - จับ migration พังได้ทันที
+- AI upstream มี retry + backoff (Typhoon 2 ครั้ง, ThaiLLM 502/503 retry)
+- timeout 30-40 วิ สำหรับวิเคราะห์รูป
+- Log จำกัดขนาด 50MB ป้องกัน disk เต็ม
+- migration แบบ guarded รันใน transaction
+- ระหว่างพัฒนาพบปัญหา 2 จุดที่ทำให้ล่ม (migration 002, API timeout)
+  -> จับได้โดย pipeline/local test แก้และ deploy แล้ว
+
+--------------------------------------------------------
+ข้อ 8) มีผู้รับผิดชอบดูแลระบบหลัง Deploy
+--------------------------------------------------------
+ทีม 07 เป็นผู้ดูแลผ่านช่องทาง:
+- GitLab CI/CD jobs กลุ่ม ops: logs, ps, restart, migrate, shell-cmd, reset-db
+- Dozzle ดู log เรียลไทม์: https://team07.aiforthai.in.th/logs/
+- Admin dashboard: https://team07.aiforthai.in.th/api/admin-db
+- อีเมลแจ้งเตือนอัตโนมัติเมื่อนักเรียนมีอารมณ์เชิงลบต่อเนื่อง/เสี่ยงวิกฤต
+  (human-in-the-loop แจ้งผู้ดูแลทันที)
