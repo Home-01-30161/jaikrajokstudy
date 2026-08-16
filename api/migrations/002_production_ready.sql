@@ -291,10 +291,10 @@ END $$;
 CREATE OR REPLACE VIEW db_health AS
 SELECT
   schemaname,
-  tablename,
-  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS total_size,
-  pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
-  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS index_size,
+  relname AS tablename,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||relname)) AS total_size,
+  pg_size_pretty(pg_relation_size(schemaname||'.'||relname)) AS table_size,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||relname) - pg_relation_size(schemaname||'.'||relname)) AS index_size,
   n_tup_ins AS inserts,
   n_tup_upd AS updates,
   n_tup_del AS deletes,
@@ -306,7 +306,7 @@ SELECT
   last_analyze,
   last_autoanalyze
 FROM pg_stat_user_tables
-ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+ORDER BY pg_total_relation_size(schemaname||'.'||relname) DESC;
 
 -- View: Slow queries (messages taking > 3 seconds)
 DO $$
