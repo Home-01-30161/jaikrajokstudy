@@ -1017,8 +1017,8 @@ export async function chatWithSearch(
     return { reply, emotionKey, searchUsed: false, sources: [] };
   }
 
-  // Build search context with results
-  const sources = searchData.results.map(r => ({ title: r.title, url: r.url }));
+  // Build search context with results - include full content for sources
+  const sources = searchData.results.map(r => ({ title: r.title, url: r.url, content: r.content }));
   const snippets = searchData.results
     .map((r, i) => `[${i + 1}] **${r.title}** (${r.url})\n${r.content.slice(0, 400)}`)
     .join("\n\n");
