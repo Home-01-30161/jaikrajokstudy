@@ -1145,9 +1145,18 @@ async function handleImageMessage(event) {
       hasFace = /selfie|face|person/i.test(detRaw) && !hasText;
     }
 
+    // Log detection result for debugging
+    console.log("[Image Detection]", {
+      raw: detRaw.slice(0, 200),
+      hasText,
+      hasFace,
+      userId: userId.slice(0, 8),
+    });
+
     // Text beats face: a photo of a person holding a worksheet is HOMEWORK.
     // Only a clean selfie (face, no text) goes to emotion analysis.
     let mode = hasFace && !hasText ? "selfie" : "homework";
+    console.log(`[Image Mode] Selected: ${mode} (hasText=${hasText}, hasFace=${hasFace})`);
 
     // Process image with detected mode (first attempt wrapped so an error or a
     // wrong-mode result can fall through to the other mode).
@@ -1173,6 +1182,14 @@ async function handleImageMessage(event) {
       mode = "selfie";
       visionResult = await visionAnalyze(imageBuffer, contentType, "selfie");
     }
+
+    // Log final result for debugging
+    console.log("[Image Result]", {
+      finalMode: mode,
+      resultLength: visionResult.length,
+      hasEmotionTag: /\[อารมณ์:/i.test(visionResult),
+      preview: visionResult.slice(0, 100),
+    });
 
     const responseTime = Date.now() - startTime;
 
