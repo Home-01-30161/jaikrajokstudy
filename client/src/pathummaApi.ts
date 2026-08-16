@@ -996,3 +996,45 @@ export async function chat(
     sources: searchResult.sources,
   };
 }
+
+/**
+ * Chat with forced web search enabled.
+ * Always calls the web search path regardless of keyword detection.
+ */
+export async function chatWithSearch(
+  userMessage: string,
+  history?: { role: string; text: string }[]
+): Promise<ChatResult> {
+  const [reply, emotionKey, searchData] = await Promise.all([
+    callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history),
+    analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
+    searchWeb(userMessage, 5, "basic").catch(() => ({ results: [], query: userMessage })),
+  ]);
+
+  if (searchData.results.length === 0) {
+    return { reply, emotionKey, searchUsed: false, sources: [] };
+  }
+
+  const sources = searchData.results.map(r => ({ title: r.title, url: r.url }));
+  const snippets = searchData.results
+    .map((r, i) => `[${i + 1}] **${r.title}** (${r.url})\n${r.content.slice(0, 400)}`)
+    .join("\n\n");
+
+  const searchCtx =
+    `\n\n---\n**ผลการค้นหาเว็บ — ใช้ข้อมูลเหล่านี้ตอบคำถาม:**\n\n${snippets}\n\n` +
+    `**คำสั่ง**: ตอบคำถามผู้ใช้โดยอิงจากผลการค้นหาด้านบนเท่านั้น อ้างอิงด้วย [1], [2], ... ห้ามแต่งข้อมูลที่ไม่มีในผลการค้นหา\n---`;
+
+  const augmentedInstruction = userMessage + searchCtx;
+  const searchReply = await callTextLLM(augmentedInstruction, SEARCH_SYSTEM_PROMPT, 3072, 0.4, history);
+
+  const sourcesBlock =
+    "\n\n---\n**แหล่งข้อมูล:**\n" +
+    sources.map((s, idx) => `[${idx + 1}] [${s.title}](${s.url})`).join("\n");
+
+  return {
+    reply: searchReply + sourcesBlock,
+    emotionKey,
+    searchUsed: true,
+    sources,
+  };
+}

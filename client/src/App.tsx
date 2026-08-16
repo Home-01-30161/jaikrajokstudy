@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { gsap } from "gsap";
 import {
   chat,
+  chatWithSearch,
   analyzeSelfie,
   analyzeHomework,
   analyzeAudio,
@@ -1545,6 +1546,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem(`jaikrajok:trend:${userKey}`, JSON.stringify(trendData)); } catch { /* storage full or blocked */ }
@@ -1694,9 +1696,13 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     setIsAnalyzing(true);
 
     try {
-      const { emotionKey, reply, searchUsed } = await chat(textToSend, currentHistory);
+      // Use webSearchEnabled state to decide which function to call
+      const { emotionKey, reply, searchUsed } = webSearchEnabled
+        ? await chatWithSearch(textToSend, currentHistory)
+        : await chat(textToSend, currentHistory);
+
       if (searchUsed) {
-        toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ (Tavily Search)");
+        toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ");
       }
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "bot", text: reply, timestamp: Date.now() }]);
       saveWebMessage("bot", reply);
@@ -1707,7 +1713,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     } finally {
       setIsAnalyzing(false);
     }
-  }, [inputText, noteMultimodal, pushTrend]);
+  }, [inputText, noteMultimodal, pushTrend, webSearchEnabled]);
 
   const handleSelfie = () => {
     selfieInputRef.current?.click();
@@ -2227,6 +2233,8 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
                   mood={mood}
                   supportStrip={showSupportStrip}
                   onDismissSupport={() => setShowSupportStrip(false)}
+                  webSearchEnabled={webSearchEnabled}
+                  setWebSearchEnabled={setWebSearchEnabled}
                 />
               </PageWrapper>
             )}
@@ -2711,7 +2719,7 @@ function HomeView({
 function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
-  mood, supportStrip, onDismissSupport,
+  mood, supportStrip, onDismissSupport, webSearchEnabled, setWebSearchEnabled,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -2726,6 +2734,8 @@ function ChatView({
   mood: string;
   supportStrip: boolean;
   onDismissSupport: () => void;
+  webSearchEnabled: boolean;
+  setWebSearchEnabled: (v: boolean) => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const hasUserMsg = messages.some((m) => m.role === "user");
@@ -2807,6 +2817,19 @@ function ChatView({
                   className="text-xs px-3 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors shadow-xs"
                 >
                   thaillm-8b ▾
+                </button>
+                <button
+                  onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                  className="text-xs px-3 py-1 font-semibold border transition-colors shadow-xs"
+                  style={{
+                    borderRadius: 0,
+                    backgroundColor: webSearchEnabled ? T.red : "white",
+                    color: webSearchEnabled ? "white" : T.ink,
+                    borderColor: webSearchEnabled ? T.red : "#C8BF9E",
+                  }}
+                  title="เปิด/ปิดการค้นหาเว็บเพื่อข้อมูลเรียลไทม์"
+                >
+                  Web Search
                 </button>
                 <button
                   onClick={handleVoice}
@@ -3051,6 +3074,19 @@ function ChatView({
                     className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer"
                   >
                     thaillm-8b ▾
+                  </button>
+                  <button
+                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                    className="text-[11px] px-2.5 py-0.5 font-semibold border transition-colors cursor-pointer"
+                    style={{
+                      borderRadius: 0,
+                      backgroundColor: webSearchEnabled ? T.red : "white",
+                      color: webSearchEnabled ? "white" : T.ink,
+                      borderColor: webSearchEnabled ? T.red : "#C8BF9E",
+                    }}
+                    title="เปิด/ปิดการค้นหาเว็บ"
+                  >
+                    Web Search
                   </button>
                   <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="พูดระบาย">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
