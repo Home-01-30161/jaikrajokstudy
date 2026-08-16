@@ -14,6 +14,7 @@ export default async function handler(req, res) {
       format: "json",
       language: "th-TH",
       engines: "google,duckduckgo,bing",
+      categories: "general",
     });
 
     const searxResp = await fetch(`${searxngBase}/search?${params}`, {

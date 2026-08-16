@@ -2803,69 +2803,7 @@ function ChatView({
           <div ref={chatBodyRef} className="flex-1 overflow-y-auto p-5 space-y-4 max-w-4xl mx-auto w-full" style={{ scrollbarWidth: "thin" }}>
             {messages.map((msg, _mi) => (
               <div key={msg.id} className={`flex chat-bubble-in ${msg.role === "user" ? "justify-end" : "justify-start"}`} style={{ animationDelay: `${_mi * 30}ms` }}>
-                {msg.role === "system" && msg.cardType === "search" && msg.searchData ? (
-                  /* ── SEARCH RESULTS CARD ── */
-                  <div className="w-full max-w-[90%] mx-auto" style={{ borderRadius: 0 }}>
-                    <div
-                      className="p-4"
-                      style={{
-                        backgroundColor: T.paper,
-                        border: `2px solid ${T.red}`,
-                        borderRadius: 0,
-                        fontFamily: "'Noto Sans Thai', sans-serif",
-                      }}
-                    >
-                      {/* Header */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="11" cy="11" r="8" />
-                          <path d="m21 21-4.35-4.35" />
-                        </svg>
-                        <p className="font-bold text-xs uppercase tracking-wider" style={{ color: T.red, fontFamily: "monospace" }}>
-                          Web Search: "{msg.searchData.query}"
-                        </p>
-                      </div>
-
-                      {/* Search Results */}
-                      <div className="space-y-2">
-                        {msg.searchData.results.slice(0, 3).map((result, idx) => (
-                          <a
-                            key={idx}
-                            href={result.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block p-3 transition-all hover:shadow-md"
-                            style={{
-                              backgroundColor: T.white,
-                              border: `1px solid ${T.khaki}`,
-                              borderRadius: 0,
-                              textDecoration: "none",
-                            }}
-                          >
-                            <p className="font-semibold text-sm mb-1" style={{ color: T.ink }}>
-                              [{idx + 1}] {result.title}
-                            </p>
-                            <p className="text-xs opacity-60 truncate" style={{ color: T.ink }}>
-                              {result.url}
-                            </p>
-                            {result.content && (
-                              <p className="text-xs mt-2 line-clamp-2" style={{ color: T.ink, opacity: 0.8 }}>
-                                {result.content.slice(0, 150)}...
-                              </p>
-                            )}
-                          </a>
-                        ))}
-                      </div>
-
-                      {/* Footer */}
-                      {msg.searchData.results.length > 3 && (
-                        <p className="text-xs mt-3 text-center opacity-60" style={{ color: T.ink, fontFamily: "monospace" }}>
-                          + {msg.searchData.results.length - 3} more results
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : msg.role === "system" ? (
+                {msg.role === "system" ? (
                   <div className="w-full px-4 py-2 text-xs font-mono text-center" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F", borderRadius: 0, border: "1px solid #C4B88A55" }}>
                     {msg.text}
                   </div>
