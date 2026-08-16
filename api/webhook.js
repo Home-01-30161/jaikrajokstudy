@@ -387,10 +387,44 @@ async function llmReply(text, history = []) {
  * Typhoon OCR — analyze a JPEG/PNG Buffer.
  * mode: "selfie" → brief emotion description  |  "homework" → full OCR + solve
  */
-async function visionAnalyze(imageBuffer, contentType, mode) {
+async function typhoonChat(payload, timeoutMs, attempts = 2) {
   const apiKey = process.env.TYPHOON_ASR_KEY;
   if (!apiKey) throw new Error("TYPHOON_ASR_KEY not set");
 
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch("https://api.opentyphoon.ai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+        signal:  AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        // Retry only on transient server/rate-limit errors
+        if (i + 1 < attempts && (res.status === 429 || res.status >= 500)) {
+          lastErr = new Error(`Typhoon OCR ${res.status}: ${errText.slice(0, 200)}`);
+          await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+          continue;
+        }
+        throw new Error(`Typhoon OCR ${res.status}: ${errText.slice(0, 200)}`);
+      }
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content?.trim() || "";
+    } catch (err) {
+      const transient =
+        err?.name === "TimeoutError" || err?.name === "AbortError" ||
+        err?.cause?.code === "ECONNRESET" || err?.cause?.code === "UND_ERR_CONNECT_TIMEOUT";
+      if (!transient || i + 1 >= attempts) throw err;
+      lastErr = err;
+      await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw lastErr || new Error("Typhoon OCR failed");
+}
+
+async function visionAnalyze(imageBuffer, contentType, mode) {
   const base64   = imageBuffer.toString("base64");
   const mimeType = (contentType || "image/jpeg").split(";")[0];
 
@@ -421,18 +455,7 @@ async function visionAnalyze(imageBuffer, contentType, mode) {
     temperature: 0.1,
   };
 
-  const res = await fetch("https://api.opentyphoon.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body:    JSON.stringify(payload),
-    signal:  AbortSignal.timeout(25000),
-  });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`Typhoon OCR ${res.status}: ${errText.slice(0, 200)}`);
-  }
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content?.trim() || "";
+  return typhoonChat(payload, 40000);
 }
 
 /** ptm-asr-1 — transcribe audio Buffer from LINE (audio/m4a). */
@@ -1076,9 +1099,6 @@ async function handleImageMessage(event) {
 
   try {
     // Auto-detect image type using Typhoon Vision with generic prompt
-    const apiKey = process.env.TYPHOON_ASR_KEY;
-    if (!apiKey) throw new Error("TYPHOON_ASR_KEY not set");
-
     const base64 = imageBuffer.toString("base64");
     const mimeType = (contentType || "image/jpeg").split(";")[0];
 
@@ -1108,17 +1128,7 @@ async function handleImageMessage(event) {
       temperature: 0.1,
     };
 
-    const detectionRes = await fetch("https://api.opentyphoon.ai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(detectionPrompt),
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!detectionRes.ok) throw new Error(`Detection failed: ${detectionRes.status}`);
-
-    const detectionData = await detectionRes.json();
-    const detRaw = (detectionData?.choices?.[0]?.message?.content || "").trim();
+    const detRaw = (await typhoonChat(detectionPrompt, 30000)) || "";
 
     // Parse JSON result; fall back to keyword heuristics if parsing fails
     let hasText = false, hasFace = false;
@@ -1225,7 +1235,15 @@ async function handleImageMessage(event) {
     }
 
   } catch (err) {
-    console.error("Auto image processing error:", err?.message);
+    console.error("Auto image processing error:", {
+      message: err?.message,
+      userId,
+      hasText,
+      hasFace,
+      mode,
+      visionLen: visionResult?.length,
+      timestamp: new Date().toISOString(),
+    });
     await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`, "Content-Type": "application/json" },
