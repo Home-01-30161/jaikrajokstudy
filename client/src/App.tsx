@@ -7,6 +7,7 @@ import {
   chatWithSearch,
   analyzeSelfie,
   analyzeHomework,
+  analyzeImageWithCaption,
   analyzeAudio,
   classifyMoodFromText,
 } from "./pathummaApi";
@@ -53,7 +54,7 @@ const IMG = {
 const T = {
   paper: "#EDE8DC",       // newsprint ground
   ink: "#1A1208",         // deep ink — text, borders
-  red: "#C8382A",         // signal red — primary action, brand accent
+  red: "#5B7036",         // signal red — primary action, brand accent
   teal: "#3D6B5A",        // teal grove — secondary actions, calm states
   khaki: "#C4B88A",       // ruled line — dividers, muted labels
   smoke: "#F7F4EE",       // lighter paper — input backgrounds
@@ -61,7 +62,7 @@ const T = {
   // legacy aliases used by interior screens (kept for compat)
   cream: "#EDE8DC",
   black: "#1A1208",
-  salmon: "#C8382A",
+  salmon: "#5B7036",
   gridLine: "rgba(26,18,8,0.08)",
 };
 
@@ -175,6 +176,8 @@ interface ChatMsg {
   role: "user" | "bot" | "system";
   text: string;
   timestamp: number;
+  imageUrl?: string;
+  imageCaption?: string;
   cardType?: "emotion" | "ocr" | "search";
   emotionData?: { label: string; note: string; color: string; bg: string; text: string; emotionKey?: string };
   ocrText?: string;
@@ -1017,7 +1020,7 @@ function OnbWelcome({ onNext }: { onNext: () => void }) {
         .onb-float { animation: onbBgDrift 6s ease-in-out infinite; }
         .onb-float2 { animation: onbBgDrift 8s ease-in-out infinite reverse; }
         .onb-btn-ink { position:relative; overflow:hidden; }
-        .onb-btn-ink::before { content:''; position:absolute; inset:0; background:#C8382A; transform:scaleX(0); transform-origin:left; transition:transform 0.3s cubic-bezier(0.22,1,0.36,1); border-radius:inherit; }
+        .onb-btn-ink::before { content:''; position:absolute; inset:0; background:#5B7036; transform:scaleX(0); transform-origin:left; transition:transform 0.3s cubic-bezier(0.22,1,0.36,1); border-radius:inherit; }
         .onb-btn-ink:hover::before { transform:scaleX(1); }
         .onb-btn-ink span { position:relative; z-index:1; }
       `}</style>
@@ -1069,7 +1072,7 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
           placeholder="ระบุอายุของคุณ"
           className="onb-age-el w-full mb-8 outline-none text-lg text-center"
           style={{ opacity: 0, backgroundColor: "#EDE8DC", border: "1.5px solid #1A1208", borderRadius: 0, padding: "14px 20px", fontFamily: "'Noto Sans Thai', monospace", color: "#1A1208", transition: "border-color 0.15s" }}
-          onFocus={e => { e.currentTarget.style.borderColor = "#C8382A"; }}
+          onFocus={e => { e.currentTarget.style.borderColor = "#5B7036"; }}
           onBlur={e => { e.currentTarget.style.borderColor = "#1A1208"; }}
         />
         <button className="onb-age-el onb-btn-ink" onClick={() => { if (!age || parseInt(age) <= 0) return; onNext(); }} style={{ opacity: 0, backgroundColor: "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: "pointer" }}>
@@ -1080,13 +1083,16 @@ function OnbAge({ age, setAge, onNext }: { age: string; setAge: (v: string) => v
   );
 }
 
-function GuardianPage({ stage, onSubmitEmail, onNext, guardianEmail, setGuardianEmail }: {
+function GuardianPage({ stage, onSubmitEmail, onNext, guardianEmail, setGuardianEmail, onVerifyCode }: {
   stage: "input" | "pending" | "approved";
   onSubmitEmail: (email: string) => Promise<void>;
   onNext: () => void;
   guardianEmail: string;
   setGuardianEmail: (v: string) => void;
+  onVerifyCode: (code: string) => Promise<boolean>;
 }) {
+  const [verificationCode, setVerificationCode] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!cardRef.current) return;
@@ -1116,7 +1122,7 @@ function GuardianPage({ stage, onSubmitEmail, onNext, guardianEmail, setGuardian
               onChange={(e) => setGuardianEmail(e.target.value)}
               className="grd-el w-full outline-none text-base"
               style={{ opacity: 0, backgroundColor: "#EDE8DC", border: "1.5px solid #1A1208", borderRadius: 0, padding: "14px 20px", color: "#1A1208", fontFamily: "'Noto Sans Thai', monospace", transition: "border-color 0.15s" }}
-              onFocus={e => { e.currentTarget.style.borderColor = "#C8382A"; }}
+              onFocus={e => { e.currentTarget.style.borderColor = "#5B7036"; }}
               onBlur={e => { e.currentTarget.style.borderColor = "#1A1208"; }}
             />
             <button onClick={() => onSubmitEmail(guardianEmail)} className="grd-el onb-btn-ink" style={{ opacity: 0, backgroundColor: "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: "pointer" }}>
@@ -1130,7 +1136,42 @@ function GuardianPage({ stage, onSubmitEmail, onNext, guardianEmail, setGuardian
             <div className="grd-el p-5" style={{ opacity: 0, backgroundColor: "#FFF8E1", border: "1.5px solid #F9A825", borderRadius: 0, fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 13, color: "#5D4037", lineHeight: 1.7 }}>
               <p style={{ fontWeight: 700, marginBottom: 8, fontFamily: "monospace", letterSpacing: "0.06em" }}>รอการยืนยันจากผู้ปกครอง</p>
               <p>ส่งอีเมลไปยัง <strong>{guardianEmail}</strong> แล้ว</p>
-              <p style={{ marginTop: 8 }}>ผู้ปกครองต้องกดลิงก์ในอีเมลเพื่อยืนยัน — หน้านี้จะอัปเดตโดยอัตโนมัติเมื่อผู้ปกครองคลิก</p>
+              <p style={{ marginTop: 8 }}>ผู้ปกครองจะได้รับรหัสยืนยัน 6 หลักในอีเมล — กรุณากรอกรหัสด้านล่างเมื่อผู้ปกครองยืนยันแล้ว</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <input
+                type="text"
+                placeholder="รหัสยืนยัน 6 หลัก"
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                className="grd-el w-full outline-none text-center text-2xl tracking-widest"
+                style={{ opacity: 0, backgroundColor: "#EDE8DC", border: "1.5px solid #1A1208", borderRadius: 0, padding: "16px 20px", color: "#1A1208", fontFamily: "monospace", transition: "border-color 0.15s" }}
+                onFocus={e => { e.currentTarget.style.borderColor = "#5B7036"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = "#1A1208"; }}
+              />
+              <button
+                onClick={async () => {
+                  if (verificationCode.length !== 6) {
+                    toast("กรุณากรอกรหัสยืนยัน 6 หลัก");
+                    return;
+                  }
+                  setIsVerifying(true);
+                  const success = await onVerifyCode(verificationCode);
+                  setIsVerifying(false);
+                  if (!success) {
+                    toast.error("รหัสยืนยันไม่ถูกต้อง กรุณาลองอีกครั้ง");
+                    setVerificationCode("");
+                  }
+                }}
+                disabled={isVerifying || verificationCode.length !== 6}
+                className="grd-el onb-btn-ink"
+                style={{ opacity: 0, backgroundColor: (isVerifying || verificationCode.length !== 6) ? "#9E9E9E" : "#1A1208", border: "none", borderRadius: 0, padding: "14px 36px", cursor: (isVerifying || verificationCode.length !== 6) ? "not-allowed" : "pointer" }}
+              >
+                <span style={{ color: "#EDE8DC", fontWeight: 700, fontFamily: "'Noto Sans Thai', monospace", fontSize: 13, letterSpacing: "0.06em" }}>
+                  {isVerifying ? "กำลังตรวจสอบ..." : "ยืนยันรหัส →"}
+                </span>
+              </button>
             </div>
           </div>
         )}
@@ -1214,7 +1255,7 @@ function PrivacyPage({ onNext }: { onNext: (consentAt: string) => void }) {
   );
 }
 
-function GuardianConfirmPage({ onConfirm }: { onConfirm: () => void }) {
+function GuardianConfirmPage({ onConfirm, verificationCode }: { onConfirm: () => void; verificationCode: string }) {
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!cardRef.current) return;
@@ -1236,8 +1277,12 @@ function GuardianConfirmPage({ onConfirm }: { onConfirm: () => void }) {
           ข้อมูลทั้งหมดจัดเก็บในอุปกรณ์ของผู้ใช้เท่านั้น ไม่มีการส่งข้อมูลส่วนบุคคลออกนอกระบบ ตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)
         </p>
         <div className="flex flex-col gap-4">
-          <div style={{ backgroundColor: "#FFF8E1", border: "1.5px solid #F9A825", borderRadius: 0, padding: "14px 20px", fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 13, color: "#5D4037", lineHeight: 1.65 }}>
-            <strong>สำคัญ:</strong> กรุณาเปิดลิงก์นี้บนอุปกรณ์ของบุตรหลาน (โทรศัพท์หรือคอมพิวเตอร์ที่บุตรหลานใช้) แล้วกดปุ่มด้านล่าง
+          <div style={{ backgroundColor: "#E3F2FD", border: "1.5px solid #2196F3", borderRadius: 0, padding: "20px", fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 14, color: "#1565C0", lineHeight: 1.65, textAlign: "center" }}>
+            <p style={{ marginBottom: 12, fontWeight: 600 }}>รหัสยืนยันของคุณคือ:</p>
+            <div style={{ fontFamily: "monospace", fontSize: "2.5rem", fontWeight: 900, letterSpacing: "0.3em", color: "#1A1208", padding: "12px", backgroundColor: "#ffffff", border: "2px solid #2196F3", borderRadius: "4px" }}>
+              {verificationCode}
+            </div>
+            <p style={{ marginTop: 12, fontSize: 12, opacity: 0.8 }}>กรุณาบอกรหัสนี้กับบุตรหลานเพื่อยืนยันการใช้งาน</p>
           </div>
           <button
             onClick={onConfirm}
@@ -1423,6 +1468,8 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   const [inputText, setInputText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [attachedImage, setAttachedImage] = useState<{ file: File; preview: string } | null>(null);
+  const [imageCaption, setImageCaption] = useState("");
 
   const [trendData, setTrendData] = useState<TrendPoint[]>(() => {
     try {
@@ -1454,6 +1501,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   // Pathumma API — file input refs
   const selfieInputRef = useRef<HTMLInputElement>(null);
   const homeworkInputRef = useRef<HTMLInputElement>(null);
+  const imageAttachInputRef = useRef<HTMLInputElement>(null);
   // Mic recording state
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -1590,10 +1638,60 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     setTransparencyLogs((prev) => [transNote, ...prev.slice(0, 4)]);
   }, []);
 
+  // Additional image state
+  const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
+  const generalImageInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("กรุณาเลือกไฟล์รูปภาพเท่านั้น");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachedImage({ file, preview: reader.result as string });
+      toast.success("แนบรูปภาพสำเร็จ");
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const clearAttachedImage = useCallback(() => {
+    setAttachedImage(null);
+    if (generalImageInputRef.current) generalImageInputRef.current.value = "";
+  }, []);
+
+  const handleGeneralImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageSelect(file);
+  };
+
+  const handleAttachImageClick = () => {
+    generalImageInputRef.current?.click();
+  };
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          handleImageSelect(file);
+          break;
+        }
+      }
+    }
+  }, [handleImageSelect]);
+
   const sendMessage = useCallback(async (overrideText?: string, sourceLabel: string = "ข้อความ") => {
     const textToSend = overrideText !== undefined ? overrideText : inputText;
-    if (!textToSend.trim()) return;
+    const currentImage = attachedImage;
+
+    if (!textToSend.trim() && !currentImage) return;
+
     if (overrideText === undefined) setInputText("");
+    clearAttachedImage();
 
     // Read history from ref — always up-to-date, no closure timing issues
     const currentHistory = messagesRef.current
@@ -1601,29 +1699,50 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       .slice(-8)  // keep last 8 for context
       .map((m) => ({ role: m.role, text: m.text }));
 
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: textToSend, timestamp: Date.now(), sourceTag: sourceLabel !== "ข้อความ" ? sourceLabel : undefined }]);
-    saveWebMessage("user", textToSend);
-    noteMultimodal(sourceLabel);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        text: textToSend,
+        imageUrl: currentImage?.preview || undefined,
+        timestamp: Date.now(),
+        sourceTag: currentImage ? "รูปภาพ" : (sourceLabel !== "ข้อความ" ? sourceLabel : undefined)
+      }
+    ]);
+    saveWebMessage("user", currentImage ? `[รูปภาพ] ${textToSend}` : textToSend);
+    noteMultimodal(currentImage ? "รูปภาพ" : sourceLabel);
     setIsAnalyzing(true);
 
     try {
-      // Always use web search for every query
-      const { emotionKey, reply, searchUsed, sources } = await chatWithSearch(textToSend, currentHistory);
+      if (currentImage) {
+        const { answer, llmReply } = await analyzeImageWithCaption(currentImage.file, textToSend);
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), role: "bot", text: "อ่านและวิเคราะห์รูปภาพเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer.slice(0, 300)}..."` },
+          { id: crypto.randomUUID(), role: "bot", text: llmReply, timestamp: Date.now() + 50 }
+        ]);
+        saveWebMessage("bot", llmReply);
+        pushTrend("neutral", "รูปภาพ");
+      } else {
+        // Always use web search for every text query
+        const { emotionKey, reply, searchUsed } = await chatWithSearch(textToSend, currentHistory);
 
-      if (searchUsed) {
-        toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ");
+        if (searchUsed) {
+          toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ");
+        }
+
+        setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "bot", text: reply, timestamp: Date.now() }]);
+        saveWebMessage("bot", reply);
+        pushTrend(emotionKey, sourceLabel);
       }
-
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "bot", text: reply, timestamp: Date.now() }]);
-      saveWebMessage("bot", reply);
-      pushTrend(emotionKey, sourceLabel);
     } catch (err) {
-      console.error("Pathumma Text LLM error:", err);
+      console.error("Pathumma LLM error:", err);
       toast.error("ไม่สามารถเชื่อมต่อ AI ได้ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setIsAnalyzing(false);
     }
-  }, [inputText, noteMultimodal, pushTrend]);
+  }, [inputText, attachedImage, clearAttachedImage, noteMultimodal, pushTrend]);
 
   const handleSelfie = () => {
     selfieInputRef.current?.click();
@@ -2143,6 +2262,11 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
                   mood={mood}
                   supportStrip={showSupportStrip}
                   onDismissSupport={() => setShowSupportStrip(false)}
+                  attachedImage={attachedImage}
+                  clearAttachedImage={clearAttachedImage}
+                  handleAttachImageClick={handleAttachImageClick}
+                  handlePaste={handlePaste}
+                  onImageClick={(url) => setPreviewModalImage(url)}
                 />
               </PageWrapper>
             )}
@@ -2194,6 +2318,34 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
           </div>
         </div>
       </div>
+
+      {/* ── Image Lightbox Modal ── */}
+      {previewModalImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm chat-bubble-in"
+          onClick={() => setPreviewModalImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl bg-stone-950 border border-stone-800 p-2" onClick={(e) => e.stopPropagation()}>
+            <img src={previewModalImage} alt="Full view" className="max-w-full max-h-[82vh] object-contain rounded-xl block mx-auto" />
+            <button
+              onClick={() => setPreviewModalImage(null)}
+              className="absolute top-4 right-4 bg-black/70 hover:bg-red-600 text-white rounded-full p-2 w-8 h-8 flex items-center justify-center text-sm font-bold transition-all shadow cursor-pointer border border-white/20"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Hidden file inputs for Pathumma Vision LLM ── */}
+      <input
+        ref={generalImageInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={handleGeneralImageChange}
+        aria-hidden="true"
+      />
 
       {/* ESCALATION MODAL */}
       {showEscalationModal && (
@@ -2632,6 +2784,7 @@ function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, supportStrip, onDismissSupport,
+  attachedImage, clearAttachedImage, handleAttachImageClick, handlePaste,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -2646,6 +2799,11 @@ function ChatView({
   mood: string;
   supportStrip: boolean;
   onDismissSupport: () => void;
+  attachedImage: { file: File; preview: string } | null;
+  clearAttachedImage: () => void;
+  handleAttachImageClick: () => void;
+  handlePaste: (e: React.ClipboardEvent) => void;
+  onImageClick: (url: string) => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const hasUserMsg = messages.some((m) => m.role === "user");
@@ -2675,14 +2833,14 @@ function ChatView({
           `}</style>
           {/* Greeting Header */}
           <div className="chat-hero-el flex items-center justify-center gap-3 mb-6">
-            <span className="chat-star text-2xl" style={{ color: T.red }}>✴</span>
+            <img src="/logo.svg" alt="JaiKraJok Logo" className="w-10 h-10 object-contain" />
             <h2 style={{ fontFamily: "'Noto Sans Thai', monospace", fontSize: "clamp(1.4rem,4vw,2rem)", fontWeight: 900, color: T.ink, letterSpacing: "-0.02em" }}>
               สวัสดีครับ, กระจกพร้อมช่วยดูแลนะ
             </h2>
           </div>
 
           {/* Claude Prompt Box Card */}
-          <div className="chat-hero-el w-full max-w-2xl bg-white p-4 shadow-md border border-[#E2D9C2] transition-all focus-within:shadow-lg focus-within:border-[#C8382A]" style={{ borderRadius: 0 }}>
+          <div className="chat-hero-el w-full max-w-2xl bg-white p-4 shadow-md border border-[#E2D9C2] transition-all focus-within:shadow-lg focus-within:border-[#5B7036]" style={{ borderRadius: 0 }}>
             <textarea
               placeholder="พิมพ์ความรู้สึกของคุณ หรือถามโจทย์การบ้าน (Bio, Math, Coding)..."
               value={inputText}
@@ -2759,7 +2917,7 @@ function ChatView({
           <div className="chat-hero-el flex flex-wrap items-center justify-center gap-2.5 mt-6 max-w-2xl px-2">
             <button
               onClick={handleSelfie}
-              className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#C8382A] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#5B7036] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
               style={{ color: "#1A1A1A", borderRadius: 0 }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" /><circle cx="12" cy="13" r="3" /></svg>
@@ -2767,7 +2925,7 @@ function ChatView({
             </button>
             <button
               onClick={handleHomeworkPhoto}
-              className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#C8382A] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#5B7036] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
               style={{ color: "#1A1A1A", borderRadius: 0 }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
@@ -2775,7 +2933,7 @@ function ChatView({
             </button>
             <button
               onClick={handleVoice}
-              className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#C8382A] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2 bg-white border border-[#C8BF9E] text-xs font-bold transition-all shadow-xs hover:border-[#5B7036] hover:shadow-[2px_2px_0_#1A1208] cursor-pointer flex items-center gap-1.5"
               style={{ color: "#1A1A1A", borderRadius: 0 }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
@@ -2884,6 +3042,17 @@ function ChatView({
                       boxShadow: msg.role === "user" ? `2px 2px 0 ${T.ink}` : "none",
                     }}
                   >
+                    {msg.imageUrl && (
+                      <div className="mb-3">
+                        <img
+                          src={msg.imageUrl}
+                          alt={msg.imageCaption || "แนบรูปภาพ"}
+                          className="max-w-full h-auto rounded-lg border border-white/20 cursor-pointer"
+                          style={{ maxHeight: "300px", objectFit: "contain" }}
+                          onClick={() => window.open(msg.imageUrl, '_blank')}
+                        />
+                      </div>
+                    )}
                     <MathText text={msg.text} />
                     {msg.role === "bot" && (
                       <button onClick={() => speakText(msg.text)} style={{ marginTop: 6, fontSize: 10, opacity: 0.5, background: "none", border: "none", cursor: "pointer", color: T.ink, fontFamily: "monospace", letterSpacing: "0.06em" }}
@@ -2935,10 +3104,28 @@ function ChatView({
           {/* Bottom Floating Prompt Card */}
           <div className="p-4 bg-transparent max-w-3xl mx-auto w-full">
             <div className="bg-white rounded-3xl p-3 shadow-sm border border-[#E2D9C2] transition-all focus-within:shadow-md focus-within:border-[#FF3366]">
+              {/* Image Preview */}
+              {attachedImage && (
+                <div className="mb-3 relative inline-block">
+                  <img
+                    src={attachedImage.preview}
+                    alt="แนบรูปภาพ"
+                    className="max-h-32 rounded-lg border border-gray-200"
+                  />
+                  <button
+                    onClick={clearAttachedImage}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold hover:bg-red-600 transition-colors shadow-md"
+                    title="ลบรูปภาพ"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
               <textarea
                 placeholder="พิมพ์ความรู้สึกของคุณ หรือถามโจทย์การบ้าน..."
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
+                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -2951,6 +3138,13 @@ function ChatView({
               />
               <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-1">
                 <div className="flex items-center gap-1.5">
+                  <button onClick={handleAttachImageClick} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="แนบรูปภาพ">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </button>
                   <button onClick={handleSelfie} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="ถ่ายเซลฟี่">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
@@ -2982,7 +3176,7 @@ function ChatView({
                   </button>
                   <button
                     onClick={() => sendMessage()}
-                    disabled={!inputText.trim()}
+                    disabled={!inputText.trim() && !attachedImage}
                     className="w-8 h-8 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm"
                     style={{ backgroundColor: T.salmon }}
                   >
@@ -3146,7 +3340,7 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
         .saf-tab span { position:relative; z-index:1; }
         .saf-item { opacity:0; }
         .saf-arch-row { position:relative; overflow:hidden; }
-        .saf-arch-row::after { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:#C8382A; transform:scaleY(0); transform-origin:bottom; transition:transform 0.3s cubic-bezier(0.22,1,0.36,1); }
+        .saf-arch-row::after { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:#5B7036; transform:scaleY(0); transform-origin:bottom; transition:transform 0.3s cubic-bezier(0.22,1,0.36,1); }
         .saf-arch-row:hover::after { transform:scaleY(1); }
         .saf-arch-row:hover { background:#EDE8DC; }
       `}</style>
@@ -3305,6 +3499,7 @@ export default function App() {
   const [age, setAge] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianStage, setGuardianStage] = useState<"input" | "pending" | "approved">("input");
+  const [guardianVerificationCode, setGuardianVerificationCode] = useState("");
 
   // Check for guardian_token in URL — show guardian confirmation page regardless of device
   useEffect(() => {
@@ -3312,8 +3507,10 @@ export default function App() {
     const token = params.get("guardian_token");
     if (!token) return;
     window.history.replaceState({}, "", window.location.pathname);
-    // Store the token so the confirm page can use it
+    // Extract verification code from token (stored in format: code_timestamp)
+    const code = token.split('_')[0];
     sessionStorage.setItem("jaikrajok:confirm_token", token);
+    sessionStorage.setItem("jaikrajok:confirm_code", code);
     setPage("guardian_confirm");
   }, []);
 
@@ -3413,22 +3610,9 @@ export default function App() {
     }
   }, []);
 
-  // Cross-tab approval: BroadcastChannel (instant) + localStorage poll (fallback for stale tabs)
-  useEffect(() => {
-    if (guardianStage !== "pending") return;
-    const advance = () => {
-      localStorage.removeItem("jaikrajok:guardian_token");
-      localStorage.removeItem("jaikrajok:guardian_pending_user");
-      localStorage.removeItem("jaikrajok:guardian_approved");
-      setGuardianStage("approved");
-    };
-    const bc = new BroadcastChannel("jaikrajok_guardian");
-    bc.onmessage = (e) => { if (e.data === "approved") advance(); };
-    const poll = setInterval(() => {
-      if (localStorage.getItem("jaikrajok:guardian_approved") === "true") advance();
-    }, 1000);
-    return () => { bc.close(); clearInterval(poll); };
-  }, [guardianStage]);
+  // Remove old cross-tab approval logic - now using verification codes instead
+  // Cross-tab approval is no longer needed as parent approves on their device
+  // and child enters the code manually
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUserState(user);
@@ -3519,15 +3703,19 @@ export default function App() {
             stage={guardianStage}
             onSubmitEmail={async (email) => {
               if (!email || !email.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
-              const token = crypto.randomUUID();
+              // Generate 6-digit verification code
+              const code = Math.floor(100000 + Math.random() * 900000).toString();
+              const token = `${code}_${Date.now()}`;
               localStorage.setItem("jaikrajok:guardian_token", token);
+              localStorage.setItem("jaikrajok:guardian_code", code);
               localStorage.setItem("jaikrajok:guardian_pending_user", currentUser?.id ?? "");
+              setGuardianVerificationCode(code);
               const approvalLink = `${window.location.origin}${window.location.pathname}?guardian_token=${token}`;
               try {
                 await fetch("/api/guardian-email", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to_email: email, child_name: currentUser?.name ?? "บุตรหลานของคุณ", approval_link: approvalLink }),
+                  body: JSON.stringify({ to_email: email, child_name: currentUser?.name ?? "บุตรหลานของคุณ", approval_link: approvalLink, verification_code: code }),
                 }).then(r => { if (!r.ok) throw new Error(`${r.status}`); });
                 setGuardianStage("pending");
                 toast("ส่งอีเมลถึงผู้ปกครองเรียบร้อยแล้ว");
@@ -3536,6 +3724,18 @@ export default function App() {
                 console.error("EmailJS error:", err);
                 toast(`ส่งอีเมลไม่สำเร็จ: ${msg}`);
               }
+            }}
+            onVerifyCode={async (inputCode) => {
+              const storedCode = localStorage.getItem("jaikrajok:guardian_code");
+              if (inputCode === storedCode) {
+                localStorage.removeItem("jaikrajok:guardian_token");
+                localStorage.removeItem("jaikrajok:guardian_code");
+                localStorage.removeItem("jaikrajok:guardian_pending_user");
+                setGuardianStage("approved");
+                toast.success("ยืนยันความยินยอมจากผู้ปกครองสำเร็จ");
+                return true;
+              }
+              return false;
             }}
             onNext={() => setPage("privacy")}
             guardianEmail={guardianEmail}
@@ -3555,12 +3755,19 @@ export default function App() {
       }} /></PageWrapper>}
       {page === "guardian_confirm" && (
         <PageWrapper pageKey="guardian_confirm">
-          <GuardianConfirmPage onConfirm={() => {
-            localStorage.setItem("jaikrajok:guardian_approved", "true");
-            new BroadcastChannel("jaikrajok_guardian").postMessage("approved");
-            sessionStorage.removeItem("jaikrajok:confirm_token");
-            toast("ยืนยันความยินยอมเรียบร้อยแล้ว กรุณาให้บุตรหลานดำเนินการต่อบนอุปกรณ์ของตน");
-          }} />
+          <GuardianConfirmPage
+            verificationCode={sessionStorage.getItem("jaikrajok:confirm_code") || ""}
+            onConfirm={() => {
+              const token = sessionStorage.getItem("jaikrajok:confirm_token");
+              const code = sessionStorage.getItem("jaikrajok:confirm_code");
+              if (token && code) {
+                localStorage.setItem(`jaikrajok:guardian_approved_${code}`, "true");
+              }
+              sessionStorage.removeItem("jaikrajok:confirm_token");
+              sessionStorage.removeItem("jaikrajok:confirm_code");
+              toast("ยืนยันความยินยอมเรียบร้อยแล้ว กรุณาบอกรหัสยืนยันกับบุตรหลานเพื่อดำเนินการต่อ");
+            }}
+          />
         </PageWrapper>
       )}
       {page === "app" && (

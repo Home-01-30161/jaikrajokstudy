@@ -800,6 +800,49 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   return { answer, llmReply };
 }
 
+export async function analyzeImageWithCaption(imageBlob: Blob, caption: string = ""): Promise<VisionResult> {
+  let answer: string;
+  try {
+    const visionQuery = caption.trim()
+      ? `วิเคราะห์ภาพนี้ตามคำสั่งของผู้ใช้: "${caption.trim()}". อ่านข้อความ ตัวเลข สูตร ไดอะแกรม และตารางทั้งหมดในภาพอย่างละเอียด`
+      : "อ่านข้อความทั้งหมดในภาพอย่างละเอียด แปลงสูตรคณิตศาสตร์เป็น LaTeX และอธิบายตารางหรือแผนภาพ";
+
+    answer = await callVisionLLM(
+      imageBlob,
+      visionQuery,
+      "image.jpg",
+      TYPHOON_OCR_MODEL,
+      HOMEWORK_VISION_SYSTEM
+    );
+  } catch (e) {
+    console.warn("Image vision failed:", e);
+    answer = "ไม่สามารถอ่านข้อมูลจากภาพได้ในขณะนี้";
+  }
+
+  if (!answer || answer.length < 5) {
+    answer = "ไม่สามารถอ่านข้อมูลจากภาพได้ในขณะนี้";
+  }
+
+  let llmReply: string;
+  try {
+    const prompt = caption.trim()
+      ? `ผู้ใช้ส่งภาพพร้อมคำสั่ง: "${caption.trim()}"\n\nข้อมูลที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 4000)}\n\nคำสั่ง: ตอบคำถามและอธิบายโจทย์/ข้อสงสัยของผู้ใช้เกี่ยวกับภาพนี้อย่างละเอียด จัดรูปแบบ Markdown และ KaTeX $$...$$ ให้ครบถ้วนสมบูรณ์`
+      : `ข้อมูลที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 4000)}\n\nคำสั่ง: อธิบายและวิเคราะห์เนื้อหาในภาพนี้ให้ผู้ใช้เข้าใจง่าย จัดรูปแบบ Markdown และ KaTeX $$...$$ ให้สวยงาม`;
+
+    const rawReply = await callTextLLM(prompt, MATH_SYSTEM_PROMPT, 6144, 0.05);
+    llmReply = fixThaiChoices(rawReply, answer);
+    if (!llmReply || llmReply.length < 20) {
+      llmReply = answer;
+    }
+  } catch (err) {
+    console.error("Vision caption LLM failed:", err);
+    llmReply = answer;
+  }
+
+  return { answer, llmReply };
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 3. AUDIO — Pathumma ptm-asr-1 (primary) + Pathumma AudioQA (fallback)
 // ═══════════════════════════════════════════════════════════════════════════════

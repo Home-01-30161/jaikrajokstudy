@@ -42,17 +42,24 @@
     min-height: 100vh;
   }
 
-  /* Login card mobile */
+  /* Login card mobile - remove rotation */
   .login-form > div {
     max-width: 400px !important;
     width: 100% !important;
     margin: 0 1rem;
     padding: 32px 24px !important;
+    transform: rotate(0deg) !important; /* Remove tilt on mobile */
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important; /* Simplify shadow */
   }
 
   /* Onboarding pages mobile */
   .onb-float, .onb-float2 {
     display: none !important; /* Hide decorative images on mobile */
+  }
+
+  /* Onboarding cards - remove rotation */
+  main > div[style*="rotate"] {
+    transform: rotate(0deg) !important;
   }
 
   /* App shell mobile adjustments */
@@ -375,7 +382,7 @@
 @media (max-width: 768px) {
   /* Larger focus indicators on mobile */
   *:focus-visible {
-    outline: 3px solid #C8382A;
+    outline: 3px solid #5B7036;
     outline-offset: 2px;
   }
 
@@ -389,7 +396,7 @@
     position: absolute;
     top: -40px;
     left: 0;
-    background: #C8382A;
+    background: #5B7036;
     color: white;
     padding: 8px;
     text-decoration: none;

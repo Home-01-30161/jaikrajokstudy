@@ -444,6 +444,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: false,
           rewrite: (path: string) => path.replace(/^\/api/, ''),
         },
+        '/api/guardian-email': {
+          target: 'http://localhost:8000',
+          changeOrigin: false,
+          rewrite: (path: string) => path.replace(/^\/api/, ''),
+        },
         '/api/tavily': {
           target: 'https://api.tavily.com',
           changeOrigin: true,

@@ -294,6 +294,43 @@ const LAND_STYLE = `
     .lp-line-grid { grid-template-columns: 1fr !important; }
     .lp-hero-headline { font-size: clamp(2.4rem, 11vw, 5rem) !important; }
     .lp-chapter-dots { display: none; }
+
+    /* Fix navigation overlap on mobile */
+    .lp-nav-mobile {
+      flex-wrap: wrap !important;
+      gap: 0.5rem !important;
+    }
+
+    /* Better button sizing on mobile */
+    .lp-cta-btn {
+      padding: 0.9rem 1.8rem !important;
+      font-size: 0.9rem !important;
+      white-space: nowrap;
+    }
+
+    /* Fix footer on mobile */
+    footer {
+      padding: 8vh 6vw 6vh !important;
+    }
+
+    /* Optimize video containers */
+    .lp-chapter-media {
+      aspect-ratio: 16 / 10;
+      max-height: 50vh;
+    }
+
+    /* Better text sizing */
+    .lp-hero-headline {
+      font-size: clamp(2.2rem, 10vw, 4rem) !important;
+      line-height: 1.1 !important;
+    }
+
+    /* Fix safety strip wrapping */
+    .lp-safety-strip {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      text-align: left !important;
+    }
   }
 `;
 
@@ -328,7 +365,8 @@ function LPNav({ onEnter }: { onEnter: () => void }) {
   return (
     <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, display: "flex",
       alignItems: "center", justifyContent: "space-between", padding: "1.25rem 2rem",
-      background: `linear-gradient(to bottom, ${LP.bg}F0, transparent)`, backdropFilter: "blur(6px)" }}>
+      background: `linear-gradient(to bottom, ${LP.bg}F0, transparent)`, backdropFilter: "blur(6px)",
+      flexWrap: "wrap", gap: "0.75rem" }} className="lp-nav-mobile">
       <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem" }}>
         <span className="lp-glitch" style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.65rem",
           letterSpacing: "0.14em", textTransform: "uppercase", color: LP.fg, opacity: 0.9 }}>
@@ -339,7 +377,7 @@ function LPNav({ onEnter }: { onEnter: () => void }) {
           กระจกสะท้อนใจ
         </span>
       </div>
-      <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", flexWrap: "wrap" }}>
         <a href="tel:1323" className="lp-hotline"
           aria-label="โทรสายด่วนสุขภาพจิต 1323"
           style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.65rem", color: LP.red,
@@ -550,7 +588,7 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
       </div>
 
       {/* ── SAFETY STRIP ── */}
-      <div style={{ position: "relative", overflow: "hidden", padding: "1.5rem 2rem",
+      <div className="lp-safety-strip" style={{ position: "relative", overflow: "hidden", padding: "1.5rem 2rem",
         background: `${LP.red}10`, borderTop: `1px solid ${LP.red}35`, borderBottom: `1px solid ${LP.red}35`,
         display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
         <video src="/videos/safety-hotline.mp4" autoPlay loop muted playsInline
