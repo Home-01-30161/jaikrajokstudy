@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     }));
 
     console.log(`[search] SearXNG OK — ${results.length} results for: ${query}`);
-    return res.json({ query, results, answer: raw.answers?.[0] ?? undefined });
+    return res.json({ query, results, answer: raw.answers?.[0] ?? undefined, source: "searxng" });
 
   } catch (searxErr) {
     console.warn("[search] SearXNG failed:", searxErr.message, "— trying Tavily fallback");
@@ -66,7 +66,7 @@ export default async function handler(req, res) {
 
     const data = await tavilyResp.json().catch(() => ({}));
     console.log(`[search] Tavily fallback OK — ${data.results?.length ?? 0} results`);
-    return res.status(tavilyResp.status).json(data);
+    return res.status(tavilyResp.status).json({ ...data, source: "tavily" });
 
   } catch (tavilyErr) {
     console.error("[search] Tavily fallback also failed:", tavilyErr.message);

@@ -153,6 +153,14 @@ smoke-test:
       echo "$r" | grep -qE '"text"' \
         && ok "ptm-asr-1" || fail "ptm-asr-1" "$(echo $r | cut -c1-200)"
 
+      echo "── /api/search (SearXNG web search) ─────────────────"
+      r=$(curl -sf -X POST "$API/search" \
+        -H "Content-Type: application/json" \
+        -d '{"query":"ประเทศไทย","max_results":3}' \
+        || echo "CURL_FAIL")
+      echo "$r" | grep -q '"source":"searxng"' \
+        && ok "search (SearXNG)" || fail "search" "$(echo $r | cut -c1-200)"
+
       echo ""
       [ $FAIL -eq 0 ] \
         && echo "✅  All smoke tests passed" \
