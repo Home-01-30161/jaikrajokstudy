@@ -131,3 +131,88 @@
     }
   }
 }
+
+/* Mobile-first responsive utilities */
+@layer utilities {
+  /* Touch-friendly sizing */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Prevent text from overflowing on mobile */
+  .text-wrap-mobile {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+
+  /* Mobile viewport height handling */
+  .min-h-screen-mobile {
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
+  }
+
+  /* Safe area insets for notched devices */
+  @supports (padding: max(0px)) {
+    .safe-top {
+      padding-top: max(env(safe-area-inset-top), 0px);
+    }
+    .safe-bottom {
+      padding-bottom: max(env(safe-area-inset-bottom), 0px);
+    }
+    .safe-left {
+      padding-left: max(env(safe-area-inset-left), 0px);
+    }
+    .safe-right {
+      padding-right: max(env(safe-area-inset-right), 0px);
+    }
+  }
+
+  /* Mobile-specific responsive breakpoints */
+  @media (max-width: 640px) {
+    /* Stack layouts vertically on mobile */
+    .mobile-stack {
+      flex-direction: column !important;
+    }
+
+    /* Full width on mobile */
+    .mobile-full {
+      width: 100% !important;
+    }
+
+    /* Hide on mobile */
+    .mobile-hidden {
+      display: none !important;
+    }
+
+    /* Smaller padding on mobile */
+    .mobile-compact {
+      padding: 0.5rem !important;
+    }
+
+    /* Smaller text on mobile */
+    .mobile-text-sm {
+      font-size: 0.875rem !important;
+    }
+
+    /* Better spacing for mobile cards */
+    .mobile-card-spacing {
+      margin-bottom: 0.75rem !important;
+    }
+  }
+
+  /* Tablet breakpoint adjustments */
+  @media (min-width: 641px) and (max-width: 1023px) {
+    .tablet-hidden {
+      display: none !important;
+    }
+  }
+
+  /* Desktop-only utilities */
+  @media (min-width: 1024px) {
+    .desktop-only {
+      display: block !important;
+    }
+  }
+}

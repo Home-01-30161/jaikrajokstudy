@@ -5,10 +5,14 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0" />
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
     <title>JaiKrajok - กระจกสะท้อนใจ</title>
     <meta name="description" content="JaiKraJok — ผู้ช่วย AI สำหรับนักเรียนไทย ช่วยตอบคำถาม วิเคราะห์การบ้าน และดูแลสุขภาพจิต" />
     <meta name="theme-color" content="#F5EFE6" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="format-detection" content="telephone=yes" />
     <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
     <link rel="apple-touch-icon" href="/favicon.jpg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -16,8 +20,28 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
+      /* Prevent horizontal scroll on mobile */
+      html, body {
+        overflow-x: hidden;
+        width: 100%;
+        max-width: 100vw;
+      }
+
       body, button, input, textarea, select {
         font-family: 'Plus Jakarta Sans', 'Inter', 'Noto Sans Thai', 'Prompt', sans-serif;
+      }
+
+      /* Mobile-specific optimizations */
+      @media (max-width: 768px) {
+        body {
+          -webkit-text-size-adjust: 100%;
+          -webkit-font-smoothing: antialiased;
+        }
+
+        /* Prevent zoom on input focus in iOS */
+        input, select, textarea {
+          font-size: 16px !important;
+        }
       }
       .btn-animate-chars {
         overflow: hidden;
