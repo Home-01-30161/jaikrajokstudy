@@ -19,118 +19,125 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_session
   ON chat_messages(session_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_time
-  ON chat_messages(user_id, created_at DESC)
-  WHERE user_id IS NOT NULL;
+  ON chat_messages(line_user_id, created_at DESC)
+  WHERE line_user_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_source
   ON chat_messages(source, created_at DESC);
 
--- homework_events: user timeline queries
-CREATE INDEX IF NOT EXISTS idx_homework_user_time
-  ON homework_events(anon_user_id, created_at DESC)
-  WHERE anon_user_id IS NOT NULL;
+-- homework_events: user timeline queries (only if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'homework_events') THEN
+    CREATE INDEX IF NOT EXISTS idx_homework_user_time
+      ON homework_events(anon_user_id, created_at DESC)
+      WHERE anon_user_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_homework_session
-  ON homework_events(session_id, created_at DESC)
-  WHERE session_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_homework_session
+      ON homework_events(session_id, created_at DESC)
+      WHERE session_id IS NOT NULL;
+  END IF;
+END $$;
 
--- sessions: active session lookups
-CREATE INDEX IF NOT EXISTS idx_sessions_active
-  ON sessions(ended_at)
-  WHERE ended_at IS NULL;
+-- sessions: active session lookups (only if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions') THEN
+    CREATE INDEX IF NOT EXISTS idx_sessions_active
+      ON sessions(ended_at)
+      WHERE ended_at IS NULL;
+  END IF;
+END $$;
 
--- users: soft delete queries
-CREATE INDEX IF NOT EXISTS idx_users_active
-  ON users(is_active, created_at DESC)
-  WHERE is_active = TRUE;
+-- users: soft delete queries (only if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users') THEN
+    CREATE INDEX IF NOT EXISTS idx_users_active
+      ON users(is_active, created_at DESC)
+      WHERE is_active = TRUE;
+  END IF;
+END $$;
 
 -- ── 2. Data Integrity Constraints ────────────────────────────────────────────
 
+-- Only add constraints if tables exist (from 001_new_schema.sql)
+
 -- emotion_events: validate source_type enum
-ALTER TABLE emotion_events
-  DROP CONSTRAINT IF EXISTS chk_source_type;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'emotion_events') THEN
+    ALTER TABLE emotion_events DROP CONSTRAINT IF EXISTS chk_source_type;
+    ALTER TABLE emotion_events ADD CONSTRAINT chk_source_type
+      CHECK (source_type IN ('face', 'text', 'voice', 'combined'));
 
-ALTER TABLE emotion_events
-  ADD CONSTRAINT chk_source_type
-  CHECK (source_type IN ('face', 'text', 'voice', 'combined'));
+    ALTER TABLE emotion_events DROP CONSTRAINT IF EXISTS chk_sentiment;
+    ALTER TABLE emotion_events ADD CONSTRAINT chk_sentiment
+      CHECK (sentiment_label IN ('positive', 'negative', 'neutral') OR sentiment_label IS NULL);
 
--- emotion_events: validate sentiment_label enum
-ALTER TABLE emotion_events
-  DROP CONSTRAINT IF EXISTS chk_sentiment;
+    ALTER TABLE emotion_events DROP CONSTRAINT IF EXISTS chk_face_emotion;
+    ALTER TABLE emotion_events ADD CONSTRAINT chk_face_emotion
+      CHECK (face_emotion IN ('happy', 'sad', 'angry', 'fearful', 'surprised', 'neutral', 'disgust')
+             OR face_emotion IS NULL);
 
-ALTER TABLE emotion_events
-  ADD CONSTRAINT chk_sentiment
-  CHECK (sentiment_label IN ('positive', 'negative', 'neutral') OR sentiment_label IS NULL);
+    ALTER TABLE emotion_events DROP CONSTRAINT IF EXISTS chk_face_confidence;
+    ALTER TABLE emotion_events ADD CONSTRAINT chk_face_confidence
+      CHECK (face_confidence IS NULL OR (face_confidence >= 0.0 AND face_confidence <= 1.0));
 
--- emotion_events: validate face_emotion enum
-ALTER TABLE emotion_events
-  DROP CONSTRAINT IF EXISTS chk_face_emotion;
-
-ALTER TABLE emotion_events
-  ADD CONSTRAINT chk_face_emotion
-  CHECK (face_emotion IN ('happy', 'sad', 'angry', 'fearful', 'surprised', 'neutral', 'disgust')
-         OR face_emotion IS NULL);
-
--- emotion_events: confidence scores must be 0.0-1.0
-ALTER TABLE emotion_events
-  DROP CONSTRAINT IF EXISTS chk_face_confidence;
-
-ALTER TABLE emotion_events
-  ADD CONSTRAINT chk_face_confidence
-  CHECK (face_confidence IS NULL OR (face_confidence >= 0.0 AND face_confidence <= 1.0));
-
-ALTER TABLE emotion_events
-  DROP CONSTRAINT IF EXISTS chk_sentiment_score;
-
-ALTER TABLE emotion_events
-  ADD CONSTRAINT chk_sentiment_score
-  CHECK (sentiment_score IS NULL OR (sentiment_score >= 0.0 AND sentiment_score <= 1.0));
+    ALTER TABLE emotion_events DROP CONSTRAINT IF EXISTS chk_sentiment_score;
+    ALTER TABLE emotion_events ADD CONSTRAINT chk_sentiment_score
+      CHECK (sentiment_score IS NULL OR (sentiment_score >= 0.0 AND sentiment_score <= 1.0));
+  END IF;
+END $$;
 
 -- schools: validate subscription_plan enum
-ALTER TABLE schools
-  DROP CONSTRAINT IF EXISTS chk_subscription_plan;
-
-ALTER TABLE schools
-  ADD CONSTRAINT chk_subscription_plan
-  CHECK (subscription_plan IN ('free', 'org'));
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'schools') THEN
+    ALTER TABLE schools DROP CONSTRAINT IF EXISTS chk_subscription_plan;
+    ALTER TABLE schools ADD CONSTRAINT chk_subscription_plan
+      CHECK (subscription_plan IN ('free', 'org'));
+  END IF;
+END $$;
 
 -- emotion_alerts: validate alert_type enum
-ALTER TABLE emotion_alerts
-  DROP CONSTRAINT IF EXISTS chk_alert_type;
-
-ALTER TABLE emotion_alerts
-  ADD CONSTRAINT chk_alert_type
-  CHECK (alert_type IN ('continuous_negative', 'crisis_signal', 'high_stress'));
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'emotion_alerts') THEN
+    ALTER TABLE emotion_alerts DROP CONSTRAINT IF EXISTS chk_alert_type;
+    ALTER TABLE emotion_alerts ADD CONSTRAINT chk_alert_type
+      CHECK (alert_type IN ('continuous_negative', 'crisis_signal', 'high_stress'));
+  END IF;
+END $$;
 
 -- sessions: validate session_type enum
-ALTER TABLE sessions
-  DROP CONSTRAINT IF EXISTS chk_session_type;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions') THEN
+    ALTER TABLE sessions DROP CONSTRAINT IF EXISTS chk_session_type;
+    ALTER TABLE sessions ADD CONSTRAINT chk_session_type
+      CHECK (session_type IN ('chat', 'homework', 'voice'));
 
-ALTER TABLE sessions
-  ADD CONSTRAINT chk_session_type
-  CHECK (session_type IN ('chat', 'homework', 'voice'));
-
--- sessions: ended_at must be after started_at
-ALTER TABLE sessions
-  DROP CONSTRAINT IF EXISTS chk_session_times;
-
-ALTER TABLE sessions
-  ADD CONSTRAINT chk_session_times
-  CHECK (ended_at IS NULL OR ended_at >= started_at);
+    ALTER TABLE sessions DROP CONSTRAINT IF EXISTS chk_session_times;
+    ALTER TABLE sessions ADD CONSTRAINT chk_session_times
+      CHECK (ended_at IS NULL OR ended_at >= started_at);
+  END IF;
+END $$;
 
 -- ── 3. Soft Delete Support ───────────────────────────────────────────────────
 
--- Add deleted_at timestamp for audit trail
-ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+-- Add deleted_at timestamp for audit trail (only if users table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users') THEN
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_by TEXT;
 
-CREATE INDEX IF NOT EXISTS idx_users_deleted
-  ON users(deleted_at)
-  WHERE deleted_at IS NOT NULL;
-
--- Add deleted_by for accountability (NULL for self-delete, admin ID for admin delete)
-ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS deleted_by TEXT;
+    CREATE INDEX IF NOT EXISTS idx_users_deleted
+      ON users(deleted_at)
+      WHERE deleted_at IS NOT NULL;
+  END IF;
+END $$;
 
 -- ── 4. Performance Monitoring Columns ─────────────────────────────────────────
 
@@ -142,12 +149,6 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_slow
   ON chat_messages(response_time_ms DESC)
   WHERE response_time_ms > 5000;  -- queries over 5 seconds
 
-ALTER TABLE emotion_events
-  ADD COLUMN IF NOT EXISTS api_latency_ms INT;
-
-ALTER TABLE homework_events
-  ADD COLUMN IF NOT EXISTS processing_time_ms INT;
-
 -- Track token usage for cost monitoring
 ALTER TABLE chat_messages
   ADD COLUMN IF NOT EXISTS tokens_used INT;
@@ -156,36 +157,46 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_tokens
   ON chat_messages(created_at, tokens_used)
   WHERE tokens_used IS NOT NULL;
 
+-- Add latency tracking to other tables (only if they exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'emotion_events') THEN
+    ALTER TABLE emotion_events ADD COLUMN IF NOT EXISTS api_latency_ms INT;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'homework_events') THEN
+    ALTER TABLE homework_events ADD COLUMN IF NOT EXISTS processing_time_ms INT;
+  END IF;
+END $$;
+
 -- ── 5. Fix Foreign Key Inconsistencies ────────────────────────────────────────
 
--- Make session_id a proper foreign key (currently "loose FK" comment)
--- First, clean up any orphaned records
-DELETE FROM emotion_events
-WHERE session_id IS NOT NULL
-  AND session_id NOT IN (SELECT session_id FROM sessions);
+-- Make session_id a proper foreign key (only if tables exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'emotion_events')
+     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions') THEN
+    -- Clean up orphaned records
+    DELETE FROM emotion_events
+    WHERE session_id IS NOT NULL
+      AND session_id NOT IN (SELECT session_id FROM sessions);
 
-DELETE FROM homework_events
-WHERE session_id IS NOT NULL
-  AND session_id NOT IN (SELECT session_id FROM sessions);
+    ALTER TABLE emotion_events DROP CONSTRAINT IF EXISTS fk_emotion_events_session;
+    ALTER TABLE emotion_events ADD CONSTRAINT fk_emotion_events_session
+      FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE SET NULL;
+  END IF;
 
--- Now add the foreign keys
-ALTER TABLE emotion_events
-  DROP CONSTRAINT IF EXISTS fk_emotion_events_session;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'homework_events')
+     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions') THEN
+    -- Clean up orphaned records
+    DELETE FROM homework_events
+    WHERE session_id IS NOT NULL
+      AND session_id NOT IN (SELECT session_id FROM sessions);
 
-ALTER TABLE emotion_events
-  ADD CONSTRAINT fk_emotion_events_session
-  FOREIGN KEY (session_id)
-  REFERENCES sessions(session_id)
-  ON DELETE SET NULL;
-
-ALTER TABLE homework_events
-  DROP CONSTRAINT IF EXISTS fk_homework_events_session;
-
-ALTER TABLE homework_events
-  ADD CONSTRAINT fk_homework_events_session
-  FOREIGN KEY (session_id)
-  REFERENCES sessions(session_id)
-  ON DELETE SET NULL;
+    ALTER TABLE homework_events DROP CONSTRAINT IF EXISTS fk_homework_events_session;
+    ALTER TABLE homework_events ADD CONSTRAINT fk_homework_events_session
+      FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- ── 6. Data Retention Policy (PDPA Compliance) ────────────────────────────────
 
