@@ -1170,10 +1170,13 @@ async function handleImageMessage(event) {
     }
 
     // ── Fallback chain ────────────────────────────────────────────────────────
-    // Selfie mode that produced NO emotion tag → the image likely wasn't a face;
-    // re-run as homework OCR.
-    if (mode === "selfie" && !/\[อารมณ์:/i.test(visionResult)) {
-      console.log("Image detect: selfie mode found no face — retrying as homework");
+    // Selfie mode that produced NO emotion-related content → retry as homework
+    // Check for: [อารมณ์:...] tag OR Thai emotion words (สดใส, เศร้า, สงบ, etc.)
+    const hasEmotionTag = /\[อารมณ์:/i.test(visionResult);
+    const hasEmotionWords = /ใบหน้า|สีหน้า|อารมณ์|รู้สึก|แสดงออก|สดใส|เศร้า|เครียด|สงบ|กังวล|ยิ้ม|หน้าตา|ขยะแขยง/i.test(visionResult);
+
+    if (mode === "selfie" && !hasEmotionTag && !hasEmotionWords && visionResult.length < 150) {
+      console.log("Image detect: selfie mode found no emotion content — retrying as homework");
       mode = "homework";
       visionResult = await visionAnalyze(imageBuffer, contentType, "homework");
     } else if (mode === "homework" && (!visionResult || visionResult.length < 20)) {

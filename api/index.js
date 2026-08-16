@@ -30,9 +30,9 @@ for (const [key, value] of Object.entries(process.env)) {
 const app = express();
 
 // Rate limiting counts real client IPs. The api sits behind two proxies
-// (hackathon reverse proxy → nginx container), so trust all proxy hops:
+// (hackathon reverse proxy → nginx container), so trust 2 proxy hops:
 // req.ip = left-most X-Forwarded-For entry = the real client.
-app.set("trust proxy", true);
+app.set("trust proxy", 2);
 app.use(globalLimiter);
 
 // ── Security headers (applied to every API response) ─────────────────────────
