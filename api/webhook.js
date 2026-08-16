@@ -203,6 +203,64 @@ async function downloadLineContent(messageId) {
 
 // ── Upstream API calls ────────────────────────────────────────────────────────
 
+/**
+ * Search the web using SearXNG API.
+ * Returns array of {title, url, content} or empty array on failure.
+ */
+async function searchWeb(query) {
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      format: "json",
+      language: "th-TH",
+      engines: "google,duckduckgo,bing",
+      categories: "general",
+    });
+
+    const res = await fetch(`http://localhost:3000/api/search?${params}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    return (data.results || []).slice(0, 5).map(r => ({
+      title: r.title || "",
+      url: r.url || "",
+      content: r.content || "",
+    }));
+  } catch (err) {
+    console.error("Search error:", err?.message);
+    return [];
+  }
+}
+
+/**
+ * Determine if a query needs web search based on content analysis.
+ */
+function needsWebSearch(message) {
+  const lower = message.toLowerCase().trim();
+
+  // Math expressions and simple calculations don't need search
+  if (/^[\d\s+\-*/()×÷.]+$/.test(message)) return false;
+  if (/^\d+\s*[+\-*/×÷]\s*\d+/.test(message)) return false;
+
+  // Simple greetings and emotions don't need search
+  if (/^(สวัสดี|หวัดดี|ดีจ้า|ว่าไง|hello|hi|hey|เหนื่อย|เครียด|เศร้า|สบายดี)/.test(lower)) return false;
+
+  // Questions with "who", "what", "when", "where", "why" likely need search
+  if (/(ใคร|อะไร|เมื่อไร|ที่ไหน|ทำไม|อย่างไร|who|what|when|where|why|how)/.test(lower)) return true;
+
+  // Current/recent time indicators need search
+  if (/(ปัจจุบัน|ตอนนี้|วันนี้|เดี๋ยวนี้|ล่าสุด|current|now|today|recent|latest)/.test(lower)) return true;
+
+  // Questions ending with question mark likely need information
+  if (/[?？]$/.test(message)) return true;
+
+  // Default to no search for casual conversation
+  return false;
+}
+
 /** ThaiLLM text completion (with optional conversation history). */
 async function llmReply(text, history = []) {
   const apiKey = process.env.TOKENMIND_API_KEY;
@@ -874,7 +932,31 @@ async function handleTextMessage(event) {
   if (isCrisis) {
     reply = CRISIS_REPLY;
   } else {
-    reply = (await llmReply(text)) || FALLBACK;
+    // Get recent conversation history for context
+    const history = await getRecentMessages(userId, state.session_id, 8);
+
+    // Use smart search detection - only search when needed
+    if (needsWebSearch(text)) {
+      // Try web search for information queries
+      try {
+        const searchResult = await searchWeb(text);
+        if (searchResult && searchResult.length > 0) {
+          const snippets = searchResult.slice(0, 5)
+            .map((r, i) => `[${i + 1}] ${r.title}\n${r.content?.slice(0, 300) || ""}`)
+            .join("\n\n");
+          const augmented = `${text}\n\n---\nผลการค้นหาเว็บ:\n${snippets}\n\nตอบคำถามโดยอิงจากผลการค้นหา อ้างอิงด้วย [1], [2], ... ห้ามแต่งข้อมูลที่ไม่มี`;
+          reply = (await llmReply(augmented, history)) || FALLBACK;
+        } else {
+          reply = (await llmReply(text, history)) || FALLBACK;
+        }
+      } catch (err) {
+        console.error("Search error:", err?.message);
+        reply = (await llmReply(text, history)) || FALLBACK;
+      }
+    } else {
+      // Simple conversation - no search needed
+      reply = (await llmReply(text, history)) || FALLBACK;
+    }
   }
 
   // Mood tracking

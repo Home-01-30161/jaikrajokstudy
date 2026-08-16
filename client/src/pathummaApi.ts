@@ -989,18 +989,51 @@ export async function chat(
 }
 
 /**
- * Chat with forced web search enabled.
- * Always calls the web search path regardless of keyword detection.
+ * Determine if a query needs web search based on content analysis.
+ * Returns true for questions about current events, facts, or information lookup.
+ */
+function needsWebSearch(message: string): boolean {
+  const lower = message.toLowerCase().trim();
+
+  // Math expressions and simple calculations don't need search
+  if (/^[\d\s+\-*/()×÷.]+$/.test(message)) return false;
+  if (/^\d+\s*[+\-*/×÷]\s*\d+/.test(message)) return false;
+
+  // Simple greetings and emotions don't need search
+  if (/^(สวัสดี|หวัดดี|ดีจ้า|ว่าไง|hello|hi|hey|เหนื่อย|เครียด|เศร้า|สบายดี)/.test(lower)) return false;
+
+  // Questions with "who", "what", "when", "where", "why" likely need search
+  if (/(ใคร|อะไร|เมื่อไร|ที่ไหน|ทำไม|อย่างไร|who|what|when|where|why|how)/.test(lower)) return true;
+
+  // Current/recent time indicators need search
+  if (/(ปัจจุบัน|ตอนนี้|วันนี้|เดี๋ยวนี้|ล่าสุด|current|now|today|recent|latest)/.test(lower)) return true;
+
+  // Questions ending with question mark likely need information
+  if (/[?？]$/.test(message)) return true;
+
+  // Default to no search for casual conversation
+  return false;
+}
+
+/**
+ * Smart chat with conditional web search.
+ * Analyzes the input and only uses web search when needed.
  */
 export async function chatWithSearch(
   userMessage: string,
   history?: { role: string; text: string }[]
 ): Promise<ChatResult> {
-  // Fetch search results and emotion in parallel
-  const [searchData, emotionKey] = await Promise.all([
-    searchWeb(userMessage, 5, "basic").catch(() => ({ results: [], query: userMessage })),
-    analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
-  ]);
+  const emotionKey = await analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage));
+
+  // Check if this query needs web search
+  if (!needsWebSearch(userMessage)) {
+    // Simple query - use LLM directly without search
+    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history);
+    return { reply, emotionKey, searchUsed: false, sources: [] };
+  }
+
+  // Fetch search results for information queries
+  const searchData = await searchWeb(userMessage, 5, "basic").catch(() => ({ results: [], query: userMessage }));
 
   if (searchData.results.length === 0) {
     // No search results — fall back to regular LLM
