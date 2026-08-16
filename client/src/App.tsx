@@ -1104,7 +1104,7 @@ function GuardianPage({ stage, onSubmitEmail, onNext, guardianEmail, setGuardian
           ขอความยินยอม<br />จากผู้ปกครอง
         </h2>
         <p className="grd-el" style={{ opacity: 0, fontFamily: "'Noto Sans Thai', sans-serif", fontSize: 14, color: "#1A120899", marginBottom: 32, lineHeight: 1.7 }}>
-          เนื่องจากคุณอายุต่ำกว่า 18 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณก่อนเข้าใช้งาน ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)
+          เนื่องจากคุณอายุต่ำกว่า 20 ปี เราจำเป็นต้องได้รับความยินยอมจากผู้ปกครองของคุณก่อนเข้าใช้งาน ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)
         </p>
 
         {stage === "input" && (
@@ -1286,6 +1286,35 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   // Ref so saveWebMessage is always current inside useCallback closures
   const lineUserIdRef = useRef<string | null>(getOrCreateWebUserId());
   lineUserIdRef.current = getOrCreateWebUserId();
+
+  // PDPA: delete all server-side records for this user (right to erasure)
+  const deleteRemoteUserData = async () => {
+    const uid = lineUserIdRef.current;
+    if (!uid) return;
+    try {
+      await fetch("/api/user-data", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ line_user_id: uid }),
+      });
+    } catch (e) {
+      console.error("[deleteRemoteUserData] failed:", e);
+    }
+  };
+
+  // PDPA: fetch server-side records and merge into the local JSON export
+  const fetchRemoteUserData = async (): Promise<Record<string, unknown> | null> => {
+    const uid = lineUserIdRef.current;
+    if (!uid) return null;
+    try {
+      const res = await fetch(`/api/user-data/export?line_user_id=${encodeURIComponent(uid)}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error("[fetchRemoteUserData] failed:", e);
+      return null;
+    }
+  };
 
   const saveWebMessage = (role: "user" | "bot", text: string) => {
     const uid = lineUserIdRef.current;
@@ -2123,14 +2152,16 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
                   trendData={trendData}
                   logEntries={logEntries}
                   onDeleteEntry={(id) => { setLogEntries((prev) => prev.filter((e) => e.id !== id)); toast("ลบรายการแล้ว"); }}
-                  onClearAll={() => {
-                    if (window.confirm("ยืนยันลบข้อมูลแนวโน้มอารมณ์ทั้งหมดของคุณ?")) {
+                  onClearAll={async () => {
+                    if (window.confirm("ยืนยันลบข้อมูลแนวโน้มอารมณ์ทั้งหมดของคุณ? (รวมข้อมูลบนเซิร์ฟเวอร์)")) {
                       setTrendData([]); setLogEntries([]); setConcernStreak(0);
+                      await deleteRemoteUserData();
                       toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
                     }
                   }}
-                  onExport={() => {
-                    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries }, null, 2)], { type: "application/json" });
+                  onExport={async () => {
+                    const remote = await fetchRemoteUserData();
+                    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries, server: remote }, null, 2)], { type: "application/json" });
                     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
                     a.click(); URL.revokeObjectURL(a.href);
                     toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
@@ -2143,15 +2174,17 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
                 <SafetyView
                   age={age}
                   guardianConsent={guardianConsent}
-                  onExport={() => {
-                    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries }, null, 2)], { type: "application/json" });
+                  onExport={async () => {
+                    const remote = await fetchRemoteUserData();
+                    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), trendData, logEntries, server: remote }, null, 2)], { type: "application/json" });
                     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "jaikrajok-my-data.json" });
                     a.click(); URL.revokeObjectURL(a.href);
                     toast("ส่งออกข้อมูลของฉันเรียบร้อยแล้ว");
                   }}
-                  onClearAll={() => {
-                    if (window.confirm("ยืนยันลบข้อมูลทั้งหมดของคุณ?")) {
+                  onClearAll={async () => {
+                    if (window.confirm("ยืนยันลบข้อมูลทั้งหมดของคุณ? (รวมข้อมูลบนเซิร์ฟเวอร์)")) {
                       setTrendData([]); setLogEntries([]);
+                      await deleteRemoteUserData();
                       toast("ลบข้อมูลทั้งหมดเรียบร้อยแล้ว");
                     }
                   }}
@@ -3475,7 +3508,7 @@ export default function App() {
             setAge={setAge}
             onNext={() => {
               const ageNum = parseInt(age);
-              setPage(ageNum < 18 ? "guardian" : "privacy");
+              setPage(ageNum < 20 ? "guardian" : "privacy");
             }}
           />
         </PageWrapper>

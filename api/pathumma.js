@@ -5,16 +5,25 @@ export default async function handler(req, res) {
   const contentType = req.headers["content-type"] ?? "";
   const isForm = contentType.includes("multipart/form-data");
 
-  const upstream = await fetch(`https://api.aiforthai.in.th${path}`, {
-    method: req.method,
-    headers: isForm
-      ? { Apikey: process.env.PATHUMMA_API_KEY, "X-lib": "jaikrajok-web" }
-      : { "Content-Type": "application/json", Apikey: process.env.PATHUMMA_API_KEY, "X-lib": "jaikrajok-web" },
-    body: req.method !== "GET" ? req : undefined,
-    // ponytail: duplex needed for streaming request body in Node 18+
-    duplex: "half",
-  });
+  try {
+    // Buffer the full body first — piping req directly into undici fetch
+    // causes connection resets on multipart form-data (binary) payloads
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const rawBody = Buffer.concat(chunks);
 
-  const data = await upstream.json().catch(() => ({}));
-  res.status(upstream.status).json(data);
+    const upstream = await fetch(`https://api.aiforthai.in.th${path}`, {
+      method: req.method,
+      headers: isForm
+        ? { "Content-Type": contentType, Apikey: process.env.PATHUMMA_API_KEY, "X-lib": "jaikrajok-web" }
+        : { "Content-Type": "application/json", Apikey: process.env.PATHUMMA_API_KEY, "X-lib": "jaikrajok-web" },
+      body: req.method !== "GET" ? rawBody : undefined,
+    });
+
+    const data = await upstream.json().catch(() => ({}));
+    res.status(upstream.status).json(data);
+  } catch (err) {
+    const isTimeout = err?.name === "TimeoutError" || err?.name === "AbortError";
+    res.status(504).json({ error: isTimeout ? "pathumma upstream timeout" : String(err?.message) });
+  }
 }

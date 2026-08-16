@@ -79,6 +79,8 @@ services:
       PATHUMMA_API_KEY:            "${APP_PATHUMMA_API_KEY}"
       TAVILY_API_KEY:              "${APP_TAVILY_API_KEY}"
       GEMINI_API_KEY:              "${APP_GEMINI_API_KEY}"
+      ENCRYPTION_KEY:              "${APP_ENCRYPTION_KEY:-}"
+      ADMIN_EMAIL:                 "${APP_ADMIN_EMAIL:-}"
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:

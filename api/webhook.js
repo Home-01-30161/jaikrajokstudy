@@ -6,6 +6,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { createHmac, randomUUID } from "crypto";
 import pg from "pg";
+import { encryptText, decryptText, hashId } from "./privacy.js";
+import { recordAlert } from "./notify.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -106,16 +108,23 @@ async function ensureDB() {
 /** Get or create a user-state row, return it. */
 async function getUserState(userId) {
   await ensureDB();
+  const key = hashId(userId);
+  // Match the hashed id first; raw id is a legacy fallback (pre-004 rows)
+  const found = await pool.query(
+    `SELECT * FROM line_user_state WHERE line_user_id = ANY($1::text[])`,
+    [[key, userId]]
+  );
+  if (found.rows.length > 0) return found.rows[0];
   // INSERT … ON CONFLICT DO NOTHING ensures idempotency
   await pool.query(
     `INSERT INTO line_user_state (line_user_id, session_id)
      VALUES ($1, $2)
      ON CONFLICT (line_user_id) DO NOTHING`,
-    [userId, randomUUID()]
+    [key, randomUUID()]
   );
   const { rows } = await pool.query(
-    `SELECT * FROM line_user_state WHERE line_user_id = $1`,
-    [userId]
+    `SELECT * FROM line_user_state WHERE line_user_id = ANY($1::text[])`,
+    [[key, userId]]
   );
   return rows[0];
 }
@@ -126,20 +135,21 @@ async function updateUserState(userId, updates) {
     "session_id", "session_num", "concern_streak",
     "pending_image_msgid", "trend_json",
   ];
+  const key = hashId(userId);
   const fields = [];
   const vals   = [];
   let idx = 1;
-  for (const key of ALLOWED) {
-    if (key in updates) {
-      fields.push(`${key} = $${idx++}`);
-      vals.push(updates[key] ?? null);
+  for (const k of ALLOWED) {
+    if (k in updates) {
+      fields.push(`${k} = $${idx++}`);
+      vals.push(updates[k] ?? null);
     }
   }
   if (fields.length === 0) return;
   fields.push(`updated_at = NOW()`);
-  vals.push(userId);
+  vals.push([key, userId]);
   await pool.query(
-    `UPDATE line_user_state SET ${fields.join(", ")} WHERE line_user_id = $${idx}`,
+    `UPDATE line_user_state SET ${fields.join(", ")} WHERE line_user_id = ANY($${idx}::text[])`,
     vals
   );
 }
@@ -149,11 +159,11 @@ async function getRecentMessages(userId, limit = 10) {
   try {
     const { rows } = await pool.query(
       `SELECT role, text FROM chat_messages
-       WHERE line_user_id = $1 AND source = 'line'
+       WHERE line_user_id = ANY($1::text[]) AND source = 'line'
        ORDER BY created_at DESC LIMIT $2`,
-      [userId, limit]
+      [[hashId(userId), userId], limit]
     );
-    return rows.reverse();
+    return rows.reverse().map((r) => ({ ...r, text: decryptText(r.text) }));
   } catch (err) {
     console.error("getRecentMessages error:", err?.message);
     return [];
@@ -168,7 +178,7 @@ async function saveToDB(userId, role, text, sessionId, sessionTitle, responseTim
          (line_user_id, role, text, source, session_id, session_title, response_time_ms)
          VALUES ($1, $2, $3, 'line', $4, $5, $6)
          RETURNING id`,
-      [userId, role, text, sessionId, sessionTitle, responseTimeMs]
+      [hashId(userId), role, encryptText(String(text).slice(0, 8000)), sessionId, sessionTitle, responseTimeMs]
     );
     return rows[0]?.id || null;
   } catch (err) {
@@ -199,7 +209,7 @@ async function saveToDBOld(userId, role, text, sessionId, sessionTitle) {
       `INSERT INTO chat_messages
          (line_user_id, role, text, source, session_id, session_title)
        VALUES ($1, $2, $3, 'line', $4, $5)`,
-      [userId, role, String(text).slice(0, 4000), sessionId || null, sessionTitle || null]
+      [hashId(userId), role, encryptText(String(text).slice(0, 8000)), sessionId || null, sessionTitle || null]
     );
   } catch (err) {
     console.error("DB save error:", err?.message);
@@ -260,6 +270,7 @@ async function downloadLineContent(messageId) {
  */
 async function searchWeb(query) {
   try {
+    const searxngBase = process.env.SEARXNG_URL ?? "http://searxng:8080";
     const params = new URLSearchParams({
       q: query,
       format: "json",
@@ -268,7 +279,8 @@ async function searchWeb(query) {
       categories: "general",
     });
 
-    const res = await fetch(`http://localhost:3000/api/search?${params}`, {
+    const res = await fetch(`${searxngBase}/search?${params}`, {
+      headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(8000),
     });
 
@@ -312,21 +324,42 @@ function needsWebSearch(message) {
   return false;
 }
 
+/** Rough token estimation — Thai ≈ 1 token / 1.5 chars, Latin ≈ 1 token / 4 chars */
+function estimateTokens(s) {
+  if (!s) return 0;
+  const thai = (s.match(/[ก-๙]/g) || []).length;
+  return Math.ceil(thai / 1.5) + Math.ceil((s.length - thai) / 4);
+}
+
 /** ThaiLLM text completion (with optional conversation history). */
 async function llmReply(text, history = []) {
   const apiKey = process.env.TOKENMIND_API_KEY;
   if (!apiKey) return null;
   try {
+    // Keep the most RECENT history messages that fit the input budget, so
+    // long questions and older context are not dropped by a fixed slice(-8).
+    const MAX_OUTPUT_TOKENS = 1024;          // ~700-800 Thai words of answer
+    const CONTEXT_LIMIT     = 7000;          // safe margin under ThaiLLM-8B's 8K context
+    let budget = CONTEXT_LIMIT - MAX_OUTPUT_TOKENS
+      - estimateTokens(SYSTEM_PROMPT) - estimateTokens(text);
+    const trimmed = [];
+    for (let i = history.length - 1; i >= 0 && budget > 0; i--) {
+      const cost = estimateTokens(history[i].text);
+      if (cost > budget && trimmed.length > 0) break;
+      trimmed.unshift(history[i]);
+      budget -= cost;
+    }
+
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
-      ...history.slice(-8).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text })),
+      ...trimmed.map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text })),
       { role: "user", content: text },
     ];
     const res = await fetch("https://tokenmind.pathumma.in.th/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "thaillm-8b", messages, max_tokens: 512, temperature: 0.4 }),
-      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({ model: "thaillm-8b", messages, max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.4 }),
+      signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -932,8 +965,8 @@ async function handleTextMessage(event) {
   if (isCrisis) {
     reply = CRISIS_REPLY;
   } else {
-    // Get recent conversation history for context
-    const history = await getRecentMessages(userId, state.session_id, 8);
+    // Get recent conversation history for context (llmReply trims by token budget)
+    const history = await getRecentMessages(userId, 30);
 
     // Use smart search detection - only search when needed
     if (needsWebSearch(text)) {
@@ -979,6 +1012,20 @@ async function handleTextMessage(event) {
     trend_json:     JSON.stringify(newTrend),
     concern_streak: newStreak,
   });
+
+  // Human-in-the-loop — record + email admin on crisis or streak escalation
+  if (isCrisis || newStreak >= 3) {
+    try {
+      await recordAlert({
+        userId,
+        alert_type: isCrisis ? "crisis_signal" : "continuous_negative",
+        consecutive_negative: newStreak,
+        message_shown_to_user: reply,
+      });
+    } catch (err) {
+      console.error("recordAlert error:", err?.message);
+    }
+  }
 
   // Build reply messages
   const messages = [{ type: "text", text: reply.slice(0, 5000) }];
@@ -1040,17 +1087,24 @@ async function handleImageMessage(event) {
       messages: [
         {
           role: "system",
-          content: "You are an image classifier. Analyze if this image contains: (A) a person's face/selfie, or (B) text/homework/documents. Reply with only 'SELFIE' or 'HOMEWORK'."
+          content:
+            "You are an image classifier for a study-assistant bot. Determine: " +
+            "(A) does the image contain READABLE TEXT / homework / documents / questions / equations? " +
+            "(B) does the image contain a person's face? " +
+            "Rules: if ANY text is visible — handwriting, printed questions, equations, " +
+            "phone/computer screenshots, worksheets, whiteboards — then has_text = true, " +
+            "EVEN IF a person's hand, arm or face also appears in the frame. " +
+            'Reply with ONLY JSON: {"has_text": true/false, "has_face": true/false}'
         },
         {
           role: "user",
           content: [
             { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-            { type: "text", text: "Classify this image as SELFIE or HOMEWORK." },
+            { type: "text", text: "Analyze this image." },
           ],
         },
       ],
-      max_tokens: 10,
+      max_tokens: 60,
       temperature: 0.1,
     };
 
@@ -1064,13 +1118,52 @@ async function handleImageMessage(event) {
     if (!detectionRes.ok) throw new Error(`Detection failed: ${detectionRes.status}`);
 
     const detectionData = await detectionRes.json();
-    const classification = (detectionData?.choices?.[0]?.message?.content?.trim() || "").toUpperCase();
+    const detRaw = (detectionData?.choices?.[0]?.message?.content || "").trim();
 
-    // Determine mode based on classification
-    const mode = classification.includes("SELFIE") ? "selfie" : "homework";
+    // Parse JSON result; fall back to keyword heuristics if parsing fails
+    let hasText = false, hasFace = false;
+    const jsonMatch = detRaw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const det = JSON.parse(jsonMatch[0]);
+        hasText = !!det.has_text;
+        hasFace = !!det.has_face;
+      } catch { /* fall through to heuristics */ }
+    }
+    if (!jsonMatch) {
+      hasText = /text|homework|document|handwriting|equation|question|exercise/i.test(detRaw);
+      hasFace = /selfie|face|person/i.test(detRaw) && !hasText;
+    }
 
-    // Process image with detected mode
-    const visionResult = await visionAnalyze(imageBuffer, contentType, mode);
+    // Text beats face: a photo of a person holding a worksheet is HOMEWORK.
+    // Only a clean selfie (face, no text) goes to emotion analysis.
+    let mode = hasFace && !hasText ? "selfie" : "homework";
+
+    // Process image with detected mode (first attempt wrapped so an error or a
+    // wrong-mode result can fall through to the other mode).
+    let visionResult = "";
+    try {
+      visionResult = await visionAnalyze(imageBuffer, contentType, mode);
+    } catch (err) {
+      console.warn(`Image detect: ${mode} analysis failed (${err?.message}) — trying other mode`);
+      mode = mode === "selfie" ? "homework" : "selfie";
+      visionResult = await visionAnalyze(imageBuffer, contentType, mode);
+    }
+
+    // ── Fallback chain ────────────────────────────────────────────────────────
+    // Selfie mode that produced NO emotion tag → the image likely wasn't a face;
+    // re-run as homework OCR.
+    if (mode === "selfie" && !/\[อารมณ์:/i.test(visionResult)) {
+      console.log("Image detect: selfie mode found no face — retrying as homework");
+      mode = "homework";
+      visionResult = await visionAnalyze(imageBuffer, contentType, "homework");
+    } else if (mode === "homework" && (!visionResult || visionResult.length < 20)) {
+      // Homework mode that found no text at all → probably a selfie; retry once
+      console.log("Image detect: homework mode found no text — retrying as selfie");
+      mode = "selfie";
+      visionResult = await visionAnalyze(imageBuffer, contentType, "selfie");
+    }
+
     const responseTime = Date.now() - startTime;
 
     await saveToDB(userId, "user", `[รูปภาพ] ${mode === "selfie" ? "เซลฟี่" : "การบ้าน"}`, state.session_id, sessionTitle);
@@ -1097,6 +1190,16 @@ async function handleImageMessage(event) {
       const messages = [{ type: "text", text: visionResult.slice(0, 5000) }];
       if (mood === "negative" && newStreak >= 3) {
         messages.push({ type: "flex", altText: "กระจกเป็นห่วงคุณ", contents: buildEscalationFlex() });
+        try {
+          await recordAlert({
+            userId,
+            alert_type: "continuous_negative",
+            consecutive_negative: newStreak,
+            message_shown_to_user: visionResult.slice(0, 200),
+          });
+        } catch (err) {
+          console.error("recordAlert error (selfie):", err?.message);
+        }
       }
       await fetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",

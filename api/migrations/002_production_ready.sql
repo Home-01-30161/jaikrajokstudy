@@ -8,22 +8,29 @@
 --    2. Add CHECK constraints for data integrity
 --    3. Add soft delete support
 --    4. Add performance monitoring columns
---    5. Fix foreign key inconsistencies
---    6. Create data retention cleanup function
+--    5. Create data retention cleanup function
+--
+--  NOTE: chat_messages is created lazily by history.js / webhook.js at
+--  runtime, so every statement touching it is guarded by an existence check.
 -- ============================================================
 
 -- ── 1. Missing Indexes (critical for performance at scale) ──────────────────
 
 -- chat_messages: most-queried table, needs session and user indexes
-CREATE INDEX IF NOT EXISTS idx_chat_messages_session
-  ON chat_messages(session_id, created_at DESC);
+DO $$
+BEGIN
+  IF to_regclass('public.chat_messages') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+      ON chat_messages(session_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_chat_messages_user_time
-  ON chat_messages(line_user_id, created_at DESC)
-  WHERE line_user_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_user_time
+      ON chat_messages(line_user_id, created_at DESC)
+      WHERE line_user_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_chat_messages_source
-  ON chat_messages(source, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_source
+      ON chat_messages(source, created_at DESC);
+  END IF;
+END $$;
 
 -- homework_events: user timeline queries (only if table exists)
 DO $$
@@ -59,9 +66,17 @@ BEGIN
   END IF;
 END $$;
 
--- ── 2. Data Integrity Constraints ────────────────────────────────────────────
+-- emotion_alerts: lookups by hashed user id (only if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'emotion_alerts') THEN
+    ALTER TABLE emotion_alerts ADD COLUMN IF NOT EXISTS line_user_id_hash TEXT;
+    CREATE INDEX IF NOT EXISTS idx_alerts_user_hash
+      ON emotion_alerts (line_user_id_hash, triggered_at DESC);
+  END IF;
+END $$;
 
--- Only add constraints if tables exist (from 001_new_schema.sql)
+-- ── 2. Data Integrity Constraints ────────────────────────────────────────────
 
 -- emotion_events: validate source_type enum
 DO $$
@@ -141,21 +156,22 @@ END $$;
 
 -- ── 4. Performance Monitoring Columns ─────────────────────────────────────────
 
--- Track API response times for debugging slow queries
-ALTER TABLE chat_messages
-  ADD COLUMN IF NOT EXISTS response_time_ms INT;
+DO $$
+BEGIN
+  IF to_regclass('public.chat_messages') IS NOT NULL THEN
+    ALTER TABLE chat_messages
+      ADD COLUMN IF NOT EXISTS response_time_ms INT,
+      ADD COLUMN IF NOT EXISTS tokens_used INT;
 
-CREATE INDEX IF NOT EXISTS idx_chat_messages_slow
-  ON chat_messages(response_time_ms DESC)
-  WHERE response_time_ms > 5000;  -- queries over 5 seconds
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_slow
+      ON chat_messages(response_time_ms DESC)
+      WHERE response_time_ms > 5000;
 
--- Track token usage for cost monitoring
-ALTER TABLE chat_messages
-  ADD COLUMN IF NOT EXISTS tokens_used INT;
-
-CREATE INDEX IF NOT EXISTS idx_chat_messages_tokens
-  ON chat_messages(created_at, tokens_used)
-  WHERE tokens_used IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_tokens
+      ON chat_messages(created_at, tokens_used)
+      WHERE tokens_used IS NOT NULL;
+  END IF;
+END $$;
 
 -- Add latency tracking to other tables (only if they exist)
 DO $$
@@ -168,37 +184,7 @@ BEGIN
   END IF;
 END $$;
 
--- ── 5. Fix Foreign Key Inconsistencies ────────────────────────────────────────
-
--- Make session_id a proper foreign key (only if tables exist)
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'emotion_events')
-     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions') THEN
-    -- Clean up orphaned records
-    DELETE FROM emotion_events
-    WHERE session_id IS NOT NULL
-      AND session_id NOT IN (SELECT session_id FROM sessions);
-
-    ALTER TABLE emotion_events DROP CONSTRAINT IF EXISTS fk_emotion_events_session;
-    ALTER TABLE emotion_events ADD CONSTRAINT fk_emotion_events_session
-      FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE SET NULL;
-  END IF;
-
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'homework_events')
-     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions') THEN
-    -- Clean up orphaned records
-    DELETE FROM homework_events
-    WHERE session_id IS NOT NULL
-      AND session_id NOT IN (SELECT session_id FROM sessions);
-
-    ALTER TABLE homework_events DROP CONSTRAINT IF EXISTS fk_homework_events_session;
-    ALTER TABLE homework_events ADD CONSTRAINT fk_homework_events_session
-      FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE SET NULL;
-  END IF;
-END $$;
-
--- ── 6. Data Retention Policy (PDPA Compliance) ────────────────────────────────
+-- ── 5. Data Retention Policy (PDPA Compliance) ────────────────────────────────
 
 -- Function to clean up old data (90-day retention)
 CREATE OR REPLACE FUNCTION cleanup_old_data(retention_days INT DEFAULT 90)
@@ -213,53 +199,62 @@ BEGIN
   cutoff_date := NOW() - (retention_days || ' days')::INTERVAL;
 
   -- Delete old chat messages
-  DELETE FROM chat_messages
-  WHERE created_at < cutoff_date;
-  GET DIAGNOSTICS deleted_count = ROW_COUNT;
-  table_name := 'chat_messages';
-  rows_deleted := deleted_count;
-  RETURN NEXT;
+  IF to_regclass('public.chat_messages') IS NOT NULL THEN
+    DELETE FROM chat_messages
+    WHERE created_at < cutoff_date;
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    table_name := 'chat_messages';
+    rows_deleted := deleted_count;
+    RETURN NEXT;
+  END IF;
 
   -- Delete old emotion events (keep aggregated daily_emotion_summary)
-  DELETE FROM emotion_events
-  WHERE detected_at < cutoff_date;
-  GET DIAGNOSTICS deleted_count = ROW_COUNT;
-  table_name := 'emotion_events';
-  rows_deleted := deleted_count;
-  RETURN NEXT;
+  IF to_regclass('public.emotion_events') IS NOT NULL THEN
+    DELETE FROM emotion_events
+    WHERE detected_at < cutoff_date;
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    table_name := 'emotion_events';
+    rows_deleted := deleted_count;
+    RETURN NEXT;
+  END IF;
 
   -- Delete old homework events
-  DELETE FROM homework_events
-  WHERE created_at < cutoff_date;
-  GET DIAGNOSTICS deleted_count = ROW_COUNT;
-  table_name := 'homework_events';
-  rows_deleted := deleted_count;
-  RETURN NEXT;
+  IF to_regclass('public.homework_events') IS NOT NULL THEN
+    DELETE FROM homework_events
+    WHERE created_at < cutoff_date;
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    table_name := 'homework_events';
+    rows_deleted := deleted_count;
+    RETURN NEXT;
+  END IF;
 
   -- Delete resolved emotion alerts older than 1 year
-  DELETE FROM emotion_alerts
-  WHERE resolved_at IS NOT NULL
-    AND resolved_at < (NOW() - INTERVAL '1 year');
-  GET DIAGNOSTICS deleted_count = ROW_COUNT;
-  table_name := 'emotion_alerts';
-  rows_deleted := deleted_count;
-  RETURN NEXT;
+  IF to_regclass('public.emotion_alerts') IS NOT NULL THEN
+    DELETE FROM emotion_alerts
+    WHERE resolved_at IS NOT NULL
+      AND resolved_at < (NOW() - INTERVAL '1 year');
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    table_name := 'emotion_alerts';
+    rows_deleted := deleted_count;
+    RETURN NEXT;
+  END IF;
 
   -- Delete ended sessions older than retention period
-  DELETE FROM sessions
-  WHERE ended_at IS NOT NULL
-    AND ended_at < cutoff_date;
-  GET DIAGNOSTICS deleted_count = ROW_COUNT;
-  table_name := 'sessions';
-  rows_deleted := deleted_count;
-  RETURN NEXT;
+  IF to_regclass('public.sessions') IS NOT NULL THEN
+    DELETE FROM sessions
+    WHERE ended_at IS NOT NULL
+      AND ended_at < cutoff_date;
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    table_name := 'sessions';
+    rows_deleted := deleted_count;
+    RETURN NEXT;
+  END IF;
 
   RETURN;
 END;
 $$ LANGUAGE plpgsql;
 
 -- Grant execute permission to application user
--- (Adjust role name based on your setup)
 GRANT EXECUTE ON FUNCTION cleanup_old_data TO PUBLIC;
 
 -- Create a table to track cleanup runs
@@ -272,31 +267,25 @@ CREATE TABLE IF NOT EXISTS data_retention_log (
   run_duration_ms INT
 );
 
--- ── 7. Vacuum and Analyze Settings ───────────────────────────────────────────
+-- ── 6. Vacuum and Analyze Settings ───────────────────────────────────────────
 
--- Optimize autovacuum for high-write tables
-ALTER TABLE chat_messages SET (
-  autovacuum_vacuum_scale_factor = 0.05,  -- vacuum at 5% dead tuples (default 20%)
-  autovacuum_analyze_scale_factor = 0.02  -- analyze at 2% changes (default 10%)
-);
+DO $$
+BEGIN
+  IF to_regclass('public.chat_messages') IS NOT NULL THEN
+    ALTER TABLE chat_messages SET (
+      autovacuum_vacuum_scale_factor = 0.05,
+      autovacuum_analyze_scale_factor = 0.02
+    );
+  END IF;
+  IF to_regclass('public.emotion_events') IS NOT NULL THEN
+    ALTER TABLE emotion_events SET (
+      autovacuum_vacuum_scale_factor = 0.1,
+      autovacuum_analyze_scale_factor = 0.05
+    );
+  END IF;
+END $$;
 
-ALTER TABLE emotion_events SET (
-  autovacuum_vacuum_scale_factor = 0.1,
-  autovacuum_analyze_scale_factor = 0.05
-);
-
--- ── 8. Partitioning Preparation (for future scaling) ─────────────────────────
-
--- Create a view that unions current table + future partitions
--- This allows transparent migration to partitioned table later
-CREATE OR REPLACE VIEW chat_messages_all AS
-SELECT * FROM chat_messages;
-
--- Add comment for future migration
-COMMENT ON TABLE chat_messages IS
-  'TODO: Partition by created_at (monthly) when exceeds 100k rows. Use: CREATE TABLE chat_messages_new PARTITION OF...';
-
--- ── 9. Monitoring Queries as Views ───────────────────────────────────────────
+-- ── 7. Monitoring Queries as Views ───────────────────────────────────────────
 
 -- View: Database health metrics
 CREATE OR REPLACE VIEW db_health AS
@@ -320,48 +309,69 @@ FROM pg_stat_user_tables
 ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
 
 -- View: Slow queries (messages taking > 3 seconds)
-CREATE OR REPLACE VIEW slow_responses AS
-SELECT
-  id,
-  user_id,
-  session_id,
-  created_at,
-  response_time_ms,
-  LEFT(content, 100) AS content_preview,
-  tokens_used
-FROM chat_messages
-WHERE response_time_ms > 3000
-ORDER BY response_time_ms DESC;
+DO $$
+BEGIN
+  IF to_regclass('public.chat_messages') IS NOT NULL THEN
+    EXECUTE $v$
+      CREATE OR REPLACE VIEW slow_responses AS
+      SELECT
+        id,
+        line_user_id,
+        session_id,
+        created_at,
+        response_time_ms,
+        LEFT(text, 100) AS content_preview,
+        tokens_used
+      FROM chat_messages
+      WHERE response_time_ms > 3000
+      ORDER BY response_time_ms DESC
+    $v$;
+  END IF;
+END $$;
 
 -- View: Daily usage statistics
-CREATE OR REPLACE VIEW daily_usage_stats AS
-SELECT
-  DATE(created_at) AS date,
-  COUNT(*) AS total_messages,
-  COUNT(DISTINCT user_id) AS active_users,
-  COUNT(DISTINCT session_id) AS sessions,
-  AVG(response_time_ms) AS avg_response_ms,
-  SUM(tokens_used) AS total_tokens
-FROM chat_messages
-WHERE created_at >= NOW() - INTERVAL '30 days'
-GROUP BY DATE(created_at)
-ORDER BY date DESC;
+DO $$
+BEGIN
+  IF to_regclass('public.chat_messages') IS NOT NULL THEN
+    EXECUTE $v$
+      CREATE OR REPLACE VIEW daily_usage_stats AS
+      SELECT
+        DATE(created_at) AS date,
+        COUNT(*) AS total_messages,
+        COUNT(DISTINCT line_user_id) AS active_users,
+        COUNT(DISTINCT session_id) AS sessions,
+        AVG(response_time_ms) AS avg_response_ms,
+        SUM(tokens_used) AS total_tokens
+      FROM chat_messages
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC
+    $v$;
+  END IF;
+END $$;
 
 -- View: Emotion tracking summary
-CREATE OR REPLACE VIEW emotion_summary AS
-SELECT
-  DATE(detected_at) AS date,
-  source_type,
-  sentiment_label,
-  COUNT(*) AS event_count,
-  AVG(face_confidence) AS avg_face_conf,
-  AVG(sentiment_score) AS avg_sentiment_score
-FROM emotion_events
-WHERE detected_at >= NOW() - INTERVAL '30 days'
-GROUP BY DATE(detected_at), source_type, sentiment_label
-ORDER BY date DESC, source_type, sentiment_label;
+DO $$
+BEGIN
+  IF to_regclass('public.emotion_events') IS NOT NULL THEN
+    EXECUTE $v$
+      CREATE OR REPLACE VIEW emotion_summary AS
+      SELECT
+        DATE(detected_at) AS date,
+        source_type,
+        sentiment_label,
+        COUNT(*) AS event_count,
+        AVG(face_confidence) AS avg_face_conf,
+        AVG(sentiment_score) AS avg_sentiment_score
+      FROM emotion_events
+      WHERE detected_at >= NOW() - INTERVAL '30 days'
+      GROUP BY DATE(detected_at), source_type, sentiment_label
+      ORDER BY date DESC, source_type, sentiment_label
+    $v$;
+  END IF;
+END $$;
 
--- ── 10. Update Migration Registry ────────────────────────────────────────────
+-- ── 8. Update Migration Registry ────────────────────────────────────────────
 
 INSERT INTO schema_migrations (version) VALUES ('002_production_ready')
   ON CONFLICT (version) DO NOTHING;

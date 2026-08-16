@@ -8,6 +8,7 @@
  */
 
 import pg from "pg";
+import { decryptText } from "./privacy.js";
 
 const PAGE_SIZE = 20;
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -38,6 +39,7 @@ export default async function handler(req, res) {
                  LEFT(text,100) AS preview
           FROM chat_messages ORDER BY created_at DESC LIMIT 5
         `);
+        for (const m of latestMessages) m.preview = decryptText(m.preview);
 
         res.write(`data: ${JSON.stringify({ count, latestMessages })}\n\n`);
       } catch (err) {
@@ -96,6 +98,7 @@ export default async function handler(req, res) {
                LEFT(text,200) AS preview
         FROM chat_messages ORDER BY created_at DESC
         LIMIT $1 OFFSET $2`, [PAGE_SIZE, offset]);
+      for (const row of r.rows) row.preview = decryptText(row.preview);
       tabRows = r.rows;
     } else if (tab === "emotions" && tables.includes("emotion_events")) {
       totalRows = counts["emotion_events"] ?? 0;
@@ -120,6 +123,7 @@ export default async function handler(req, res) {
       totalRows = counts["emotion_alerts"] ?? 0;
       const r = await pool.query(`
         SELECT id, alert_type, consecutive_negative, admin_notified,
+               line_user_id_hash,
                LEFT(message_shown_to_user,100) AS msg,
                to_char(triggered_at AT TIME ZONE 'Asia/Bangkok','DD Mon HH24:MI:SS') AS time,
                resolved_at
@@ -196,6 +200,7 @@ export default async function handler(req, res) {
           <td class="num">${r.id}</td>
           <td><span class="badge badge-alert">${esc(r.alert_type)}</span></td>
           <td class="num">${r.consecutive_negative??"—"}</td>
+          <td class="mono">${esc(r.line_user_id_hash ? r.line_user_id_hash.slice(0,16)+"…" : "—")}</td>
           <td class="preview">${esc(r.msg??"—")}</td>
           <td>${r.admin_notified?"✅":"—"}</td>
           <td class="mono time">${r.time}</td>
@@ -207,7 +212,7 @@ export default async function handler(req, res) {
       if (tab==="messages")  return `<tr><th>ID</th><th>User ID</th><th>Role</th><th>Source</th><th>Session</th><th>Time (BKK)</th><th>Preview</th></tr>`;
       if (tab==="emotions")  return `<tr><th>ID</th><th>Source</th><th>Face</th><th>Sentiment</th><th>Combined</th><th>Summary</th><th>Time (BKK)</th></tr>`;
       if (tab==="homework")  return `<tr><th>ID</th><th>Subject</th><th>OCR Text</th><th>AI Response</th><th>Emotion</th><th>Time (BKK)</th></tr>`;
-      if (tab==="alerts")    return `<tr><th>ID</th><th>Type</th><th>Streak</th><th>Message Shown</th><th>Notified</th><th>Time (BKK)</th><th>Status</th></tr>`;
+      if (tab==="alerts")    return `<tr><th>ID</th><th>Type</th><th>Streak</th><th>User (hash)</th><th>Message Shown</th><th>Notified</th><th>Time (BKK)</th><th>Status</th></tr>`;
     };
 
     // ── final HTML ─────────────────────────────────────────────────────────

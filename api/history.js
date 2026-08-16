@@ -1,4 +1,5 @@
 import pg from "pg";
+import { encryptText, decryptText, hashId } from "./privacy.js";
 
 // Shared connection pool — reused across requests
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -45,9 +46,9 @@ export default async function handler(req, res) {
            (line_user_id, role, text, source, session_id, session_title)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
-          line_user_id,
+          hashId(line_user_id),                          // § anonymized — never raw
           role,
-          String(text).slice(0, 4000),
+          encryptText(String(text).slice(0, 4000)),      // § AES-256-GCM
           source || "web",
           session_id || null,
           session_title || null,
@@ -66,14 +67,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing or invalid line_user_id" });
 
     try {
+      // Match the hashed id first; the raw id is a fallback for legacy rows
+      // that predate the anonymization migration (004).
       const { rows } = await pool.query(
         `SELECT role, text, source, created_at, session_id, session_title
            FROM chat_messages
-          WHERE line_user_id = $1
+          WHERE line_user_id = ANY($1::text[])
           ORDER BY created_at ASC
           LIMIT 200`,
-        [lineUserId]
+        [[hashId(lineUserId), lineUserId]]
       );
+
+      for (const row of rows) row.text = decryptText(row.text); // § decrypt AES-256-GCM
 
       // Group by session_id — rows without session_id go into a "LINE Bot History" fallback
       const sessionMap = new Map();

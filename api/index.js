@@ -1,7 +1,9 @@
+import "dotenv/config";
 import express from "express";
 import webhookHandler from "./webhook.js";
 import historyHandler from "./history.js";
 import ssenseHandler from "./ssense.js";
+import vajaHandler from "./vaja.js";
 import tavilyHandler from "./tavily.js";
 import searchHandler from "./search.js";
 import pathummaHandler from "./pathumma.js";
@@ -12,6 +14,8 @@ import lineTokenHandler from "./line-token.js";
 import sendOtpHandler from "./send-otp.js";
 import guardianEmailHandler from "./guardian-email.js";
 import adminDbHandler from "./admin-db.js";
+import { exportUserData, deleteUserData } from "./user-data.js";
+import { globalLimiter, strictLimiter } from "./rate-limit.js";
 import { runMigrations } from "./migrate.js";
 
 // Strip APP_ prefix injected by CI so handlers read env vars normally
@@ -24,6 +28,12 @@ for (const [key, value] of Object.entries(process.env)) {
 }
 
 const app = express();
+
+// Rate limiting counts real client IPs. The api sits behind two proxies
+// (hackathon reverse proxy → nginx container), so trust all proxy hops:
+// req.ip = left-most X-Forwarded-For entry = the real client.
+app.set("trust proxy", true);
+app.use(globalLimiter);
 
 // ── Security headers (applied to every API response) ─────────────────────────
 app.use((_req, res, next) => {
@@ -68,9 +78,13 @@ app.all(["/ptm-asr", "/ptm-asr/*"], (req, res) => {
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+// ── Stricter limits on abuse-prone / expensive endpoints ──────────────────────
+app.use(["/send-otp", "/guardian-email", "/line-token"], strictLimiter);
+
 // ── JSON-body handlers ────────────────────────────────────────────────────────
 app.all("/history", historyHandler);
 app.post("/ssense", ssenseHandler);
+app.post("/vaja", vajaHandler);
 app.post("/tavily", tavilyHandler);       // kept for backward compat
 app.post("/search", searchHandler);       // SearXNG primary + Tavily fallback
 app.all(["/thaillm", "/thaillm/*"], thaillmHandler);
@@ -80,6 +94,10 @@ app.post("/guardian-email", guardianEmailHandler);
 
 // ── Admin DB inspection (read-only, secret-protected) ────────────────────────
 app.get("/admin-db", adminDbHandler);
+
+// ── PDPA data rights: export / erasure ───────────────────────────────────────
+app.get("/user-data/export", exportUserData);
+app.delete("/user-data", deleteUserData);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 8000;

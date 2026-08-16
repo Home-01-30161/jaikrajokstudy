@@ -195,7 +195,8 @@ restart:
 
 migrate:
   <<: *ops
-  script: [docker compose -p "$TEAM" exec -T api alembic upgrade head]
+  # Node project — migrations run via api/migrate.js (no alembic)
+  script: [docker compose -p "$TEAM" exec -T api node migrate.js]
 
 shell-cmd:
   <<: *ops

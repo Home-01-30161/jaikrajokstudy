@@ -128,9 +128,17 @@ CREATE INDEX IF NOT EXISTS idx_daily_summary_user
   ON daily_emotion_summary (anon_user_id, summary_date DESC);
 
 -- ── 8. Extend existing chat_messages ─────────────────────────────────────────
-ALTER TABLE chat_messages
-  ADD COLUMN IF NOT EXISTS emotion_tag   TEXT,       -- sentiment label for this message
-  ADD COLUMN IF NOT EXISTS emotion_score FLOAT;      -- confidence 0.0–1.0
+-- chat_messages is created lazily by history.js / webhook.js at runtime, so it
+-- may not exist yet when this migration runs on a fresh database.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_name = 'chat_messages') THEN
+    ALTER TABLE chat_messages
+      ADD COLUMN IF NOT EXISTS emotion_tag   TEXT,
+      ADD COLUMN IF NOT EXISTS emotion_score FLOAT;
+  END IF;
+END $$;
 
 -- ── 9. Migrate mood_events → emotion_events ──────────────────────────────────
 --  mood_events columns are unknown at write time; migrate what we can safely.
