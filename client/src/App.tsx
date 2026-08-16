@@ -2868,9 +2868,9 @@ function ChatView({
                   </svg>
                 </button>
                 <button
-                  onClick={handleHomeworkPhoto}
+                  onClick={handleAttachImageClick}
                   className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
-                  title="แนบรูปการบ้าน"
+                  title="แนบรูปภาพหรือการบ้าน"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -3138,7 +3138,7 @@ function ChatView({
               />
               <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-1">
                 <div className="flex items-center gap-1.5">
-                  <button onClick={handleAttachImageClick} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="แนบรูปภาพ">
+                  <button onClick={handleAttachImageClick} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="แนบรูปภาพหรือการบ้าน">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                       <circle cx="8.5" cy="8.5" r="1.5" />
@@ -3149,13 +3149,6 @@ function ChatView({
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
                       <circle cx="12" cy="13" r="3" />
-                    </svg>
-                  </button>
-                  <button onClick={handleHomeworkPhoto} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="แนบรูปการบ้าน">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
                     </svg>
                   </button>
                 </div>
