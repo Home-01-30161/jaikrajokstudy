@@ -2792,7 +2792,7 @@ function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, supportStrip, onDismissSupport,
-  attachedImage, clearAttachedImage, handleAttachImageClick, handlePaste,
+  attachedImage, clearAttachedImage, handleAttachImageClick, handlePaste, onImageClick,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -2849,10 +2849,29 @@ function ChatView({
 
           {/* Claude Prompt Box Card */}
           <div className="chat-hero-el w-full max-w-2xl bg-white p-4 shadow-md border border-[#E2D9C2] transition-all focus-within:shadow-lg focus-within:border-[#5B7036]" style={{ borderRadius: 0 }}>
+            {/* Image Preview */}
+            {attachedImage && (
+              <div className="mb-3 relative inline-block text-left">
+                <img
+                  src={attachedImage.preview}
+                  alt="แนบรูปภาพ"
+                  className="max-h-32 rounded-lg border border-gray-200 cursor-pointer"
+                  onClick={() => onImageClick(attachedImage.preview)}
+                />
+                <button
+                  onClick={clearAttachedImage}
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold hover:bg-red-600 transition-colors shadow-md"
+                  title="ลบรูปภาพ"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <textarea
               placeholder="พิมพ์ความรู้สึกของคุณ หรือถามโจทย์การบ้าน (Bio, Math, Coding)..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -2908,8 +2927,8 @@ function ChatView({
                 </button>
                 <button
                   onClick={() => sendMessage()}
-                  disabled={!inputText.trim()}
-                  className="w-9 h-9 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm"
+                  disabled={!inputText.trim() && !attachedImage}
+                  className="w-9 h-9 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm cursor-pointer"
                   style={{ backgroundColor: T.salmon }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
