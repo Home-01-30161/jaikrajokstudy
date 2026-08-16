@@ -21,10 +21,47 @@ export default async function handler(req, res) {
   if (!process.env.DATABASE_URL)
     return res.status(500).send("<h2>DATABASE_URL not configured</h2>");
 
+  // SSE endpoint for real-time updates
+  if (req.query.stream === "true") {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const sendUpdate = async () => {
+      try {
+        const { rows: [{ count }] } = await pool.query(`SELECT COUNT(*) AS count FROM chat_messages`);
+        const { rows: latestMessages } = await pool.query(`
+          SELECT id, line_user_id, role, source,
+                 to_char(created_at AT TIME ZONE 'Asia/Bangkok','DD Mon HH24:MI:SS') AS time,
+                 LEFT(text,100) AS preview
+          FROM chat_messages ORDER BY created_at DESC LIMIT 5
+        `);
+
+        res.write(`data: ${JSON.stringify({ count, latestMessages })}\n\n`);
+      } catch (err) {
+        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      }
+    };
+
+    // Send initial update
+    await sendUpdate();
+
+    // Send updates every 2 seconds
+    const interval = setInterval(sendUpdate, 2000);
+
+    req.on("close", () => {
+      clearInterval(interval);
+      res.end();
+    });
+
+    return;
+  }
+
   // Override the global API CSP (default-src 'none') for this HTML page.
   // Inline <style> is required; no external scripts or frames needed.
   res.setHeader("Content-Security-Policy",
-    "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'");
 
   const s   = req.query.secret;
   const tab  = ["messages","emotions","homework","alerts"].includes(req.query.tab)
@@ -242,12 +279,22 @@ export default async function handler(req, res) {
     .pg-btn.current{background:#2d3250;border-color:#7dd3fc;color:#fff;font-weight:700}
     .pg-btn.disabled{color:#334155;cursor:default;pointer-events:none}
     .footer{font-size:11px;color:#334155;margin-top:24px}
+    /* live indicator */
+    .live-badge{display:inline-flex;align-items:center;gap:6px;background:#065f46;color:#6ee7b7;padding:4px 12px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.04em}
+    .live-dot{width:8px;height:8px;background:#6ee7b7;border-radius:50%;animation:pulse 2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .live-updates{background:#1e2030;border:1px solid #2d3250;border-radius:8px;padding:12px;margin-top:14px}
+    .live-updates h3{font-size:12px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}
+    .live-msg{background:#222440;border-left:3px solid #7dd3fc;padding:8px 12px;margin-bottom:6px;border-radius:4px;font-size:12px}
+    .live-msg:last-child{margin-bottom:0}
+    .live-msg .badge{margin-right:6px}
+    .live-msg .time{color:#64748b;font-size:11px;margin-left:8px}
   </style>
 </head>
 <body>
 
 <h1>🗄️ JaiKraJok — DB Admin</h1>
-<p class="sub">team07 · PostgreSQL 16 · read-only · <a href="${link(tab,safePage)}">↻ refresh</a></p>
+<p class="sub">team07 · PostgreSQL 16 · read-only · <a href="${link(tab,safePage)}">↻ refresh</a> · <span class="live-badge"><span class="live-dot"></span>LIVE</span></p>
 
 <div class="cards">
   <div class="card"><div class="label">DB Size</div><div class="value">${db_size}</div></div>
@@ -289,7 +336,64 @@ export default async function handler(req, res) {
   </div>
 </div>
 
+<div class="live-updates" id="liveUpdates">
+  <h3>🔴 Live Updates (Last 5 messages)</h3>
+  <div id="liveMessages">Connecting...</div>
+</div>
+
 <p class="footer">Generated at ${new Date().toLocaleString("th-TH",{timeZone:"Asia/Bangkok"})}</p>
+
+<script>
+(function() {
+  const liveMessagesEl = document.getElementById('liveMessages');
+  const eventSource = new EventSource('?secret=${s}&stream=true');
+
+  eventSource.onmessage = function(e) {
+    try {
+      const data = JSON.parse(e.data);
+
+      if (data.error) {
+        liveMessagesEl.innerHTML = '<div style="color:#f87171">Error: ' + data.error + '</div>';
+        return;
+      }
+
+      if (data.latestMessages && data.latestMessages.length > 0) {
+        const html = data.latestMessages.map(msg => {
+          const roleClass = msg.role === 'user' ? 'badge-user' : 'badge-bot';
+          const sourceClass = msg.source === 'line' ? 'badge-line' : 'badge-web';
+          return \`<div class="live-msg">
+            <span class="badge \${roleClass}">\${msg.role}</span>
+            <span class="badge \${sourceClass}">\${msg.source}</span>
+            <span style="color:#cbd5e1">\${escapeHtml(msg.preview)}</span>
+            <span class="time">\${msg.time}</span>
+          </div>\`;
+        }).join('');
+        liveMessagesEl.innerHTML = html;
+
+        // Update total count in header if visible
+        const countCard = document.querySelector('.cards .card:nth-child(3) .value');
+        if (countCard && data.count) {
+          countCard.textContent = data.count.toLocaleString();
+        }
+      } else {
+        liveMessagesEl.innerHTML = '<div style="color:#64748b">No messages yet</div>';
+      }
+    } catch (err) {
+      console.error('SSE parse error:', err);
+    }
+  };
+
+  eventSource.onerror = function() {
+    liveMessagesEl.innerHTML = '<div style="color:#fbbf24">Connection lost. Reconnecting...</div>';
+  };
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+})();
+</script>
 
 </body>
 </html>`;
