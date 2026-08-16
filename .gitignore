@@ -21,6 +21,10 @@ TeamGivenAcess.md
 # IDE and editor files
 .vscode/
 .idea/
+.claude/
+.codex/
+.cursor/
+.impeccable/
 *.swp
 *.swo
 *~

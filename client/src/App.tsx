@@ -11,6 +11,7 @@ import {
   classifyMoodFromText,
 } from "./pathummaApi";
 import MathText from "./MathText";
+import LandingPage from "./pages/LandingPage";
 
 /* ============ IMAGE PATHS ============ */
 const IMG = {
@@ -166,7 +167,7 @@ const EMO_HEADER: Record<string, string> = {
   positive: "วันนี้ดีเพราะอะไรนะ?",
 };
 
-type Page = "login" | "onb1" | "onb2" | "guardian" | "guardian_confirm" | "privacy" | "app";
+type Page = "landing" | "login" | "onb1" | "onb2" | "guardian" | "guardian_confirm" | "privacy" | "app";
 type AppView = "home" | "chat" | "trend" | "safety";
 
 interface ChatMsg {
@@ -593,133 +594,6 @@ function OtpModal({
   );
 }
 
-/* ============ GOOGLE OAUTH SIGN-IN MODAL ============ */
-function GoogleOAuthModal({
-  onSelectAccount,
-  onClose,
-}: {
-  onSelectAccount: (user: UserAccount) => void;
-  onClose: () => void;
-}) {
-  const [customEmail, setCustomEmail] = useState("");
-  const [showCustomInput, setShowCustomInput] = useState(false);
-
-  const demoAccounts = [
-    {
-      name: "Supakorn Chaiwong",
-      email: "supakorn.g@gmail.com",
-    },
-    {
-      name: "NECTEC Student",
-      email: "nectec.study@gmail.com",
-    },
-  ];
-
-  const handleChoose = (name: string, email: string) => {
-    const cleanEmail = email.trim().toLowerCase();
-    const newUser: UserAccount = {
-      id: "usr_google_" + cleanEmail.replace(/[^a-z0-9]/g, "_"),
-      email: cleanEmail,
-      name: name || cleanEmail.split("@")[0],
-      passwordHash: "google_oauth_auth",
-      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
-    };
-    onSelectAccount(newUser);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade-in">
-      <div className="bg-white rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl border border-gray-100 relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl font-bold w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
-        >
-          ✕
-        </button>
-
-        {/* Google Header */}
-        <div className="text-center mb-6">
-          <svg className="w-10 h-10 mx-auto mb-3" viewBox="0 0 48 48">
-            <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
-            <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
-            <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
-            <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
-          </svg>
-          <h3 className="text-xl font-bold text-gray-900" style={{ fontFamily: "'Inter', sans-serif" }}>
-            Sign in with Google
-          </h3>
-          <p className="text-xs text-gray-500 mt-1">Choose an account to continue to <strong className="text-[#FF3366]">JaiKraJok</strong></p>
-        </div>
-
-        {/* Account List */}
-        <div className="space-y-2.5 mb-4">
-          {demoAccounts.map((acc, i) => (
-            <button
-              key={i}
-              onClick={() => handleChoose(acc.name, acc.email)}
-              className="w-full p-3 rounded-2xl border border-gray-200 hover:border-[#FF3366] hover:bg-rose-50/50 transition-all flex items-center gap-3 text-left group cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-full bg-[#FF3366] text-white font-bold flex items-center justify-center text-sm shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
-                {acc.name[0]}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-gray-900 truncate">{acc.name}</p>
-                <p className="text-[11px] text-gray-500 truncate">{acc.email}</p>
-              </div>
-              <span className="text-gray-400 group-hover:text-[#FF3366] text-sm font-bold">➔</span>
-            </button>
-          ))}
-        </div>
-
-        {showCustomInput ? (
-          <div className="pt-3 border-t border-gray-100">
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Enter your Gmail address:</label>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                placeholder="your.email@gmail.com"
-                value={customEmail}
-                onChange={(e) => setCustomEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && customEmail.includes("@")) {
-                    handleChoose(customEmail.split("@")[0], customEmail);
-                  }
-                }}
-                className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-xl outline-none focus:border-[#FF3366] text-gray-900"
-              />
-              <button
-                onClick={() => {
-                  if (customEmail.includes("@")) {
-                    handleChoose(customEmail.split("@")[0], customEmail);
-                  } else {
-                    toast("กรุณากรอกอีเมลที่ถูกต้อง");
-                  }
-                }}
-                className="px-4 py-2 bg-[#FF3366] text-white text-xs font-bold rounded-xl hover:bg-[#e02b58] transition-colors"
-              >
-                Sign In
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowCustomInput(true)}
-            className="w-full py-2.5 text-xs text-gray-600 hover:text-black font-semibold text-center hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
-          >
-            + Use another Google account
-          </button>
-        )}
-
-        <div className="mt-4 pt-3 border-t border-gray-100 text-center">
-          <p className="text-[10px] text-gray-400 leading-normal">
-            To continue, Google will share your name, email address, and profile picture with JaiKraJok.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ============ LINE OAUTH MODAL — Real OAuth 2.1 flow ============ */
 function LineOAuthModal({
   onClose,
@@ -814,7 +688,6 @@ function LineOAuthModal({
 /* ============ LOGIN PAGE ============ */
 function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; onLoginSuccess: (user: UserAccount) => void }) {
   const [showOtpModal, setShowOtpModal] = useState(false);
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
   const [showLineModal, setShowLineModal] = useState(false);
   const [pendingRegistration, setPendingRegistration] = useState<{ email: string; passwordHash: string; otpCode: string } | null>(null);
   const [otpPreviewUrl, setOtpPreviewUrl] = useState<string | null>(null);
@@ -931,7 +804,6 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
       saveUsersList(users);
       setCurrentUser(googleUser);
     }
-    setShowGoogleModal(false);
     setShowLineModal(false);
     toast(`✓ เข้าสู่ระบบสำเร็จ! (${googleUser.name || googleUser.email})`);
     onLoginSuccess(googleUser);
@@ -1110,13 +982,6 @@ function LoginPage({ onNext: _onNext, onLoginSuccess }: { onNext: () => void; on
             setPendingRegistration(null);
           }}
           onResend={handleResendOtp}
-        />
-      )}
-
-      {showGoogleModal && (
-        <GoogleOAuthModal
-          onSelectAccount={handleSelectGoogleAccount}
-          onClose={() => setShowGoogleModal(false)}
         />
       )}
 
@@ -2778,7 +2643,7 @@ function ChatView({
             .chat-star { display:inline-block; animation: chatStarSpin 8s linear infinite; }
             .chat-hero-el { opacity: 0; }
             @keyframes chatBubblePop { from{opacity:0;transform:translateY(8px) scale(0.96)} to{opacity:1;transform:translateY(0) scale(1)} }
-            .chat-bubble-in { animation: chatBubblePop 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+            .chat-bubble-in { animation: chatBubblePop 0.35s cubic-bezier(0.22,1,0.36,1) both; }
           `}</style>
           {/* Greeting Header */}
           <div className="chat-hero-el flex items-center justify-center gap-3 mb-6">
@@ -2830,10 +2695,10 @@ function ChatView({
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => toast("โมเดลหลัก: thaillm-8b (TokenMind)")}
+                  onClick={() => toast("โมเดลหลัก: Pathumma LLM (NECTEC)")}
                   className="text-xs px-3 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors shadow-xs"
                 >
-                  thaillm-8b ▾
+                  Pathumma ▾
                 </button>
                 <button
                   onClick={() => setWebSearchEnabled(!webSearchEnabled)}
@@ -3149,10 +3014,10 @@ function ChatView({
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => toast("โมเดลหลัก: thaillm-8b (TokenMind)")}
+                    onClick={() => toast("โมเดลหลัก: Pathumma LLM (NECTEC)")}
                     className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer"
                   >
-                    thaillm-8b ▾
+                    Pathumma ▾
                   </button>
                   <button
                     onClick={() => setWebSearchEnabled(!webSearchEnabled)}
@@ -3225,7 +3090,7 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
         .trend-card { opacity: 0; }
         .trend-row { opacity: 0; }
         @keyframes dotPop { from { r: 0; opacity: 0; } to { opacity: 1; } }
-        .chart-dot { animation: dotPop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .chart-dot { animation: dotPop 0.4s cubic-bezier(0.22,1,0.36,1) both; }
         .trend-btn { position: relative; overflow: hidden; transition: box-shadow 0.18s; }
         .trend-btn::before { content:''; position:absolute; inset:0; opacity:0; background: currentColor; transition: opacity 0.18s; }
         .trend-btn:hover { box-shadow: 2px 2px 0 currentColor; }
@@ -3305,53 +3170,6 @@ function TrendView({ trendData, logEntries, onDeleteEntry, onClearAll, onExport 
             </button>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============ SCHOOL VIEW ============ */
-function _SchoolView() {
-  return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="inline-block px-4 py-1.5 rounded-full text-xs font-mono font-bold" style={{ backgroundColor: "#F3E6C8", color: "#6E4F1F" }}>
-        🧪 ข้อมูลตัวอย่างเพื่อสาธิต (Demo aggregate data)
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { num: "312", label: "การเช็คอินสัปดาห์นี้" },
-          { num: "24%", label: "มีแนวโน้มเครียด/กังวลต่อเนื่อง" },
-          { num: "58%", label: "อยู่ในเกณฑ์ปกติ-ผ่อนคลาย" },
-          { num: "9", label: "กรณีที่ส่งต่อครูที่ปรึกษา" },
-        ].map((stat, i) => (
-          <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
-            <span className="text-3xl font-black block" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>{stat.num}</span>
-            <span className="text-xs text-gray-700 mt-1 block font-semibold" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{stat.label}</span>
-          </div>
-        ))}
-      </div>
-      <div className="p-6 rounded-2xl" style={{ backgroundColor: T.white, border: "1.5px solid #E2D9C2", boxShadow: "0 2px 12px rgba(26,26,26,0.06)" }}>
-        <h4 className="font-bold text-base mb-4" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.black }}>แนวโน้มรายสัปดาห์ (ระดับความเครียดเฉลี่ย)</h4>
-        <div className="flex items-end gap-6 h-40 pt-4">
-          {[["52%", "สัปดาห์ 1", T.teal], ["61%", "สัปดาห์ 2", T.teal], ["74%", "สัปดาห์ 3", "#A85F73"], ["66%", "สัปดาห์ 4", "#6F6389"], ["48%", "สัปดาห์นี้", T.teal]].map(([h, l, c], i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-              <div className="w-full rounded-t-xl" style={{ height: h, backgroundColor: c }} />
-              <span className="text-xs font-mono text-gray-500">{l}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[
-          { title: "บริการฟรี", desc: "นักเรียนและครูใช้งานผ่านเว็บแอปพลิเคชันได้ฟรีเสมอ" },
-          { title: "แพ็กเกจโรงเรียน", desc: "ค่าบริการรายเดือนสำหรับภาพรวมสถิติระดับสถาบัน ไม่ระบุตัวตนนักเรียน" },
-          { title: "บริการวิเคราะห์ข้อมูล", desc: "สำหรับหน่วยงานด้านการศึกษาที่ต้องการข้อมูลเชิงลึกระดับภาพรวม" },
-        ].map((plan, i) => (
-          <div key={i} className="p-5 rounded-2xl" style={{ backgroundColor: T.white, border: `2px solid ${T.teal}`, boxShadow: "0 2px 12px rgba(26,26,26,0.07)" }}>
-            <h5 className="font-bold text-sm mb-2" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif", color: T.teal }}>{plan.title}</h5>
-            <p className="text-xs text-gray-700 leading-relaxed font-medium" style={{ fontFamily: "'Inter', 'Inter', 'Noto Sans Thai', sans-serif" }}>{plan.desc}</p>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -3543,7 +3361,7 @@ const PageWrapper = ({ children, pageKey }: { children: React.ReactNode; pageKey
 
 export default function App() {
   const [currentUser, setCurrentUserState] = useState<UserAccount | null>(() => getCurrentUser());
-  const [page, setPage] = useState<Page>(() => (getCurrentUser() ? "app" : "login"));
+  const [page, setPage] = useState<Page>(() => (getCurrentUser() ? "app" : "landing"));
   const [age, setAge] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianStage, setGuardianStage] = useState<"input" | "pending" | "approved">("input");
@@ -3731,6 +3549,9 @@ export default function App() {
   return (
     <div className="font-sans">
       <Toaster richColors position="top-center" />
+      {page === "landing" && (
+        <LandingPage onEnter={() => setPage("login")} />
+      )}
       {page === "login" && (
         <PageWrapper pageKey="login">
           <LoginPage

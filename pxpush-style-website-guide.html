@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<!--
+  THESIS: A guide that teaches the pxpush aesthetic by performing it —
+  scroll-driven narrative where each section is a choreographed scene change.
+  Refuses the linear document format.
+  OWN-WORLD: Near-black #0F0F0F canvas, Bebas Neue display at 10–14vw,
+  amber #E8C020 accent, JetBrains Mono labels, amber marquee strips,
+  stroke-only section numbers bleeding at viewport edge.
+  STORY: The reader discovers how to build this exact style of site by
+  experiencing it — every technique shown is immediately legible.
+  FIRST VIEWPORT: Full dark canvas, Nº00 in 14vw mono slides up,
+  headline words cascade in, amber marquee bar anchors the bottom.
+  FORM: Scroll-pinned horizontal for §02, GSAP ScrollTrigger stagger
+  reveals for all others, Lenis smooth scroll throughout.
+  FINISH: unreviewed and undocumented is unfinished; this build ends
+  with the finish review, the verdict, and DESIGN.md.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Building a Website Like PX PUSH — The Animated Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&family=Archivo:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+<style>
+:root {
+  --bg: #0F0F0F; --sur: #181818; --fg: #F0EBE0; --mt: #686858;
+  --ac: #E8C020; --acd: #B89A10; --bd: #262626;
+  --bgl: #F0EBE0; --fgl: #111108; --mtl: #888872;
+  --fd: 'Bebas Neue', 'Arial Black', sans-serif;
+  --fm: 'JetBrains Mono', 'Courier New', monospace;
+  --fb: 'Archivo', system-ui, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: auto; }
+body { background: var(--bg); color: var(--fg); font-family: var(--fb); overflow-x: hidden; }
+::selection { background: var(--ac); color: var(--bg); }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--ac); }
+
+/* ── MARQUEE ── */
+.mq { overflow: hidden; white-space: nowrap; user-select: none; }
+.mq-inner { display: inline-flex; }
+.mq-inner.fwd { animation: mqL 28s linear infinite; }
+.mq-inner.rev { animation: mqR 34s linear infinite; }
+.mq-item { padding: 0 2.5rem; font-family: var(--fm); font-size: .72rem;
+  letter-spacing: .14em; text-transform: uppercase; }
+@keyframes mqL { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+@keyframes mqR { from{transform:translateX(-50%)} to{transform:translateX(0)} }
+@media(prefers-reduced-motion:reduce){ .mq-inner{animation-play-state:paused} }
+
+/* ── PROGRESS BAR ── */
+#prog { position: fixed; top: 0; left: 0; height: 2px; background: var(--ac);
+  width: 0%; z-index: 200; transform-origin: left; }
+
+/* ── NAV ── */
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 1.2rem 6vw; display: flex; align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(to bottom,rgba(15,15,15,.92),transparent);
+  backdrop-filter: blur(8px); }
+.nav-logo { font-family: var(--fm); font-size: .65rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--fg); opacity: .7; }
+.nav-cta { font-family: var(--fm); font-size: .62rem; color: var(--ac);
+  letter-spacing: .12em; text-transform: uppercase;
+  border: 1px solid var(--ac); padding: .35rem .9rem;
+  text-decoration: none; transition: background .18s, color .18s; }
+.nav-cta:hover { background: var(--ac); color: var(--bg); }
+
+/* ── HERO ── */
+#hero { min-height: 100svh; display: flex; flex-direction: column;
+  justify-content: flex-end; padding: 0 6vw 0; background: var(--bg); }
+.hero-eyebrow { font-family: var(--fm); font-size: .68rem;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--ac);
+  margin-bottom: 1.25rem; opacity: 0; transform: translateY(16px); }
+.hero-hl { font-family: var(--fd); line-height: .9;
+  font-size: clamp(3.8rem,11vw,10.5rem); color: var(--fg); }
+.hw { display: inline-block; overflow: hidden; }
+.hwi { display: inline-block; transform: translateY(105%); }
+.hero-sub { font-size: clamp(.88rem,1.4vw,1rem); color: var(--mt);
+  max-width: 54ch; line-height: 1.75; margin: 2rem 0 4.5rem; opacity: 0; }
+.scroll-cue { font-family: var(--fm); font-size: .58rem; letter-spacing: .18em;
+  color: var(--mt); text-transform: uppercase; opacity: 0;
+  margin-bottom: 2.5rem; display: flex; align-items: center; gap: .6rem; }
+.scroll-arr { display: inline-block; animation: bobDown 1.6s ease-in-out infinite; }
+@keyframes bobDown { 0%,100%{transform:translateY(0)} 50%{transform:translateY(5px)} }
+
+/* ── SECTION SKELETON ── */
+.sec { padding: 12vh 6vw; position: relative; overflow: hidden; }
+.sec.light { background: var(--bgl); color: var(--fgl); }
+.sec.dark  { background: var(--bg); }
+.sec.mid   { background: var(--sur); }
+.sec-lbl { font-family: var(--fm); font-size: .62rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ac); margin-bottom: 1.5rem;
+  display: flex; align-items: center; gap: .6rem; }
+.sec-lbl::before { content: '●'; font-size: .45rem; }
+.light .sec-lbl { color: var(--acd); }
+.sec-ghost { font-family: var(--fd);
+  font-size: clamp(6rem,18vw,16rem); line-height: 1;
+  color: transparent; -webkit-text-stroke: 1px var(--bd);
+  position: absolute; right: 4vw; top: 5vh; pointer-events: none;
+  user-select: none; }
+.light .sec-ghost { -webkit-text-stroke-color: #D8D0C4; }
+
+/* ── DISPLAY TYPE ── */
+.d-xl { font-family: var(--fd); font-size: clamp(3.5rem,10vw,9rem);
+  line-height: .92; letter-spacing: .01em; }
+.d-lg { font-family: var(--fd); font-size: clamp(2.5rem,6vw,5.5rem);
+  line-height: .94; }
+.d-md { font-family: var(--fd); font-size: clamp(1.4rem,3vw,2.6rem);
+  line-height: 1; }
+.body-p { font-size: clamp(.88rem,1.3vw,1rem); line-height: 1.78;
+  max-width: 58ch; color: var(--mt); }
+.light .body-p { color: var(--mtl); }
+.ac { color: var(--ac); } .light .ac { color: var(--acd); }
+
+/* ── TRAIT CARD (§02 horizontal) ── */
+.trait-card { min-width: min(380px,85vw); padding: 3rem 2.5rem;
+  border: 1px solid var(--bd); background: var(--sur); flex-shrink: 0; }
+.tc-num { font-family: var(--fm); font-size: .6rem; color: var(--ac);
+  letter-spacing: .16em; text-transform: uppercase; margin-bottom: 1.25rem; }
+.tc-title { font-family: var(--fd); font-size: 1.9rem; letter-spacing: .03em;
+  margin-bottom: 1rem; line-height: 1; }
+.tc-body { font-size: .84rem; line-height: 1.72; color: var(--mt); }
+
+/* ── STRUCT TABLE ── */
+.struct-row { display: grid; grid-template-columns: 3.5rem 3fr 2fr;
+  gap: 1.25rem 2rem; padding: 1.25rem 0;
+  border-bottom: 1px solid var(--bd); align-items: start;
+  opacity: 0; transform: translateX(-28px); }
+.sr-num { font-family: var(--fm); font-size: .62rem; color: var(--ac); }
+.sr-name { font-family: var(--fd); font-size: 1.05rem; letter-spacing: .04em; }
+.sr-purpose { font-size: .8rem; color: var(--mt); font-style: italic; }
+@media(max-width:600px){ .struct-row{grid-template-columns:2.5rem 1fr} .sr-purpose{display:none} }
+
+/* ── STEP CARD ── */
+.step-card { padding: 2rem; border: 1px solid var(--bd); background: var(--sur);
+  opacity: 0; transform: translateY(30px); }
+.light .step-card { background: #fff; border-color: #DDD7CB; }
+.sc-num { font-family: var(--fd); font-size: 3rem; line-height: 1;
+  color: var(--ac); margin-bottom: .75rem; }
+.light .sc-num { color: var(--acd); }
+.sc-title { font-family: var(--fd); font-size: 1.3rem; letter-spacing: .03em;
+  margin-bottom: .6rem; }
+.sc-body { font-size: .82rem; line-height: 1.72; color: var(--mt); }
+.light .sc-body { color: var(--mtl); }
+
+/* ── CHECK LIST ── */
+.check-item { display: flex; align-items: flex-start; gap: 1rem;
+  padding: 1.2rem 0; border-bottom: 1px solid var(--bd);
+  opacity: 0; transform: translateX(-20px); }
+.cb { width: 1.1rem; height: 1.1rem; border: 1.5px solid var(--ac);
+  flex-shrink: 0; margin-top: .12rem; }
+.ci-text { font-family: var(--fm); font-size: .78rem; line-height: 1.6; }
+
+/* ── CODE BLOCK ── */
+.codeblk { background: #080808; border: 1px solid var(--bd);
+  padding: 1.25rem 1.5rem; font-family: var(--fm); font-size: .72rem;
+  line-height: 1.75; color: #A0A090; overflow-x: auto;
+  margin-top: 1.25rem; }
+.kw { color: var(--ac); } .cm { color: #585848; }
+
+/* ── LAYOUT HELPERS ── */
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3vw; }
+.row3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 2vw; }
+@media(max-width:768px){ .row2,.row3{grid-template-columns:1fr} }
+.mt2 { margin-top: 2rem; } .mt4 { margin-top: 4rem; }
+.overline { font-family: var(--fm); font-size: .58rem; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--mt); display: block;
+  margin-bottom: .6rem; }
+
+/* ── QUOTE REVEAL ── */
+.q-word { display: inline-block; opacity: 0; transform: translateY(14px); }
+
+/* ── FOOTER ── */
+footer { padding: 7vh 6vw; border-top: 1px solid var(--bd);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 2rem; background: var(--bg); }
+.foot-note { font-family: var(--fm); font-size: .62rem; color: var(--mt);
+  letter-spacing: .08em; line-height: 1.9; }
+</style>
+</head>
+<body>
+<div id="prog"></div>
+
+<!-- NAV -->
+<nav>
+  <span class="nav-logo">● Building Like PX PUSH — Animated Guide</span>
+  <a class="nav-cta" href="#s01">Start Reading ↗</a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <p class="hero-eyebrow">The Guide // Nº00</p>
+  <h1 class="hero-hl">
+    <span class="hw"><span class="hwi">BUILDING</span></span><br>
+    <span class="hw"><span class="hwi">A WEBSITE</span></span><br>
+    <span class="hw"><span class="hwi ac">LIKE</span></span><br>
+    <span class="hw"><span class="hwi">PX PUSH.</span></span>
+  </h1>
+  <p class="hero-sub">A scroll-driven walkthrough of the aesthetic, the structure, the motion,
+    and the copy patterns that make the editorial-studio genre work.
+    You are about to experience the technique as you read about it.</p>
+  <p class="scroll-cue"><span class="scroll-arr">↓</span> Scroll to begin</p>
+  <!-- hero marquee anchor -->
+  <div class="mq" style="border-top:1px solid var(--bd);padding:.55rem 0;margin:0 -6vw;">
+    <div class="mq-inner fwd">
+      <span class="mq-item">Editorial Studio</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Scroll Narrative</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Dark Canvas</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Bebas Neue</span><span class="mq-item ac">●</span>
+      <span class="mq-item">GSAP ScrollTrigger</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Lenis Smooth Scroll</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Amber Accent</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Editorial Studio</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Scroll Narrative</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Dark Canvas</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Bebas Neue</span><span class="mq-item ac">●</span>
+      <span class="mq-item">GSAP ScrollTrigger</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Lenis Smooth Scroll</span><span class="mq-item ac">●</span>
+      <span class="mq-item">Amber Accent</span><span class="mq-item ac">●</span>
+    </div>
+  </div>
+</section>
+
+<!-- §01 what-kind placeholder -->
+<section class="sec dark" id="s01">
+  <span class="sec-ghost">01</span>
+  <div class="sec-lbl">Nº001 / What Kind of Site</div>
+  <p class="d-xl" style="max-width:14ch">SINGLE<br>LONG<br><span class="ac">SCROLL.</span></p>
+  <div class="row2 mt4">
+    <p class="body-p">PX PUSH is a <strong>single-long-scroll marketing site</strong> for a design-subscription service.
+      Unlimited design requests for a flat monthly fee. The whole page does one job:
+      convert visitors into "Get Started" clicks. Everything — copy, layout, motion — is in service of that.</p>
+    <div>
+      <p class="body-p">Site map is intentionally tiny:</p>
+      <div class="codeblk mt2">
+<span class="kw">/</span>          <span class="cm">— Home (does 90% of selling)</span>
+<span class="kw">/about</span>
+<span class="kw">/journal</span>   <span class="cm">— blog</span>
+<span class="kw">/start</span>     <span class="cm">— signup / CTA landing</span>
+<span class="kw">/terms</span>  <span class="kw">/privacy</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- §02 VISUAL STYLE — pinned horizontal scroll -->
+<section class="sec mid" id="s02" style="padding-bottom:0">
+  <span class="sec-ghost" style="top:4vh">02</span>
+  <div class="sec-lbl">Nº002 / Visual &amp; Interaction Style</div>
+  <p class="d-lg" style="margin-bottom:3rem">Five Defining<br><span class="ac">Traits</span></p>
+  <!-- horizontal scroll track -->
+  <div id="htrack-wrap">
+    <div id="htrack">
+      <div class="trait-card">
+        <div class="tc-num">Trait 01 / Canvas</div>
+        <div class="tc-title">Near-Black<br>Background</div>
+        <p class="tc-body">Near-black (#1a1a1a) with off-white text. High contrast, moody, editorial.
+          Every other colour becomes accent-level loud against this base.</p>
+      </div>
+      <div class="trait-card">
+        <div class="tc-num">Trait 02 / Type</div>
+        <div class="tc-title">Oversized<br>Display Type</div>
+        <p class="tc-body">Section titles repeat 6–8× stacked or marqueeing — a classic looping marquee
+          used purely for visual rhythm. Bebas Neue or similar condensed display face at 10–14vw.</p>
+      </div>
+      <div class="trait-card">
+        <div class="tc-num">Trait 03 / Labels</div>
+        <div class="tc-title">Numbered<br>Section Labels</div>
+        <p class="tc-body">"Nº001 / Intro", "Nº002 / Works" — gives an editorial, catalog/index feel.
+          Bullet dots (●) as recurring graphic motif before headings and nav items.</p>
+      </div>
+      <div class="trait-card">
+        <div class="tc-num">Trait 04 / Motion</div>
+        <div class="tc-title">Horizontal<br>Marquees</div>
+        <p class="tc-body">Full-bleed autoplay looping video for hero. Horizontal/looping image marquees
+          for portfolio and brand assets. Continuous motion = never feels static.</p>
+      </div>
+      <div class="trait-card">
+        <div class="tc-num">Trait 05 / Copy</div>
+        <div class="tc-title">Sparse, Punchy<br>Paragraphs</div>
+        <p class="tc-body">Arrows (↗) on every CTA. Short sentences, active voice.
+          Concrete numbers everywhere — "$4,000/mo", "72 hour delivery" —
+          specificity builds trust more than vague claims.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- §03 PAGE STRUCTURE -->
+<section class="sec light" id="s03">
+  <span class="sec-ghost">03</span>
+  <div class="sec-lbl">Nº003 / Page Structure</div>
+  <p class="d-lg" style="margin-bottom:3rem">Proven<br><span class="ac">Spine.</span></p>
+  <p class="body-p" style="margin-bottom:2.5rem">Hook → Problem/Solution → Proof → Value props → Pricing → Upsell → Footer. Deviation is a conversion risk.</p>
+  <div id="struct-list">
+    <div class="struct-row"><span class="sr-num">01</span><span class="sr-name">Hero</span><span class="sr-purpose">Video bg + repeating headline. Hook + positioning statement.</span></div>
+    <div class="struct-row"><span class="sr-num">02</span><span class="sr-name">Intro / Nº001</span><span class="sr-purpose">Problem → solution narrative. Primary CTA + pricing anchor.</span></div>
+    <div class="struct-row"><span class="sr-num">03</span><span class="sr-name">Works / Nº002</span><span class="sr-purpose">Looping image marquee. Social proof via portfolio.</span></div>
+    <div class="struct-row"><span class="sr-num">04</span><span class="sr-name">Benefits / Nº003</span><span class="sr-purpose">5 numbered value props with small illustrations.</span></div>
+    <div class="struct-row"><span class="sr-num">05</span><span class="sr-name">Packages / Nº004</span><span class="sr-purpose">Pricing cards — Standard / Pro. 2–3 tiers max.</span></div>
+    <div class="struct-row"><span class="sr-num">06</span><span class="sr-name">Brand Sprint</span><span class="sr-purpose">Upsell / secondary offer. Fixed-scope package.</span></div>
+    <div class="struct-row"><span class="sr-num">07</span><span class="sr-name">Footer</span><span class="sr-purpose">Legal entity, socials, secondary CTA. Trust signal.</span></div>
+  </div>
+</section>
+
+<!-- §04 TECH STACK -->
+<section class="sec dark" id="s04">
+  <span class="sec-ghost">04</span>
+  <div class="sec-lbl">Nº004 / Recommended Stack</div>
+  <p class="d-lg" style="margin-bottom:3rem">Two<br><span class="ac">Options.</span></p>
+  <div class="row2 mt2" id="stack-cards">
+    <div class="step-card">
+      <div class="sc-num">A</div>
+      <div class="sc-title">No-Code — Fastest</div>
+      <p class="sc-body">Framer or Webflow handle scroll animation, marquees, and CMS with zero custom code. PX PUSH likely uses one — they sell Framer/Webflow dev as a Pro package feature.</p>
+    </div>
+    <div class="step-card">
+      <div class="sc-num">B</div>
+      <div class="sc-title">Custom Code — Full Control</div>
+      <p class="sc-body">Vite + HTML/CSS/JS or Next.js. GSAP + ScrollTrigger for scroll reveals and horizontal pinning. Lenis for smooth inertia. Tailwind for styling velocity.</p>
+    </div>
+  </div>
+  <div class="codeblk mt4">
+<span class="cm">// Option B — exact versions used in this guide</span>
+<span class="kw">gsap</span>                  <span class="cm">3.12</span>
+<span class="kw">@studio-freight/lenis</span> <span class="cm">1.0.42</span>
+<span class="kw">tailwindcss</span>           <span class="cm">^4</span>
+<span class="kw">vite</span>                  <span class="cm">^7</span>
+  </div>
+</section>
+
+<!-- §05 BUILDING EACH SECTION -->
+<section class="sec mid" id="s05">
+  <span class="sec-ghost">05</span>
+  <div class="sec-lbl">Nº005 / Building Each Section</div>
+  <p class="d-lg" style="margin-bottom:3rem">Section<br><span class="ac">Recipes.</span></p>
+  <div class="row3 mt4" id="step-grid">
+    <div class="step-card"><div class="sc-num">01</div><div class="sc-title">Hero</div><p class="sc-body">Full-viewport &lt;video&gt; muted autoplay loop + dark overlay. Repeating h1 with CSS marquee. Scroll-cue anchored bottom.</p></div>
+    <div class="step-card"><div class="sc-num">02</div><div class="sc-title">Portfolio Marquee</div><p class="sc-body">Flex container wider than viewport. Duplicate image set, animate translateX infinite. Pause on hover. .webp throughout.</p></div>
+    <div class="step-card"><div class="sc-num">03</div><div class="sc-title">Benefits</div><p class="sc-body">Numbered Nº001–Nº005. Short headline + 1–2 sentence description. ScrollTrigger stagger 0.08s per item.</p></div>
+    <div class="step-card"><div class="sc-num">04</div><div class="sc-title">Pricing Cards</div><p class="sc-body">Plan name, strikethrough + discounted price, feature list, single CTA. Mark one "Popular". 2–3 tiers max.</p></div>
+    <div class="step-card"><div class="sc-num">05</div><div class="sc-title">Upsell</div><p class="sc-body">Same card pattern but framed as a fixed-scope project. Captures leads not ready to commit monthly.</p></div>
+    <div class="step-card"><div class="sc-num">06</div><div class="sc-title">Footer</div><p class="sc-body">Legal entity + address, social links, secondary CTA, legal pages. Never skip the address — trust signal.</p></div>
+  </div>
+</section>
+
+<!-- §06 COPYWRITING — word-by-word quote reveal -->
+<section class="sec dark" id="s06">
+  <span class="sec-ghost">06</span>
+  <div class="sec-lbl">Nº006 / Copywriting Patterns</div>
+  <p class="d-lg" style="margin-bottom:3.5rem">Words That<br><span class="ac">Convert.</span></p>
+  <div id="quote-wrap" style="max-width:72ch;margin-bottom:4rem">
+    <p id="quote-text" style="font-family:var(--fb);font-size:clamp(1.25rem,2.2vw,1.9rem);font-weight:700;line-height:1.55"></p>
+  </div>
+  <div class="row2">
+    <div>
+      <span class="overline">Pattern 01</span>
+      <p class="d-md" style="margin-bottom:.75rem">Problem →<br>Reframe → Offer</p>
+      <p class="body-p">Name the pain of hiring designers/freelancers/agencies. Reposition the subscription as the fix. Never lead with features — lead with the friction you remove.</p>
+    </div>
+    <div>
+      <span class="overline">Pattern 02</span>
+      <p class="d-md" style="margin-bottom:.75rem">Concrete<br>Numbers</p>
+      <p class="body-p">"$4,000/mo", "72 hour delivery", "4 weeks" — specificity builds trust more than vague claims. Every CTA uses ↗ and action verbs: "Get Started", "View Pricing".</p>
+    </div>
+  </div>
+</section>
+
+<!-- §07 PERFORMANCE -->
+<section class="sec light" id="s07">
+  <span class="sec-ghost">07</span>
+  <div class="sec-lbl">Nº007 / Performance &amp; Technical Notes</div>
+  <p class="d-lg" style="margin-bottom:3rem">Ship<br><span class="ac">Fast.</span></p>
+  <div id="perf-list">
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Compress hero video aggressively — target &lt;3–5 MB. Provide poster frame for slow connections.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Use .webp / .avif for all imagery. Lazy-load below-the-fold marquee images.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Load GSAP + Lenis deferred/async — don't block first paint.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Respect prefers-reduced-motion — disable marquees and scroll-jacking for users who request it.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Keep to one route (/) with anchor links — reduces build complexity, keeps funnel linear.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Target Core Web Vitals: LCP &lt;2.5 s, CLS &lt;0.1, INP &lt;200 ms.</div></div>
+  </div>
+</section>
+
+<!-- §08 BUILD CHECKLIST -->
+<section class="sec mid" id="s08">
+  <span class="sec-ghost">08</span>
+  <div class="sec-lbl">Nº008 / Minimal Build Checklist</div>
+  <p class="d-lg" style="margin-bottom:3rem">11 Steps<br>to <span class="ac">Ship.</span></p>
+  <div id="build-list">
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Set up Next.js / Vite or Framer / Webflow. Dark theme tokens — #1a1a1a bg, off-white text.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Build hero: video bg + marquee headline component (reusable — you will use it 3× on the page).</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Build reusable Section wrapper with "Nº00X / Label" eyebrow pattern.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Build horizontal image-marquee component (reuse for Works + Brand assets).</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Build Benefits list: icon + numbered title + copy, ScrollTrigger stagger.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Build Pricing card component (reuse for Standard / Pro / Brand Sprint).</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Wire up scroll animations — GSAP ScrollTrigger for fade/slide-ins.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Add smooth scroll — Lenis if going custom-code.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Build footer with legal entity + address + socials + secondary CTA.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Add /about, /journal, /start, /terms, /privacy as simpler secondary pages.</div></div>
+    <div class="check-item"><div class="cb"></div><div class="ci-text">Optimize media, test prefers-reduced-motion, test mobile.</div></div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div>
+    <p class="foot-note">Building a Website Like PX PUSH — Animated Guide<br>All techniques shown are this guide's own implementation.</p>
+  </div>
+  <div style="text-align:right">
+    <p class="foot-note" style="color:var(--ac)">● Stack used in this guide<br>GSAP 3.12 · Lenis 1.0.42 · Bebas Neue · JetBrains Mono</p>
+  </div>
+</footer>
+
+<style>
+#htrack-wrap { overflow: hidden; padding-bottom: 3rem; }
+#htrack { display: flex; gap: 2rem; width: max-content; padding-bottom: 1rem; }
+</style>
+
+<script>
+gsap.registerPlugin(ScrollTrigger);
+
+const lenis = new Lenis({ lerp: 0.1, smoothWheel: true });
+lenis.on('scroll', ScrollTrigger.update);
+gsap.ticker.add((time) => lenis.raf(time * 1000));
+gsap.ticker.lagSmoothing(0);
+
+// scroll progress bar
+ScrollTrigger.create({
+  trigger: 'body', start: 'top top', end: 'bottom bottom',
+  onUpdate: (s) => { document.getElementById('prog').style.width = (s.progress * 100) + '%'; }
+});
+
+// hero word cascade
+const heroTl = gsap.timeline({ defaults: { ease: 'expo.out', duration: 1.1 } });
+heroTl
+  .to('.hwi', { y: '0%', stagger: 0.1 }, 0)
+  .to('.hero-eyebrow', { opacity: 1, y: 0, duration: .9 }, 0.15)
+  .to('.hero-sub', { opacity: 1, duration: 1, ease: 'power2.out' }, 0.5)
+  .to('.scroll-cue', { opacity: 1, duration: .8 }, 0.8);
+
+// §02 pinned horizontal scroll
+const htrack = document.getElementById('htrack');
+const htWrap = document.getElementById('htrack-wrap');
+if (htrack && htWrap) {
+  gsap.to(htrack, {
+    x: () => -(htrack.scrollWidth - htWrap.clientWidth),
+    ease: 'none',
+    scrollTrigger: {
+      trigger: '#s02',
+      start: 'center center',
+      end: () => '+=' + htrack.scrollWidth,
+      pin: true,
+      scrub: 1,
+      anticipatePin: 1,
+    }
+  });
+  ScrollTrigger.addEventListener('refreshInit', () =>
+    gsap.set(htrack, { x: 0 })
+  );
+}
+
+// struct-row slide in from left
+gsap.utils.toArray('#struct-list .struct-row').forEach((el, i) => {
+  gsap.to(el, {
+    opacity: 1, x: 0, duration: 0.65, ease: 'power3.out',
+    delay: i * 0.07,
+    scrollTrigger: { trigger: el, start: 'top 86%', once: true }
+  });
+});
+
+// step-cards fade up
+['#stack-cards', '#step-grid'].forEach(id => {
+  gsap.utils.toArray(id + ' .step-card').forEach((el, i) => {
+    gsap.to(el, {
+      opacity: 1, y: 0, duration: 0.65, ease: 'power3.out',
+      delay: i * 0.09,
+      scrollTrigger: { trigger: el, start: 'top 88%', once: true }
+    });
+  });
+});
+
+// check-items slide in
+['#perf-list', '#build-list'].forEach(id => {
+  gsap.utils.toArray(id + ' .check-item').forEach((el, i) => {
+    gsap.to(el, {
+      opacity: 1, x: 0, duration: 0.55, ease: 'power2.out',
+      delay: i * 0.055,
+      scrollTrigger: { trigger: el, start: 'top 89%', once: true }
+    });
+  });
+});
+
+// §06 quote word-by-word reveal
+const quoteRaw = "Name the pain. Reframe the problem. Make the offer. Short sentences. Active voice. Concrete numbers build trust more than vague claims.";
+const quotePara = document.getElementById('quote-text');
+if (quotePara) {
+  quotePara.innerHTML = quoteRaw.split(' ')
+    .map(w => `<span class="q-word">${w}</span>`).join(' ');
+  gsap.to('#quote-text .q-word', {
+    opacity: 1, y: 0, stagger: 0.048, ease: 'power2.out', duration: 0.45,
+    scrollTrigger: { trigger: '#quote-wrap', start: 'top 72%', once: true }
+  });
+}
+
+// nav background on scroll
+ScrollTrigger.create({
+  start: 'top -80',
+  onUpdate: (s) => {
+    document.querySelector('nav').style.background =
+      s.direction === 1 ? 'rgba(15,15,15,.97)' : 'linear-gradient(to bottom,rgba(15,15,15,.92),transparent)';
+  }
+});
+</script>
+</body>
+</html>

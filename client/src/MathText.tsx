@@ -186,9 +186,9 @@ function parseLinesAndBlocks(textBlock: string, keyPrefix: string): React.ReactN
           style={{
             margin: "0.4em 0",
             padding: "0.4em 0.8em",
-            borderLeft: "3px solid #E2D9C2",
-            backgroundColor: "rgba(0,0,0,0.03)",
-            borderRadius: "0 6px 6px 0",
+            borderLeft: "1px solid #C4B88A",
+            backgroundColor: "rgba(0,0,0,0.02)",
+            borderRadius: "0 4px 4px 0",
             fontStyle: "italic",
           }}
         >
