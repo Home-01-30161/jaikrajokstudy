@@ -396,7 +396,7 @@ export default function LandingPage({ onEnter }: { onEnter: () => void }) {
             </div>
           </div>
           <div className="lp-reveal" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-            <img src="/collage/line_qr.jpg" alt="LINE QR Code — เพิ่มเพื่อน JaiKrajok"
+            <img src="/line-qr.jpg" alt="LINE QR Code — เพิ่มเพื่อน JaiKrajok"
               style={{ width: "clamp(140px,22vw,220px)", height: "auto", imageRendering: "crisp-edges" }}
               onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
             <span style={{ fontFamily: "'Space Mono', monospace", fontSize: "0.65rem",
