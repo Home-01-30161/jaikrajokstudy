@@ -406,7 +406,7 @@ export async function searchWeb(
   maxResults = 5,
   searchDepth: "basic" | "advanced" = "basic"
 ): Promise<TavilySearchResponse> {
-  const res = await fetch(`${TAVILY_PROXY}/search`, {
+  const res = await fetch(TAVILY_PROXY, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -420,12 +420,12 @@ export async function searchWeb(
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    console.error("[Tavily] HTTP error", res.status, errBody.slice(0, 300));
-    throw new Error(`Tavily ${res.status}: ${errBody.slice(0, 200)}`);
+    console.error("[Search] HTTP error", res.status, errBody.slice(0, 300));
+    throw new Error(`Search ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
   const raw = await res.json() as TavilySearchResponse;
-  console.debug("[Tavily] Search results for:", query, "| count:", raw.results?.length);
+  console.debug("[Search] Search results for:", query, "| count:", raw.results?.length);
   return raw;
 }
 
