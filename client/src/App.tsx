@@ -1638,9 +1638,10 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     setTransparencyLogs((prev) => [transNote, ...prev.slice(0, 4)]);
   }, []);
 
-  // Additional image state
+  // Additional image state & ref for instant closure access
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
   const generalImageInputRef = useRef<HTMLInputElement>(null);
+  const attachedImageRef = useRef<{ file: File; preview: string } | null>(null);
 
   const handleImageSelect = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -1649,20 +1650,27 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     }
     const reader = new FileReader();
     reader.onload = () => {
-      setAttachedImage({ file, preview: reader.result as string });
+      const imgObj = { file, preview: reader.result as string };
+      attachedImageRef.current = imgObj;
+      setAttachedImage(imgObj);
       toast.success("แนบรูปภาพสำเร็จ");
     };
     reader.readAsDataURL(file);
   }, []);
 
   const clearAttachedImage = useCallback(() => {
+    attachedImageRef.current = null;
     setAttachedImage(null);
     if (generalImageInputRef.current) generalImageInputRef.current.value = "";
+    if (homeworkInputRef.current) homeworkInputRef.current.value = "";
   }, []);
 
   const handleGeneralImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleImageSelect(file);
+    if (file) {
+      handleImageSelect(file);
+      e.target.value = "";
+    }
   };
 
   const handleAttachImageClick = () => {
@@ -1686,7 +1694,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
 
   const sendMessage = useCallback(async (overrideText?: string, sourceLabel: string = "ข้อความ") => {
     const textToSend = overrideText !== undefined ? overrideText : inputText;
-    const currentImage = attachedImage;
+    const currentImage = attachedImageRef.current || attachedImage;
 
     if (!textToSend.trim() && !currentImage) return;
 
@@ -1866,7 +1874,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   };
 
   const handleHomeworkPhoto = () => {
-    homeworkInputRef.current?.click();
+    handleAttachImageClick();
   };
 
   const handleHomeworkFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
