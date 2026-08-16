@@ -71,6 +71,12 @@ async function ensureDB() {
     CREATE INDEX IF NOT EXISTS idx_chat_messages_user
       ON chat_messages (line_user_id, created_at ASC);
 
+    -- Add performance tracking columns if they don't exist
+    ALTER TABLE chat_messages
+      ADD COLUMN IF NOT EXISTS response_time_ms INT;
+    ALTER TABLE chat_messages
+      ADD COLUMN IF NOT EXISTS tokens_used INT;
+
     CREATE TABLE IF NOT EXISTS line_user_state (
       line_user_id        TEXT PRIMARY KEY,
       session_id          TEXT        NOT NULL,
