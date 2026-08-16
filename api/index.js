@@ -17,6 +17,7 @@ import adminDbHandler from "./admin-db.js";
 import { exportUserData, deleteUserData } from "./user-data.js";
 import { globalLimiter, strictLimiter } from "./rate-limit.js";
 import { runMigrations } from "./migrate.js";
+import pg from "pg";
 
 // Strip APP_ prefix injected by CI so handlers read env vars normally
 // e.g. APP_DATABASE_URL → DATABASE_URL
@@ -26,6 +27,10 @@ for (const [key, value] of Object.entries(process.env)) {
     if (!process.env[unprefixed]) process.env[unprefixed] = value;
   }
 }
+
+const pool = process.env.DATABASE_URL
+  ? new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5, connectionTimeoutMillis: 3000 })
+  : null;
 
 const app = express();
 
@@ -48,7 +53,28 @@ app.use((_req, res, next) => {
 });
 
 // ── Health check (required by CI pipeline) ──────────────────────────────────
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+// Verifies the API is up AND the database is reachable, so a broken
+// migration or DB outage is caught by the pipeline instead of silently
+// returning ok while the bot misbehaves.
+app.get("/health", async (_req, res) => {
+  try {
+    if (pool) await pool.query("SELECT 1");
+    return res.json({ status: "ok", db: "ok" });
+  } catch (err) {
+    return res.status(503).json({ status: "degraded", db: "error" });
+  }
+});
+
+// ── DB health detail — exercises migration 002's db_health view ─────────────
+app.get("/db-health", async (_req, res) => {
+  if (!pool) return res.status(503).json({ status: "no-db-configured" });
+  try {
+    const result = await pool.query("SELECT COUNT(*) AS n FROM db_health");
+    return res.json({ status: "ok", tables: Number(result.rows[0]?.n || 0) });
+  } catch (err) {
+    return res.status(503).json({ status: "degraded", error: err?.message });
+  }
+});
 
 // ── Raw-body handlers — register BEFORE express.json() ───────────────────────
 // webhook reads raw body itself for LINE signature verification

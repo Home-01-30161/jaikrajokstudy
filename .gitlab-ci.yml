@@ -105,31 +105,46 @@ smoke-test:
       ok()  { echo "  ✅ $1"; }
       fail(){ echo "  ❌ $1 — $2"; FAIL=1; }
 
-      echo "── /health ──────────────────────────────────────────"
-      curl -sf "$API/health" >/dev/null \
-        && ok "health" || fail "health" "unreachable"
+      echo "── /health (incl. DB probe) ─────────────────────────"
+      curl -sf --max-time 30 "$API/health" >/dev/null \
+        && ok "health" || fail "health" "unreachable or DB down"
+
+      echo "── /db-health (migration 002 view) ──────────────────"
+      r=$(curl -sf --max-time 30 "$API/db-health" || echo "CURL_FAIL")
+      echo "$r" | grep -q '"status":"ok"' \
+        && ok "db-health" || fail "db-health" "$(echo $r | cut -c1-200)"
+
+      echo "── LINE webhook route (bad signature → 401) ─────────"
+      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST "$API/webhooks/line" \
+        -H "Content-Type: application/json" \
+        -H "X-Line-Signature: smoke-test-invalid" \
+        -d '{"events":[]}')
+      [ "$code" = "401" ] \
+        && ok "webhook-signature (401)" || fail "webhook-signature" "expected 401, got $code"
 
       echo "── thaillm-8b (primary text LLM) ────────────────────"
-      r=$(curl -sf -X POST "$API/thaillm/v1/chat/completions" \
+      r=$(curl -sf --max-time 60 -X POST "$API/thaillm/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -d '{"model":"thaillm-8b","messages":[{"role":"user","content":"ตอบว่า ok"}],"max_tokens":8,"stream":false}' \
         || echo "CURL_FAIL")
-      echo "$r" | grep -q '"choices"' \
+      echo "$r" | grep -q '"role":"assistant"' \
         && ok "thaillm-8b" || fail "thaillm-8b" "$(echo $r | cut -c1-200)"
 
       echo "── typhoon-v2.5-30b-a3b-instruct (text fallback) ────"
-      r=$(curl -sf -X POST "$API/typhoon/v1/chat/completions" \
+      r=$(curl -sf --max-time 60 -X POST "$API/typhoon/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -d '{"model":"typhoon-v2.5-30b-a3b-instruct","messages":[{"role":"user","content":"say ok"}],"max_tokens":8}' \
         || echo "CURL_FAIL")
-      echo "$r" | grep -q '"choices"' \
+      echo "$r" | grep -q '"role":"assistant"' \
         && ok "typhoon-text" || fail "typhoon-text" "$(echo $r | cut -c1-200)"
 
       echo "── ssense (sentiment analysis) ──────────────────────"
-      curl -sf -X POST "$API/ssense" \
+      r=$(curl -sf --max-time 60 -X POST "$API/ssense" \
         -H "Content-Type: application/json" \
-        -d '{"text":"วันนี้ดีใจมาก"}' >/dev/null \
-        && ok "ssense" || fail "ssense" "HTTP error"
+        -d '{"text":"วันนี้ดีใจมาก"}' \
+        || echo "CURL_FAIL")
+      echo "$r" | grep -qiE '"sentiment"|"label"|"mood"' \
+        && ok "ssense" || fail "ssense" "$(echo $r | cut -c1-200)"
 
       echo "── typhoon-ocr (vision/OCR) — 64×64 white PNG ───────"
       # python3 installed above; 1×1 PNG is rejected by the model.
@@ -138,7 +153,7 @@ smoke-test:
         -H "Content-Type: application/json" \
         -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${TINY_PNG}\"}},{\"type\":\"text\",\"text\":\"what text is in this image?\"}]}],\"max_tokens\":16}" \
         || echo "CURL_FAIL")
-      echo "$r" | grep -q '"choices"' \
+      echo "$r" | grep -q '"role":"assistant"' \
         && ok "typhoon-ocr" || fail "typhoon-ocr" "$(echo $r | cut -c1-200)"
 
       echo "── ptm-asr-1 (speech-to-text) — silent WAV ──────────"
@@ -154,7 +169,7 @@ smoke-test:
         && ok "ptm-asr-1" || fail "ptm-asr-1" "$(echo $r | cut -c1-200)"
 
       echo "── /api/search (SearXNG web search) ─────────────────"
-      r=$(curl -sf -X POST "$API/search" \
+      r=$(curl -sf --max-time 60 -X POST "$API/search" \
         -H "Content-Type: application/json" \
         -d '{"query":"ประเทศไทย","max_results":3}' \
         || echo "CURL_FAIL")
