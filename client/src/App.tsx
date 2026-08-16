@@ -2218,7 +2218,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
             }}
           />
 
-          <div className="relative z-10 px-5 py-6 md:px-8 md:py-7">
+          <div className="relative z-10 px-2 py-3 sm:px-4 md:px-8 md:py-7">
             {currentView === "home" && (
               <PageWrapper pageKey="home">
                 <HomeView
@@ -2973,7 +2973,7 @@ function ChatView({
           </div>
 
           {/* Messages */}
-          <div ref={chatBodyRef} className="flex-1 overflow-y-auto p-5 space-y-4 max-w-4xl mx-auto w-full" style={{ scrollbarWidth: "thin" }}>
+          <div ref={chatBodyRef} className="flex-1 overflow-y-auto p-2.5 sm:p-4 md:p-5 space-y-4 max-w-4xl mx-auto w-full" style={{ scrollbarWidth: "thin" }}>
             {messages.map((msg, _mi) => (
               <div key={msg.id} className={`flex chat-bubble-in ${msg.role === "user" ? "justify-end" : "justify-start"}`} style={{ animationDelay: `${_mi * 30}ms` }}>
                 {msg.role === "system" ? (
@@ -3102,7 +3102,7 @@ function ChatView({
           )}
 
           {/* Bottom Floating Prompt Card */}
-          <div className="p-4 bg-transparent max-w-3xl mx-auto w-full">
+          <div className="p-1.5 sm:p-4 bg-transparent max-w-3xl mx-auto w-full">
             <div className="bg-white rounded-3xl p-3 shadow-sm border border-[#E2D9C2] transition-all focus-within:shadow-md focus-within:border-[#FF3366]">
               {/* Image Preview */}
               {attachedImage && (
