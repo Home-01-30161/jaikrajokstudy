@@ -210,7 +210,7 @@ async function llmReply(text, history = []) {
   try {
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
-      ...history.slice(-8).map((m) => ({ role: m.role, content: m.text })),
+      ...history.slice(-8).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text })),
       { role: "user", content: text },
     ];
     const res = await fetch("https://tokenmind.pathumma.in.th/v1/chat/completions", {
@@ -222,8 +222,19 @@ async function llmReply(text, history = []) {
     if (!res.ok) return null;
     const data = await res.json();
     const raw = data?.choices?.[0]?.message?.content || "";
-    // Strip <think>...</think> reasoning blocks (ThaiLLM chain-of-thought)
-    return raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() || null;
+    // Strip ALL <think> tags (both paired and unpaired)
+    let cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "").trim();
+    // Strip leaked English reasoning
+    if (/(?:Okay, the user just said|The task is to|First, I need to|The user wants|Looking at)/i.test(cleaned)) {
+      const lines = cleaned.split("\n");
+      const thaiLines = lines.filter(l => {
+        const thaiCount = (l.match(/[ก-๙]/g) || []).length;
+        const engCount = (l.match(/[a-zA-Z]/g) || []).length;
+        return thaiCount > 8 && thaiCount > engCount;
+      });
+      if (thaiLines.length > 0) cleaned = thaiLines.join("\n").trim();
+    }
+    return cleaned || null;
   } catch (e) {
     console.error("LLM error:", e?.message);
     return null;

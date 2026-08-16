@@ -106,23 +106,14 @@ async function blobToWav(blob: Blob): Promise<Blob> {
 function stripThink(text: string): string {
   if (!text) return "";
 
-  // 1. Proper <think>...</think> tags — extract the final answer that follows </think>
-  if (text.includes("</think>")) {
-    const after = text.split("</think>").slice(1).join("</think>").trim();
-    if (after) return after;
-  }
+  // 1. Remove ALL <think> tags first (both paired and unpaired)
+  let cleaned = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")  // Remove paired tags
+    .replace(/<\/?think>/gi, "")                 // Remove any remaining unpaired tags
+    .trim();
 
-  // 2. Unclosed <think> tag at start
-  if (text.trimStart().startsWith("<think>")) {
-    const withoutTag = text.replace(/^<think>/i, "").trim();
-    const after = withoutTag.includes("</think>") ? withoutTag.split("</think>").slice(1).join("</think>").trim() : "";
-    if (after) return after;
-  }
-
-  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>/gi, "").trim();
-
-  // 3. Remove leaked English reasoning blocks (e.g. `สดใส" (bright). The task is to...`)
-  if (/(?:The task is to|First, I need to|The user wants|Check if it's within|Wait, the user|Looking at the|Let's analyze|Let's break down|We need to solve|So, start by|The response should)/i.test(cleaned)) {
+  // 2. Remove leaked English reasoning blocks
+  if (/(?:The task is to|First, I need to|The user wants|Check if it's within|Wait, the user|Looking at the|Let's analyze|Let's break down|We need to solve|So, start by|The response should|Okay, the user just said)/i.test(cleaned)) {
     // Check if there is a quoted Thai message like "ดีใจที่เห็นรอยยิ้ม..."
     const thaiQuoteMatch = cleaned.match(/"([฀-๿][^"]{10,})"/);
     if (thaiQuoteMatch && thaiQuoteMatch[1]) {
@@ -134,7 +125,7 @@ function stripThink(text: string): string {
     const thaiLines = lines.filter(l => {
       const thaiCount = (l.match(/[฀-๿]/g) || []).length;
       const engCount = (l.match(/[a-zA-Z]/g) || []).length;
-      return thaiCount > 8 && thaiCount > engCount && !l.includes("The task is") && !l.includes("First, I need") && !l.includes("The user wants");
+      return thaiCount > 8 && thaiCount > engCount && !l.includes("The task is") && !l.includes("First, I need") && !l.includes("The user wants") && !l.includes("Okay, the user");
     });
 
     if (thaiLines.length > 0) {
@@ -142,7 +133,7 @@ function stripThink(text: string): string {
     }
   }
 
-  // 4. General preamble stripping: if text starts with English reasoning before Thai content
+  // 3. General preamble stripping: if text starts with English reasoning before Thai content
   const firstThaiIdx = cleaned.search(/[฀-๿]/);
   if (firstThaiIdx > 0) {
     const preamble = cleaned.slice(0, firstThaiIdx).trim();
@@ -152,7 +143,7 @@ function stripThink(text: string): string {
   }
 
 
-  // 5. Physics/math homework: if response is long and starts with reasoning prose before
+  // 4. Physics/math homework: if response is long and starts with reasoning prose before
   //    the structured answer (## header), trim the preamble. Threshold: >400 chars before first ##.
   const firstHeaderIdx = cleaned.search(/^#{1,3}\s/m);
   if (firstHeaderIdx > 400) {
