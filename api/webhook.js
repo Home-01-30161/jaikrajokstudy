@@ -873,58 +873,6 @@ async function handleTextMessage(event) {
     return;
   }
 
-  // ── COMMAND: selfie / homework (after pending image) ───────────────────────
-  if ((isSelfie(text) || isHomework(text)) && state.pending_image_msgid) {
-    const mode  = isSelfie(text) ? "selfie" : "homework";
-    const msgId = state.pending_image_msgid;
-    await updateUserState(userId, { pending_image_msgid: null });
-
-    try {
-      const { buf, contentType } = await downloadLineContent(msgId);
-      const visionResult         = await visionAnalyze(buf, contentType, mode);
-
-      if (mode === "selfie") {
-        const mood      = detectMood(visionResult);
-        const newTrend  = pushTrend(state.trend_json, mood);
-        const newStreak = mood === "negative"
-          ? (state.concern_streak || 0) + 1
-          : mood === "positive" ? 0 : (state.concern_streak || 0);
-
-        await Promise.all([
-          updateUserState(userId, {
-            trend_json:     JSON.stringify(newTrend),
-            concern_streak: newStreak,
-          }),
-          saveToDB(userId, "bot", `[เซลฟี่] ${visionResult}`, state.session_id, sessionTitle),
-        ]);
-
-        const messages = [{ type: "flex", altText: `📸 ผลวิเคราะห์อารมณ์`, contents: buildSelfieFlex(visionResult, mood) }];
-        if (newStreak >= 3) {
-          messages.push({ type: "flex", altText: "กระจกเป็นห่วงคุณ", contents: buildEscalationFlex() });
-        }
-        await lineReply(event.replyToken, messages);
-
-      } else {
-        // homework — flex card for first chunk, plain text for overflow
-        await saveToDB(userId, "bot", `[เฉลยการบ้าน] ${visionResult.slice(0, 200)}`, state.session_id, sessionTitle);
-        const messages = [{ type: "flex", altText: "📚 เฉลยการบ้าน", contents: buildHomeworkFlex(visionResult) }];
-        if (visionResult.length > 2000) {
-          const overflow = splitText(visionResult.slice(2000), 4900);
-          overflow.slice(0, 4).forEach((chunk) => messages.push({ type: "text", text: chunk }));
-        }
-        await lineReply(event.replyToken, messages.slice(0, 5));
-      }
-
-    } catch (err) {
-      console.error("Vision error:", err?.message);
-      await lineReply(event.replyToken, [{
-        type: "text",
-        text: "ขออภัยค่ะ วิเคราะห์ภาพไม่ได้ในขณะนี้ ลองส่งภาพใหม่อีกครั้งนะ",
-      }]);
-    }
-    return;
-  }
-
   // ── NORMAL CHAT ─────────────────────────────────────────────────────────────
   const isCrisis = CRISIS_KEYWORDS.some((k) => text.includes(k));
   let reply;
@@ -1000,23 +948,140 @@ async function handleImageMessage(event) {
   const msgId  = event.message?.id;
   if (!msgId) return;
 
+  let state;
+  try { state = await getUserState(userId); } catch { state = null; }
+  const sessionTitle = state ? `เซสชัน #${state.session_num}` : null;
+
+  // Download image
+  let imageBuffer, contentType;
   try {
-    await getUserState(userId); // ensure row exists
-    await updateUserState(userId, { pending_image_msgid: msgId });
+    const downloaded = await downloadLineContent(msgId);
+    imageBuffer = downloaded.buf;
+    contentType = downloaded.contentType;
   } catch (err) {
-    console.error("State update error:", err?.message);
+    console.error("Image download error:", err?.message);
+    await lineReply(event.replyToken, [{
+      type: "text",
+      text: "ขออภัยค่ะ ไม่สามารถโหลดรูปภาพได้ ลองส่งใหม่อีกครั้งนะคะ",
+    }]);
+    return;
   }
 
+  // Send processing message
   await lineReply(event.replyToken, [{
     type: "text",
-    text: "ได้รับรูปภาพแล้วค่ะ 📷 ต้องการให้กระจกทำอะไรกับรูปนี้?",
-    quickReply: {
-      items: [
-        { type: "action", action: { type: "message", label: "📸 เซลฟี่วิเคราะห์อารมณ์", text: "เซลฟี่" } },
-        { type: "action", action: { type: "message", label: "📚 เฉลยการบ้าน",             text: "การบ้าน" } },
-      ],
-    },
+    text: "🔍 กำลังวิเคราะห์รูปภาพ...",
   }]);
+
+  try {
+    // Auto-detect image type using Typhoon Vision with generic prompt
+    const apiKey = process.env.TYPHOON_ASR_KEY;
+    if (!apiKey) throw new Error("TYPHOON_ASR_KEY not set");
+
+    const base64 = imageBuffer.toString("base64");
+    const mimeType = (contentType || "image/jpeg").split(";")[0];
+
+    const detectionPrompt = {
+      model: "typhoon-ocr",
+      messages: [
+        {
+          role: "system",
+          content: "You are an image classifier. Analyze if this image contains: (A) a person's face/selfie, or (B) text/homework/documents. Reply with only 'SELFIE' or 'HOMEWORK'."
+        },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+            { type: "text", text: "Classify this image as SELFIE or HOMEWORK." },
+          ],
+        },
+      ],
+      max_tokens: 10,
+      temperature: 0.1,
+    };
+
+    const detectionRes = await fetch("https://api.opentyphoon.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(detectionPrompt),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!detectionRes.ok) throw new Error(`Detection failed: ${detectionRes.status}`);
+
+    const detectionData = await detectionRes.json();
+    const classification = (detectionData?.choices?.[0]?.message?.content?.trim() || "").toUpperCase();
+
+    // Determine mode based on classification
+    const mode = classification.includes("SELFIE") ? "selfie" : "homework";
+
+    // Process image with detected mode
+    const visionResult = await visionAnalyze(imageBuffer, contentType, mode);
+
+    await saveToDB(userId, "user", `[รูปภาพ] ${mode === "selfie" ? "เซลฟี่" : "การบ้าน"}`, state.session_id, sessionTitle);
+
+    if (mode === "selfie") {
+      // Extract emotion from selfie result
+      const emotionMatch = visionResult.match(/\[อารมณ์:\s*([^\]]+)\]/i);
+      const emotion = emotionMatch ? emotionMatch[1].trim() : "neutral";
+      const mood = emotion.includes("สดใส") || emotion.includes("ยิ้ม") || emotion.includes("มีความสุข")
+        ? "positive"
+        : emotion.includes("เศร้า") || emotion.includes("เครียด") || emotion.includes("กังวล")
+        ? "negative"
+        : "neutral";
+
+      const newTrend = pushTrend(state.trend_json, mood);
+      const newStreak = mood === "negative" ? (state.concern_streak || 0) + 1 : mood === "positive" ? 0 : (state.concern_streak || 0);
+
+      await Promise.all([
+        saveToDB(userId, "bot", visionResult, state.session_id, sessionTitle),
+        updateUserState(userId, {
+          trend_json: JSON.stringify(newTrend),
+          concern_streak: newStreak,
+        }),
+      ]);
+
+      const messages = [{ type: "text", text: visionResult.slice(0, 5000) }];
+      if (mood === "negative" && newStreak >= 3) {
+        messages.push({ type: "flex", altText: "กระจกเป็นห่วงคุณ", contents: buildEscalationFlex() });
+      }
+      await fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ to: userId, messages }),
+      });
+
+    } else {
+      // Homework mode
+      await saveToDB(userId, "bot", visionResult, state.session_id, sessionTitle);
+
+      const messages = [{ type: "text", text: visionResult.slice(0, 5000) }];
+      if (visionResult.length > 5000) {
+        const overflow = splitText(visionResult.slice(5000), 4900);
+        overflow.slice(0, 4).forEach((chunk) => messages.push({ type: "text", text: chunk }));
+      }
+
+      await fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ to: userId, messages: messages.slice(0, 5) }),
+      });
+    }
+
+  } catch (err) {
+    console.error("Auto image processing error:", err?.message);
+    await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: userId,
+        messages: [{
+          type: "text",
+          text: "ขออภัยค่ะ วิเคราะห์รูปภาพไม่ได้ในขณะนี้ ลองส่งภาพใหม่อีกครั้งนะคะ",
+        }],
+      }),
+    });
+  }
 }
 
 async function handleAudioMessage(event) {
