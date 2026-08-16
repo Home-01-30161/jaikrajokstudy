@@ -26,6 +26,7 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");  // Tell nginx: DO NOT buffer this response
     res.flushHeaders();
 
     const sendUpdate = async () => {
