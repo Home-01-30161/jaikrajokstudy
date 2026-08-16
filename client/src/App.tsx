@@ -1269,9 +1269,23 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   // Raw LINE userId (e.g. "Uabc123") — present only for LINE-authenticated users
   const lineUserId = currentUser?.id?.startsWith("usr_line_") ? currentUser.id.replace("usr_line_", "") : null;
 
+  // Generate persistent web user ID for all users (guest or authenticated)
+  const getOrCreateWebUserId = () => {
+    // If LINE authenticated, use their LINE ID
+    if (lineUserId) return lineUserId;
+
+    // For web users, generate/retrieve persistent ID from localStorage
+    let webUserId = localStorage.getItem("jkj_web_user_id");
+    if (!webUserId) {
+      webUserId = `web_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+      localStorage.setItem("jkj_web_user_id", webUserId);
+    }
+    return webUserId;
+  };
+
   // Ref so saveWebMessage is always current inside useCallback closures
-  const lineUserIdRef = useRef<string | null>(lineUserId);
-  lineUserIdRef.current = lineUserId;
+  const lineUserIdRef = useRef<string | null>(getOrCreateWebUserId());
+  lineUserIdRef.current = getOrCreateWebUserId();
 
   const saveWebMessage = (role: "user" | "bot", text: string) => {
     const uid = lineUserIdRef.current;
