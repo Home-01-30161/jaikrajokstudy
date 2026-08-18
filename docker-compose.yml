@@ -81,6 +81,8 @@ services:
       GEMINI_API_KEY:              "${APP_GEMINI_API_KEY}"
       ENCRYPTION_KEY:              "${APP_ENCRYPTION_KEY:-}"
       ADMIN_EMAIL:                 "${APP_ADMIN_EMAIL:-}"
+      SMTP_USER:                   "${APP_SMTP_USER:-}"
+      SMTP_PASS:                   "${APP_SMTP_PASS:-}"
     volumes:
       - /data/hack/${TEAM:-team07}/uploads:/app/uploads
     healthcheck:

@@ -378,13 +378,150 @@ function vitePluginLineTokenDev(): Plugin {
   };
 }
 
+function vitePluginNotifyEmail(): Plugin {
+  return {
+    name: "notify-email-sender",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api/notify", async (req, res, next) => {
+        if (req.method !== "POST") return next();
+
+        let bodyStr = "";
+        req.on("data", (chunk) => { bodyStr += chunk.toString(); });
+        req.on("end", async () => {
+          try {
+            const { alert_type, text, streak } = JSON.parse(bodyStr || "{}");
+            const smtpUser = process.env.APP_SMTP_USER || process.env.SMTP_USER || process.env.GMAIL_USER;
+            const smtpPass = process.env.APP_SMTP_PASS || process.env.SMTP_PASS || process.env.GMAIL_APP_PASS;
+            const adminEmail = process.env.APP_ADMIN_EMAIL || process.env.ADMIN_EMAIL || smtpUser;
+
+            if (!smtpUser || !smtpPass) {
+              res.writeHead(503, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "SMTP credentials not set" }));
+              return;
+            }
+
+            const transporter = nodemailer.createTransport({
+              service: "gmail",
+              auth: { user: smtpUser, pass: smtpPass },
+            });
+
+            const alertLabel = alert_type === "crisis_signal" ? "🔴 สัญญาณวิกฤต (crisis)" : "⚠️ อารมณ์เชิงลบต่อเนื่อง (continuous_negative)";
+
+            await transporter.sendMail({
+              from: `"JaiKraJok" <${smtpUser}>`,
+              to: adminEmail,
+              subject: `${alertLabel} — JaiKraJok Web App Alert`,
+              text: [
+                `JaiKraJok — Human-in-the-loop alert (Web App)`,
+                ``,
+                `Alert type:        ${alertLabel}`,
+                `Streak count:      ${streak ?? 1}`,
+                `User message:      ${text ?? "-"}`,
+                ``,
+                `แจ้งเตือนจากการสนทนาทางหน้าเว็บ localhost:3000`,
+              ].join("\n"),
+            });
+
+            console.log(`[Notify Mailer] Crisis alert email sent to ${adminEmail}`);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: true }));
+          } catch (err: any) {
+            console.error("[Notify Mailer] Error:", err);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
+      });
+    },
+  };
+}
+
+function vitePluginGuardianEmail(): Plugin {
+  return {
+    name: "guardian-email-sender",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api/guardian-email", async (req, res, next) => {
+        if (req.method !== "POST") return next();
+
+        let bodyStr = "";
+        req.on("data", (chunk) => { bodyStr += chunk.toString(); });
+        req.on("end", async () => {
+          try {
+            const { to_email, child_name, approval_link, verification_code } = JSON.parse(bodyStr || "{}");
+            const smtpUser = process.env.APP_SMTP_USER || process.env.SMTP_USER || process.env.GMAIL_USER;
+            const smtpPass = process.env.APP_SMTP_PASS || process.env.SMTP_PASS || process.env.GMAIL_APP_PASS;
+
+            if (!to_email) {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Missing to_email" }));
+              return;
+            }
+
+            let transporter: nodemailer.Transporter;
+            let fromEmail = "JaiKraJok <noreply@jaikrajok.app>";
+
+            if (smtpUser && smtpPass) {
+              transporter = nodemailer.createTransport({
+                service: "gmail",
+                auth: { user: smtpUser, pass: smtpPass },
+              });
+              fromEmail = smtpUser;
+            } else {
+              const testAccount = await nodemailer.createTestAccount();
+              transporter = nodemailer.createTransport({
+                host: "smtp.ethereal.email",
+                port: 587,
+                secure: false,
+                auth: { user: testAccount.user, pass: testAccount.pass },
+              });
+              fromEmail = testAccount.user;
+            }
+
+            await transporter.sendMail({
+              from: fromEmail,
+              to: to_email,
+              subject: "ขอความยินยอมผู้ปกครอง — JaiKraJok",
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E0E0E0; border-radius: 8px;">
+                  <h2 style="color: #1A1208; border-bottom: 2px solid #FF3366; padding-bottom: 10px;">ขอความยินยอมผู้ปกครอง</h2>
+                  <p>สวัสดีครับ/ค่ะ ผู้ปกครองของ <strong>${child_name ?? "บุตรหลานของคุณ"}</strong></p>
+                  <p>บุตรหลานของคุณต้องการใช้งาน <strong>JaiKraJok</strong> ซึ่งเป็นแอปพลิเคชันสุขภาพจิตสำหรับนักเรียน</p>
+                  <div style="background-color: #E3F2FD; border: 2px solid #2196F3; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+                    <p style="margin: 0 0 10px 0; color: #1565C0; font-weight: 600;">รหัสยืนยันของคุณคือ:</p>
+                    <div style="font-family: monospace; font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #1A1208; background: white; padding: 15px; border: 2px solid #2196F3; border-radius: 4px; margin: 10px 0;">
+                      ${verification_code}
+                    </div>
+                  </div>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${approval_link}" style="display: inline-block; background-color: #2E7D32; color: white; padding: 15px 40px; text-decoration: none; font-weight: 700; border-radius: 4px; font-size: 16px;">
+                      อนุมัติการใช้งาน JaiKraJok
+                    </a>
+                  </div>
+                </div>
+              `,
+            });
+
+            console.log(`[Guardian Mailer] Email sent successfully to ${to_email}`);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true }));
+          } catch (err: any) {
+            console.error("[Guardian Mailer] Error:", err);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // loadEnv with prefix='' loads ALL vars (not just VITE_) into process.env
   const env = loadEnv(mode, path.resolve(import.meta.dirname), '');
   // Explicitly populate process.env so proxy configure callbacks can read them
   Object.assign(process.env, env);
 
-  const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginOtpEmail(), vitePluginSsenseDev(), vitePluginLineTokenDev()];
+  const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginOtpEmail(), vitePluginNotifyEmail(), vitePluginGuardianEmail(), vitePluginSsenseDev(), vitePluginLineTokenDev()];
 
   return {
     plugins,
@@ -440,11 +577,6 @@ export default defineConfig(({ mode }) => {
           },
         },
         '/api/search': {
-          target: 'http://localhost:8000',
-          changeOrigin: false,
-          rewrite: (path: string) => path.replace(/^\/api/, ''),
-        },
-        '/api/guardian-email': {
           target: 'http://localhost:8000',
           changeOrigin: false,
           rewrite: (path: string) => path.replace(/^\/api/, ''),

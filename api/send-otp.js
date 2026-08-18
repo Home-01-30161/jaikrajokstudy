@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { isSmtpConfigured } from "./notify.js";
+import { isSmtpConfigured, getSmtpCredentials } from "./notify.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -14,17 +14,16 @@ export default async function handler(req, res) {
     });
   }
 
+  const { user, pass } = getSmtpCredentials();
+
   try {
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+      auth: { user, pass },
     });
 
     await transporter.sendMail({
-      from: `"JaiKraJok" <${process.env.SMTP_USER}>`,
+      from: `"JaiKraJok" <${user}>`,
       to: email,
       subject: "รหัส OTP สำหรับ JaiKraJok",
       text: `รหัส OTP ของคุณคือ: ${otp}\n\nรหัสนี้จะหมดอายุใน 10 นาที`,

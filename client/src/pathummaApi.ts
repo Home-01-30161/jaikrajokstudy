@@ -731,8 +731,8 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   // Single vision call: unified OCR + diagram description with physics-aware system prompt
   let answer: string;
   try {
-    // typhoon-ocr is the only model that accepts image inputs; use systemPromptOverride
-    // so it reasons about angles/diagram structure instead of just dumping raw text.
+    // typhoon-ocr is the only model that accepts image inputs; 
+    // it reasons about angles/diagram structure instead of just dumping raw text.
     answer = await callVisionLLM(
       imageBlob,
       "Read this image. Transcribe all Thai text exactly. For each diagram element (points, angles, vectors, axes), " +

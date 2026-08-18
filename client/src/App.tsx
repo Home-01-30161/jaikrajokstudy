@@ -1615,7 +1615,18 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     });
     const nowStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
     setLogEntries((prev) => [{ id: crypto.randomUUID(), time: nowStr, label: info.label, source: sourceLabel, key }, ...prev.slice(0, 19)]);
-    setConcernStreak((prevStreak) => (info.concern ? prevStreak + 1 : 0));
+    setConcernStreak((prevStreak) => {
+      const nextStreak = info.concern ? prevStreak + 1 : 0;
+      if (nextStreak >= 3) {
+        setShowEscalationModal(true);
+        fetch("/api/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ alert_type: "continuous_negative", text: "อารมณ์เชิงลบติดต่อกัน 3 ครั้ง", streak: nextStreak }),
+        }).catch(() => {});
+      }
+      return nextStreak;
+    });
     if (info.concern) setShowSupportStrip(true);
   }, []);
 
@@ -1700,6 +1711,18 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
 
     if (overrideText === undefined) setInputText("");
     clearAttachedImage();
+
+    // Check crisis keywords and trigger email alert
+    const CRISIS_KEYWORDS = ["ฆ่าตัวตาย", "อยากตาย", "ทำร้ายตัวเอง", "ไม่อยากอยู่", "ไม่มีค่า"];
+    const isCrisis = CRISIS_KEYWORDS.some((k) => textToSend.includes(k));
+    if (isCrisis) {
+      setShowEscalationModal(true);
+      fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alert_type: "crisis_signal", text: textToSend, streak: 1 }),
+      }).catch(() => {});
+    }
 
     // Read history from ref — always up-to-date, no closure timing issues
     const currentHistory = messagesRef.current
@@ -3732,17 +3755,20 @@ export default function App() {
               setGuardianVerificationCode(code);
               const approvalLink = `${window.location.origin}${window.location.pathname}?guardian_token=${token}`;
               try {
-                await fetch("/api/guardian-email", {
+                const res = await fetch("/api/guardian-email", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ to_email: email, child_name: currentUser?.name ?? "บุตรหลานของคุณ", approval_link: approvalLink, verification_code: code }),
-                }).then(r => { if (!r.ok) throw new Error(`${r.status}`); });
+                });
+                if (!res.ok) {
+                  const errJson = await res.json().catch(() => ({}));
+                  throw new Error(errJson.error || `HTTP ${res.status}`);
+                }
                 setGuardianStage("pending");
                 toast("ส่งอีเมลถึงผู้ปกครองเรียบร้อยแล้ว");
-              } catch (err) {
-                const msg = (err as { text?: string })?.text ?? "ไม่ทราบสาเหตุ";
-                console.error("EmailJS error:", err);
-                toast(`ส่งอีเมลไม่สำเร็จ: ${msg}`);
+              } catch (err: any) {
+                console.error("Guardian Email error:", err);
+                toast(`ส่งอีเมลไม่สำเร็จ: ${err.message || "เกิดข้อผิดพลาด"}`);
               }
             }}
             onVerifyCode={async (inputCode) => {

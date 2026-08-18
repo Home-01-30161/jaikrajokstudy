@@ -17,10 +17,15 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const PLACEHOLDER_PASS = /^(your-|changeme|xxxx|replace)/i;
 let warnedSmtp = false;
 
+export function getSmtpCredentials() {
+  const user = process.env.APP_SMTP_USER || process.env.SMTP_USER;
+  const pass = process.env.APP_SMTP_PASS || process.env.SMTP_PASS;
+  return { user, pass };
+}
+
 /** True when SMTP credentials are real (not placeholders). */
 export function isSmtpConfigured() {
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const { user, pass } = getSmtpCredentials();
   if (!user || !pass) return false;
   if (PLACEHOLDER_PASS.test(pass) || pass.includes("your-gmail-app-password")) return false;
   return true;
@@ -51,22 +56,26 @@ async function ensureAlertTable() {
  * Never throws — failures are logged so the LINE chat keeps working.
  */
 export async function recordAlert({ userId, alert_type, consecutive_negative, message_shown_to_user }) {
-  if (!process.env.DATABASE_URL) {
-    console.warn("[notify] DATABASE_URL not set — alert not recorded");
-    return null;
-  }
-
-  await ensureAlertTable();
-
   const lineUserIdHash = hashId(userId);
-  const inserted = await pool.query(
-    `INSERT INTO emotion_alerts
-       (line_user_id_hash, alert_type, consecutive_negative, message_shown_to_user)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id`,
-    [lineUserIdHash, alert_type, consecutive_negative ?? null, String(message_shown_to_user ?? "").slice(0, 500)]
-  );
-  const alertId = inserted.rows[0]?.id ?? null;
+  let alertId = null;
+
+  if (process.env.DATABASE_URL) {
+    try {
+      await ensureAlertTable();
+      const inserted = await pool.query(
+        `INSERT INTO emotion_alerts
+           (line_user_id_hash, alert_type, consecutive_negative, message_shown_to_user)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [lineUserIdHash, alert_type, consecutive_negative ?? null, String(message_shown_to_user ?? "").slice(0, 500)]
+      );
+      alertId = inserted.rows[0]?.id ?? null;
+    } catch (err) {
+      console.warn("[notify] DB alert record failed:", err.message);
+    }
+  } else {
+    console.warn("[notify] DATABASE_URL not set — DB record skipped, sending email");
+  }
 
   const sent = await sendAdminEmail({
     alert_type,
@@ -75,8 +84,8 @@ export async function recordAlert({ userId, alert_type, consecutive_negative, me
     message_shown_to_user,
   });
 
-  if (sent && alertId) {
-    await pool.query(`UPDATE emotion_alerts SET admin_notified = TRUE WHERE id = $1`, [alertId]);
+  if (sent && alertId && pool) {
+    await pool.query(`UPDATE emotion_alerts SET admin_notified = TRUE WHERE id = $1`, [alertId]).catch(() => {});
   }
 
   return { id: alertId, admin_notified: sent };
@@ -95,23 +104,21 @@ export async function sendAdminEmail({ alert_type, line_user_id_hash, consecutiv
     return false;
   }
 
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+  const { user, pass } = getSmtpCredentials();
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.APP_ADMIN_EMAIL || user;
   if (!adminEmail) {
-    console.warn("[notify] no ADMIN_EMAIL set — falling back to SMTP_USER");
+    console.warn("[notify] no ADMIN_EMAIL set — falling back to SMTP user");
   }
 
   try {
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+      auth: { user, pass },
     });
 
     const alertLabel = alert_type === "crisis_signal" ? "🔴 สัญญาณวิกฤต (crisis)" : "⚠️ อารมณ์เชิงลบต่อเนื่อง (continuous_negative)";
     await transporter.sendMail({
-      from: `"JaiKraJok" <${process.env.SMTP_USER}>`,
+      from: `"JaiKraJok" <${user}>`,
       to: adminEmail,
       subject: `${alertLabel} — JaiKraJok (user ${line_user_id_hash.slice(0, 12)}…)`,
       text: [
