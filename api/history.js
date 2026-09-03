@@ -1,94 +1,74 @@
-import pg from "pg";
-import { encryptText, decryptText, hashId } from "./privacy.js";
-
-// Shared connection pool — reused across requests
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-
-// Ensure the chat_messages table exists on first use
-let tableReady = false;
-async function ensureTable() {
-  if (tableReady) return;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      id           SERIAL PRIMARY KEY,
-      line_user_id TEXT        NOT NULL,
-      role         TEXT        NOT NULL,
-      text         TEXT        NOT NULL,
-      source       TEXT        NOT NULL DEFAULT 'web',
-      session_id   TEXT,
-      session_title TEXT,
-      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages (line_user_id, created_at ASC);
-  `);
-  tableReady = true;
-}
+// history.js — chat message store backed by Supabase REST API
+//   POST /history  { line_user_id, role, text, source?, session_id?, session_title? }
+//   GET  /history?line_user_id=...  → { sessions: [...] }
 
 export default async function handler(req, res) {
-  if (!process.env.DATABASE_URL)
-    return res.status(500).json({ error: "DATABASE_URL not configured" });
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const serviceKey  = process.env.SUPABASE_SERVICE_KEY;
+  if (!supabaseUrl || !serviceKey)
+    return res.status(500).json({ error: "Supabase not configured" });
 
-  try {
-    await ensureTable();
-  } catch (err) {
-    return res.status(500).json({ error: "DB init failed: " + err.message });
-  }
-
-  // POST /api/history — save a web chat message
+  // ── POST: save a web chat message ─────────────────────────────────────────
   if (req.method === "POST") {
     const { line_user_id, role, text, source, session_id, session_title } = req.body ?? {};
     if (!line_user_id || !role || !text)
       return res.status(400).json({ error: "Missing fields" });
 
-    try {
-      await pool.query(
-        `INSERT INTO chat_messages
-           (line_user_id, role, text, source, session_id, session_title)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          hashId(line_user_id),                          // § anonymized — never raw
-          role,
-          encryptText(String(text).slice(0, 4000)),      // § AES-256-GCM
-          source || "web",
-          session_id || null,
-          session_title || null,
-        ]
-      );
-      return res.status(200).json({ ok: true });
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
+    const response = await fetch(`${supabaseUrl}/rest/v1/chat_messages`, {
+      method: "POST",
+      headers: {
+        apikey:          serviceKey,
+        Authorization:   `Bearer ${serviceKey}`,
+        "Content-Type":  "application/json",
+        Prefer:          "return=minimal",
+      },
+      body: JSON.stringify({
+        line_user_id,
+        role,
+        text:          String(text).slice(0, 4000),
+        source:        source       || "web",
+        session_id:    session_id   || null,
+        session_title: session_title || null,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text().catch(() => "");
+      return res.status(response.status).json({ error: err.slice(0, 200) });
     }
+    return res.status(200).json({ ok: true });
   }
 
-  // GET /api/history?line_user_id=U... — fetch chat history grouped by session
+  // ── GET: fetch chat history grouped by session ─────────────────────────────
   if (req.method === "GET") {
     const lineUserId = req.query.line_user_id;
     if (!lineUserId || lineUserId.length > 128)
       return res.status(400).json({ error: "Missing or invalid line_user_id" });
 
+    const params = new URLSearchParams({
+      line_user_id: `eq.${lineUserId}`,
+      order:        "created_at.asc",
+      limit:        "200",
+      select:       "role,text,source,created_at,session_id,session_title",
+    });
+
     try {
-      // Match the hashed id first; the raw id is a fallback for legacy rows
-      // that predate the anonymization migration (004).
-      const { rows } = await pool.query(
-        `SELECT role, text, source, created_at, session_id, session_title
-           FROM chat_messages
-          WHERE line_user_id = ANY($1::text[])
-          ORDER BY created_at ASC
-          LIMIT 200`,
-        [[hashId(lineUserId), lineUserId]]
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/chat_messages?${params}`,
+        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
       );
+      if (!response.ok) return res.status(502).json({ error: "Supabase error" });
+      const rows = await response.json();
 
-      for (const row of rows) row.text = decryptText(row.text); // § decrypt AES-256-GCM
-
-      // Group by session_id — rows without session_id go into a "LINE Bot History" fallback
+      // Group by session_id
       const sessionMap = new Map();
       for (const row of rows) {
         const sid = row.session_id || "__line__";
         if (!sessionMap.has(sid)) {
           sessionMap.set(sid, {
-            session_id: sid,
+            session_id:    sid,
             session_title: row.session_title || (sid === "__line__" ? "LINE Bot History" : "สนทนา"),
-            messages: [],
+            messages:      [],
           });
         }
         sessionMap.get(sid).messages.push(row);
@@ -96,7 +76,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({ sessions: Array.from(sessionMap.values()) });
     } catch (err) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: err.message || String(err) });
     }
   }
 

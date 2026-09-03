@@ -5,9 +5,38 @@
 //           multi-session commands, 1323 support strip
 // ─────────────────────────────────────────────────────────────────────────────
 import { createHmac, randomUUID } from "crypto";
-import pg from "pg";
 import { encryptText, decryptText, hashId } from "./privacy.js";
 import { recordAlert } from "./notify.js";
+
+// ── Supabase REST helpers ─────────────────────────────────────────────────────
+function sbUrl()  { return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ""; }
+function sbKey()  { return process.env.SUPABASE_SERVICE_KEY || ""; }
+function sbHdr(extra = {}) {
+  return { apikey: sbKey(), Authorization: `Bearer ${sbKey()}`, "Content-Type": "application/json", ...extra };
+}
+async function sbGet(table, params) {
+  const url = `${sbUrl()}/rest/v1/${table}?${new URLSearchParams(params)}`;
+  const res = await fetch(url, { headers: sbHdr() });
+  if (!res.ok) throw new Error(`Supabase GET ${table}: ${res.status}`);
+  return res.json();
+}
+async function sbPost(table, body) {
+  const res = await fetch(`${sbUrl()}/rest/v1/${table}`, {
+    method: "POST",
+    headers: sbHdr({ Prefer: "return=representation" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`Supabase POST ${table}: ${res.status} ${t.slice(0,200)}`); }
+  return res.json();
+}
+async function sbPatch(table, filter, body) {
+  const res = await fetch(`${sbUrl()}/rest/v1/${table}?${filter}`, {
+    method: "PATCH",
+    headers: sbHdr({ Prefer: "return=minimal" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`Supabase PATCH ${table}: ${res.status} ${t.slice(0,200)}`); }
+}
 
 export const config = { api: { bodyParser: false } };
 
@@ -65,155 +94,90 @@ const isHomework  = (t) => /^(การบ้าน|homework|เฉลย)$/i.te
 const isHistory   = (t) => /^(ประวัติ|history|ดูประวัติ|บทสนทนา)$/i.test(t.trim());
 const isVoiceHint = (t) => /^(อยากส่งเสียง)$/i.test(t.trim());
 
-// ── Database ──────────────────────────────────────────────────────────────────
-
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-let dbReady = false;
-
-async function ensureDB() {
-  if (dbReady) return;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      id            SERIAL PRIMARY KEY,
-      line_user_id  TEXT        NOT NULL,
-      role          TEXT        NOT NULL,
-      text          TEXT        NOT NULL,
-      source        TEXT        NOT NULL DEFAULT 'line',
-      session_id    TEXT,
-      session_title TEXT,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_chat_messages_user
-      ON chat_messages (line_user_id, created_at ASC);
-
-    -- Add performance tracking columns if they don't exist
-    ALTER TABLE chat_messages
-      ADD COLUMN IF NOT EXISTS response_time_ms INT;
-    ALTER TABLE chat_messages
-      ADD COLUMN IF NOT EXISTS tokens_used INT;
-
-    CREATE TABLE IF NOT EXISTS line_user_state (
-      line_user_id        TEXT PRIMARY KEY,
-      session_id          TEXT        NOT NULL,
-      session_num         INT         NOT NULL DEFAULT 1,
-      concern_streak      INT         NOT NULL DEFAULT 0,
-      pending_image_msgid TEXT,
-      trend_json          JSONB       NOT NULL DEFAULT '[]'::jsonb,
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  dbReady = true;
-}
+// ── Database (Supabase REST) ───────────────────────────────────────────────────
 
 /** Get or create a user-state row, return it. */
 async function getUserState(userId) {
-  await ensureDB();
+  if (!sbUrl() || !sbKey()) return null;
   const key = hashId(userId);
-  // Match the hashed id first; raw id is a legacy fallback (pre-004 rows)
-  const found = await pool.query(
-    `SELECT * FROM line_user_state WHERE line_user_id = ANY($1::text[])`,
-    [[key, userId]]
-  );
-  if (found.rows.length > 0) return found.rows[0];
-  // INSERT … ON CONFLICT DO NOTHING ensures idempotency
-  await pool.query(
-    `INSERT INTO line_user_state (line_user_id, session_id)
-     VALUES ($1, $2)
-     ON CONFLICT (line_user_id) DO NOTHING`,
-    [key, randomUUID()]
-  );
-  const { rows } = await pool.query(
-    `SELECT * FROM line_user_state WHERE line_user_id = ANY($1::text[])`,
-    [[key, userId]]
-  );
-  return rows[0];
+  try {
+    // Try hashed id first, then raw id as legacy fallback
+    let rows = await sbGet("line_user_state", { line_user_id: `eq.${key}` });
+    if (!rows.length) rows = await sbGet("line_user_state", { line_user_id: `eq.${userId}` });
+    if (rows.length > 0) return rows[0];
+
+    // Create new state row
+    const newState = { line_user_id: key, session_id: randomUUID(), session_num: 1, concern_streak: 0, trend_json: [] };
+    const created = await fetch(`${sbUrl()}/rest/v1/line_user_state`, {
+      method: "POST",
+      headers: sbHdr({ Prefer: "return=representation", "on_conflict": "line_user_id" }),
+      body: JSON.stringify(newState),
+    });
+    const result = created.ok ? await created.json() : [];
+    return Array.isArray(result) ? result[0] : result;
+  } catch (err) {
+    console.error("getUserState error:", err?.message);
+    return null;
+  }
 }
 
 /** Partially update user-state columns. */
 async function updateUserState(userId, updates) {
-  const ALLOWED = [
-    "session_id", "session_num", "concern_streak",
-    "pending_image_msgid", "trend_json",
-  ];
+  if (!sbUrl() || !sbKey()) return;
+  const ALLOWED = ["session_id", "session_num", "concern_streak", "pending_image_msgid", "trend_json"];
   const key = hashId(userId);
-  const fields = [];
-  const vals   = [];
-  let idx = 1;
+  const patch = {};
   for (const k of ALLOWED) {
-    if (k in updates) {
-      fields.push(`${k} = $${idx++}`);
-      vals.push(updates[k] ?? null);
-    }
+    if (k in updates) patch[k] = updates[k] ?? null;
   }
-  if (fields.length === 0) return;
-  fields.push(`updated_at = NOW()`);
-  vals.push([key, userId]);
-  await pool.query(
-    `UPDATE line_user_state SET ${fields.join(", ")} WHERE line_user_id = ANY($${idx}::text[])`,
-    vals
-  );
+  if (!Object.keys(patch).length) return;
+  patch.updated_at = new Date().toISOString();
+  try {
+    // Try hashed id; if not found try raw (legacy)
+    await sbPatch("line_user_state", `line_user_id=eq.${key}`, patch);
+  } catch (err) {
+    console.error("updateUserState error:", err?.message);
+  }
 }
 
 async function getRecentMessages(userId, limit = 10) {
-  if (!process.env.DATABASE_URL) return [];
+  if (!sbUrl() || !sbKey()) return [];
   try {
-    const { rows } = await pool.query(
-      `SELECT role, text FROM chat_messages
-       WHERE line_user_id = ANY($1::text[]) AND source = 'line'
-       ORDER BY created_at DESC LIMIT $2`,
-      [[hashId(userId), userId], limit]
-    );
-    return rows.reverse().map((r) => ({ ...r, text: decryptText(r.text) }));
+    const key = hashId(userId);
+    // Fetch from both hashed and raw id (legacy), merge and sort
+    const [hashed, raw] = await Promise.all([
+      sbGet("chat_messages", { line_user_id: `eq.${key}`, source: "eq.line", order: "created_at.desc", limit: String(limit), select: "role,text,created_at" }),
+      sbGet("chat_messages", { line_user_id: `eq.${userId}`, source: "eq.line", order: "created_at.desc", limit: String(limit), select: "role,text,created_at" }),
+    ]);
+    const all = [...hashed, ...raw].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).slice(-limit);
+    return all.map((r) => ({ role: r.role, text: r.text }));
   } catch (err) {
     console.error("getRecentMessages error:", err?.message);
     return [];
   }
 }
 
-async function saveToDB(userId, role, text, sessionId, sessionTitle, responseTimeMs = null) {
-  if (!process.env.DATABASE_URL) return null;
+async function saveToDB(userId, role, text, sessionId, sessionTitle, _responseTimeMs = null) {
+  if (!sbUrl() || !sbKey()) return null;
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO chat_messages
-         (line_user_id, role, text, source, session_id, session_title, response_time_ms)
-         VALUES ($1, $2, $3, 'line', $4, $5, $6)
-         RETURNING id`,
-      [hashId(userId), role, encryptText(String(text).slice(0, 8000)), sessionId, sessionTitle, responseTimeMs]
-    );
-    return rows[0]?.id || null;
+    const rows = await sbPost("chat_messages", {
+      line_user_id:  hashId(userId),
+      role,
+      text:          String(text).slice(0, 8000),
+      source:        "line",
+      session_id:    sessionId    || null,
+      session_title: sessionTitle || null,
+    });
+    return Array.isArray(rows) ? rows[0]?.id || null : null;
   } catch (err) {
     console.error("saveToDB error:", err?.message);
     return null;
   }
 }
 
-/** Update chat message with performance metrics (response_time_ms, tokens_used) */
-async function updateMessageMetrics(messageId, responseTimeMs, tokensUsed = null) {
-  if (!process.env.DATABASE_URL || !messageId) return;
-  try {
-    await pool.query(
-      `UPDATE chat_messages
-       SET response_time_ms = $1, tokens_used = $2
-       WHERE id = $3`,
-      [responseTimeMs, tokensUsed, messageId]
-    );
-  } catch (err) {
-    console.error("updateMessageMetrics error:", err?.message);
-  }
-}
-
-async function saveToDBOld(userId, role, text, sessionId, sessionTitle) {
-  if (!process.env.DATABASE_URL) return;
-  try {
-    await pool.query(
-      `INSERT INTO chat_messages
-         (line_user_id, role, text, source, session_id, session_title)
-       VALUES ($1, $2, $3, 'line', $4, $5)`,
-      [hashId(userId), role, encryptText(String(text).slice(0, 8000)), sessionId || null, sessionTitle || null]
-    );
-  } catch (err) {
-    console.error("DB save error:", err?.message);
-  }
+/** No-op: Supabase doesn't support in-place PATCH by returned id easily without RLS. */
+async function updateMessageMetrics(_messageId, _responseTimeMs, _tokensUsed = null) {
+  // Not implemented for Supabase — metrics tracking omitted
 }
 
 // ── LINE API helpers ──────────────────────────────────────────────────────────
@@ -458,20 +422,20 @@ async function visionAnalyze(imageBuffer, contentType, mode) {
   return typhoonChat(payload, 40000);
 }
 
-/** ptm-asr-1 — transcribe audio Buffer from LINE (audio/m4a). */
+/** typhoon-asr-realtime — transcribe audio Buffer from LINE (audio/m4a or audio/wav). */
 async function asrTranscribe(audioBuffer, contentType) {
-  const apiKey = process.env.TOKENMIND_API_KEY;
-  if (!apiKey) throw new Error("TOKENMIND_API_KEY not set");
+  const apiKey = process.env.TYPHOON_ASR_KEY || process.env.TYPHOON_API_KEY;
+  if (!apiKey) throw new Error("TYPHOON_ASR_KEY not set");
 
   const mimeType = contentType || "audio/m4a";
-  const ext      = mimeType.includes("mp4") ? "mp4" : "m4a";
+  const ext      = mimeType.includes("mp4") ? "mp4" : mimeType.includes("wav") ? "wav" : "m4a";
   const blob     = new Blob([audioBuffer], { type: mimeType });
 
   const form = new FormData();
   form.append("file",  blob, `recording.${ext}`);
-  form.append("model", "ptm-asr-1");
+  form.append("model", "typhoon-asr-realtime");
 
-  const res = await fetch("https://tokenmind.pathumma.in.th/v1/audio/transcriptions", {
+  const res = await fetch("https://api.opentyphoon.ai/v1/audio/transcriptions", {
     method:  "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body:    form,
@@ -479,11 +443,11 @@ async function asrTranscribe(audioBuffer, contentType) {
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    throw new Error(`ptm-asr-1 ${res.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`typhoon-asr-realtime ${res.status}: ${errText.slice(0, 200)}`);
   }
   const data = await res.json();
   const text = (data.text || "").trim();
-  if (!text) throw new Error("ASR returned empty transcription");
+  if (!text) throw new Error("Typhoon ASR returned empty transcription");
   return text;
 }
 

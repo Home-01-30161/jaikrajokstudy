@@ -1,69 +1,66 @@
-// ─────────────────────────────────────────────────────────────────────────────
 // user-data.js — PDPA §33-34: right of access, portability, and erasure
+//   backed by Supabase REST API
 //
 //   GET    /user-data/export?line_user_id=U...
-//          → JSON with every stored record for this user (decrypted)
+//          → JSON with every stored record for this user
 //   DELETE /user-data  body: { line_user_id: "U..." }
 //          → permanently deletes every stored record for this user
-//
-// The raw id is never stored — lookups match the SHA-256 hash, with a raw-id
-// fallback for legacy rows that predate the anonymization migration (004).
-// ─────────────────────────────────────────────────────────────────────────────
-import pg from "pg";
-import { decryptText, hashId } from "./privacy.js";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-
-const USER_TABLES = {
-  chat_messages:  "line_user_id",
-  line_user_state: "line_user_id",
-  emotion_alerts: "line_user_id_hash",
-};
-
-async function userKeys(lineUserId) {
-  return [hashId(lineUserId), lineUserId];
+function sbHeaders(key) {
+  return {
+    apikey:         key,
+    Authorization:  `Bearer ${key}`,
+    "Content-Type": "application/json",
+    Prefer:         "return=minimal",
+  };
 }
 
 /** GET /user-data/export?line_user_id=... — full data export (JSON) */
 export async function exportUserData(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
-  if (!process.env.DATABASE_URL)
-    return res.status(500).json({ error: "DATABASE_URL not configured" });
+
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const serviceKey  = process.env.SUPABASE_SERVICE_KEY;
+  if (!supabaseUrl || !serviceKey)
+    return res.status(500).json({ error: "Supabase not configured" });
 
   const { line_user_id } = req.query;
   if (!line_user_id || line_user_id.length > 128)
     return res.status(400).json({ error: "line_user_id query param required" });
 
-  const keys = await userKeys(line_user_id);
-
   try {
-    const data = {};
+    const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
 
-    const messages = await pool.query(
-      `SELECT id, role, text, source, session_id, session_title, created_at
-         FROM chat_messages WHERE line_user_id = ANY($1::text[]) ORDER BY created_at ASC`,
-      [keys]
-    );
-    data.chat_messages = messages.rows.map((r) => ({ ...r, text: decryptText(r.text) }));
+    // chat_messages
+    const msgParams = new URLSearchParams({
+      line_user_id: `eq.${line_user_id}`,
+      order: "created_at.asc",
+      select: "id,role,text,source,session_id,session_title,created_at",
+    });
+    const msgRes = await fetch(`${supabaseUrl}/rest/v1/chat_messages?${msgParams}`, { headers });
+    const chat_messages = msgRes.ok ? await msgRes.json() : [];
 
-    const state = await pool.query(
-      `SELECT session_id, session_num, concern_streak, trend_json, updated_at
-         FROM line_user_state WHERE line_user_id = ANY($1::text[])`,
-      [keys]
-    );
-    data.line_user_state = state.rows;
+    // line_user_state
+    const stateParams = new URLSearchParams({
+      line_user_id: `eq.${line_user_id}`,
+      select: "session_id,session_num,concern_streak,trend_json,updated_at",
+    });
+    const stateRes = await fetch(`${supabaseUrl}/rest/v1/line_user_state?${stateParams}`, { headers });
+    const line_user_state = stateRes.ok ? await stateRes.json() : [];
 
-    const alerts = await pool.query(
-      `SELECT id, alert_type, consecutive_negative, message_shown_to_user, admin_notified, triggered_at
-         FROM emotion_alerts WHERE line_user_id_hash = $1 ORDER BY triggered_at ASC`,
-      [hashId(line_user_id)]
-    ).catch(() => ({ rows: [] }));
-    data.emotion_alerts = alerts.rows;
+    // emotion_alerts
+    const alertParams = new URLSearchParams({
+      line_user_id: `eq.${line_user_id}`,
+      order: "triggered_at.asc",
+      select: "id,alert_type,consecutive_negative,message_shown_to_user,admin_notified,triggered_at",
+    });
+    const alertRes = await fetch(`${supabaseUrl}/rest/v1/emotion_alerts?${alertParams}`, { headers });
+    const emotion_alerts = alertRes.ok ? await alertRes.json() : [];
 
     return res.status(200).json({
       exported_at: new Date().toISOString(),
-      line_user_id_hash: hashId(line_user_id),
-      data,
+      line_user_id,
+      data: { chat_messages, line_user_state, emotion_alerts },
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -73,35 +70,44 @@ export async function exportUserData(req, res) {
 /** DELETE /user-data — permanent erasure (PDPA right to deletion) */
 export async function deleteUserData(req, res) {
   if (req.method !== "DELETE") return res.status(405).json({ error: "Method not allowed" });
-  if (!process.env.DATABASE_URL)
-    return res.status(500).json({ error: "DATABASE_URL not configured" });
+
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const serviceKey  = process.env.SUPABASE_SERVICE_KEY;
+  if (!supabaseUrl || !serviceKey)
+    return res.status(500).json({ error: "Supabase not configured" });
 
   const { line_user_id } = req.body ?? {};
   if (!line_user_id || line_user_id.length > 128)
     return res.status(400).json({ error: "line_user_id required in body" });
 
-  const keys = await userKeys(line_user_id);
-  const hash = hashId(line_user_id);
+  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json", Prefer: "return=representation" };
 
   try {
     const deleted = {};
-    const messages = await pool.query(
-      `DELETE FROM chat_messages WHERE line_user_id = ANY($1::text[]) RETURNING id`,
-      [keys]
-    );
-    deleted.chat_messages = messages.rowCount;
 
-    const state = await pool.query(
-      `DELETE FROM line_user_state WHERE line_user_id = ANY($1::text[]) RETURNING id`,
-      [keys]
+    // Delete chat_messages
+    const msgRes = await fetch(
+      `${supabaseUrl}/rest/v1/chat_messages?line_user_id=eq.${encodeURIComponent(line_user_id)}`,
+      { method: "DELETE", headers }
     );
-    deleted.line_user_state = state.rowCount;
+    const deletedMsgs = msgRes.ok ? await msgRes.json().catch(() => []) : [];
+    deleted.chat_messages = Array.isArray(deletedMsgs) ? deletedMsgs.length : 0;
 
-    const alerts = await pool.query(
-      `DELETE FROM emotion_alerts WHERE line_user_id_hash = $1 RETURNING id`,
-      [hash]
-    ).catch(() => ({ rowCount: 0 }));
-    deleted.emotion_alerts = alerts.rowCount;
+    // Delete line_user_state
+    const stateRes = await fetch(
+      `${supabaseUrl}/rest/v1/line_user_state?line_user_id=eq.${encodeURIComponent(line_user_id)}`,
+      { method: "DELETE", headers }
+    );
+    const deletedState = stateRes.ok ? await stateRes.json().catch(() => []) : [];
+    deleted.line_user_state = Array.isArray(deletedState) ? deletedState.length : 0;
+
+    // Delete emotion_alerts
+    const alertRes = await fetch(
+      `${supabaseUrl}/rest/v1/emotion_alerts?line_user_id=eq.${encodeURIComponent(line_user_id)}`,
+      { method: "DELETE", headers }
+    ).catch(() => null);
+    const deletedAlerts = alertRes?.ok ? await alertRes.json().catch(() => []) : [];
+    deleted.emotion_alerts = Array.isArray(deletedAlerts) ? deletedAlerts.length : 0;
 
     return res.status(200).json({ ok: true, deleted });
   } catch (err) {

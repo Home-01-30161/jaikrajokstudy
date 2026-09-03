@@ -593,13 +593,13 @@ export default defineConfig(({ mode }) => {
           },
         },
         '/api/ptm-asr': {
-          target: 'https://tokenmind.pathumma.in.th',
+          target: 'https://api.opentyphoon.ai',
           changeOrigin: true,
           secure: true,
           rewrite: (path: string) => path.replace(/^\/api\/ptm-asr/, '/v1'),
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq) => {
-              proxyReq.setHeader('Authorization', `Bearer ${env.TOKENMIND_API_KEY ?? ''}`);
+              proxyReq.setHeader('Authorization', `Bearer ${env.TYPHOON_ASR_KEY ?? env.TYPHOON_API_KEY ?? ''}`);
             });
           },
         },

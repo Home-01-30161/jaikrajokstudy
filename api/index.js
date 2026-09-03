@@ -16,8 +16,7 @@ import guardianEmailHandler from "./guardian-email.js";
 import adminDbHandler from "./admin-db.js";
 import { exportUserData, deleteUserData } from "./user-data.js";
 import { globalLimiter, strictLimiter } from "./rate-limit.js";
-import { runMigrations } from "./migrate.js";
-import pg from "pg";
+
 
 // Strip APP_ prefix injected by CI so handlers read env vars normally
 // e.g. APP_DATABASE_URL → DATABASE_URL
@@ -28,9 +27,6 @@ for (const [key, value] of Object.entries(process.env)) {
   }
 }
 
-const pool = process.env.DATABASE_URL
-  ? new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5, connectionTimeoutMillis: 3000 })
-  : null;
 
 const app = express();
 
@@ -52,27 +48,21 @@ app.use((_req, res, next) => {
   next();
 });
 
-// ── Health check (required by CI pipeline) ──────────────────────────────────
-// Verifies the API is up AND the database is reachable, so a broken
-// migration or DB outage is caught by the pipeline instead of silently
-// returning ok while the bot misbehaves.
+// ── Health check ─────────────────────────────────────────────────────────────
 app.get("/health", async (_req, res) => {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const serviceKey  = process.env.SUPABASE_SERVICE_KEY;
   try {
-    if (pool) await pool.query("SELECT 1");
-    return res.json({ status: "ok", db: "ok" });
-  } catch (err) {
+    if (supabaseUrl && serviceKey) {
+      const r = await fetch(`${supabaseUrl}/rest/v1/chat_messages?limit=1`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!r.ok) return res.status(503).json({ status: "degraded", db: "error" });
+    }
+    return res.json({ status: "ok", db: supabaseUrl ? "ok" : "not-configured" });
+  } catch {
     return res.status(503).json({ status: "degraded", db: "error" });
-  }
-});
-
-// ── DB health detail — exercises migration 002's db_health view ─────────────
-app.get("/db-health", async (_req, res) => {
-  if (!pool) return res.status(503).json({ status: "no-db-configured" });
-  try {
-    const result = await pool.query("SELECT COUNT(*) AS n FROM db_health");
-    return res.json({ status: "ok", tables: Number(result.rows[0]?.n || 0) });
-  } catch (err) {
-    return res.status(503).json({ status: "degraded", error: err?.message });
   }
 });
 
@@ -127,14 +117,6 @@ app.delete("/user-data", deleteUserData);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 8000;
-
-runMigrations()
-  .then(() => {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`JaiKraJok API listening on :${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("Startup migration failed — aborting:", err.message);
-    process.exit(1);
-  });
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`JaiKraJok API listening on :${PORT}`);
+});

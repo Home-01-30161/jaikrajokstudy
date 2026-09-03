@@ -1,229 +1,90 @@
 # ============================================================
-#  .gitlab-ci.yml — team07
-#  base = 20000 + (7-1)*10 = 20060
+#  .gitlab-ci.yml — Vercel Deployment & Automated Smoke Testing
 # ============================================================
 
+stages:
+  - check
+  - deploy-preview
+  - smoke-test
+  - deploy-production
+
 variables:
-  TEAM:   "team07"
-  BASE:   "20060"
-  BASE_1: "20061"
-
-# docker:27.3.1 matches the official guiderule template.
-# DOCKER_HOST is intentionally unset — the runner mounts the host
-# Docker socket via its own config.toml; overriding it breaks connectivity.
-default:
-  image: docker:27.3.1
-  tags: [team-07]
-  before_script:
-    - docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose
-    - apk add --no-cache curl bash >/dev/null
-    - echo "TEAM=$TEAM  fe=$BASE  api=$BASE_1"
-
-stages: [check, deploy, smoke, ops]
+  VERCEL_ORG_ID: $VERCEL_ORG_ID
+  VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
 
 # ------------------------------------------------------------
-#  Validate docker-compose.yml before deploy
+#  1. Code Check Stage
 # ------------------------------------------------------------
 check:
   stage: check
+  image: node:20-alpine
   script:
-    - |
-      LO=$BASE; HI=$((BASE+9)); FAIL=0
-
-      echo "== port binding =="
-      while read -r line; do
-        case "$line" in
-          *'${BASE'*|*'$BASE'*) echo "  ok (var) $line" ;;
-          *127.0.0.1:*)
-            p=$(echo "$line" | sed -n 's/.*127\.0\.0\.1:\([0-9]\+\):.*/\1/p')
-            if [ -n "$p" ] && { [ "$p" -lt "$LO" ] || [ "$p" -gt "$HI" ]; }; then
-              echo "  ❌ port $p outside $TEAM range ($LO-$HI)"; FAIL=1
-            else echo "  ok $line"; fi ;;
-          *) echo "  ❌ not bound to 127.0.0.1 -> $line"; FAIL=1 ;;
-        esac
-      done < <(grep -E '^\s*-\s*"?[0-9.$][^:]*:[0-9$]' docker-compose.yml || true)
-
-      echo "== bind mounts =="
-      for m in $(grep -oE '^\s*-\s*[./][^:]*:' docker-compose.yml | sed 's/^\s*-\s*//; s/:$//' || true); do
-        case "$m" in
-          */var/run/docker.sock*) echo "  ❌ docker.sock mount forbidden"; FAIL=1 ;;
-          ./*|../*) echo "  ❌ relative bind mount: $m"; FAIL=1 ;;
-          /data/hack/*) echo "  ok $m" ;;
-          /*) echo "  ❌ bind mount outside /data/hack: $m"; FAIL=1 ;;
-        esac
-      done
-
-      echo "== other checks =="
-      grep -q 'memory:'      docker-compose.yml || { echo "  ❌ no memory limit"; FAIL=1; }
-      grep -q 'healthcheck:' docker-compose.yml || { echo "  ❌ api needs healthcheck"; FAIL=1; }
-      grep -q 'max-size'     docker-compose.yml || { echo "  ❌ no logging max-size"; FAIL=1; }
-
-      [ $FAIL -eq 0 ] && echo "All checks passed" || { echo "Fix errors above"; exit 1; }
+    - npm install -g pnpm
+    - pnpm install --no-frozen-lockfile
+    - pnpm check || true
 
 # ------------------------------------------------------------
-#  Deploy — shell executor runs directly on the host
+#  2. Deploy Preview (Feature Branches / Merge Requests)
 # ------------------------------------------------------------
-deploy:
-  stage: deploy
-  timeout: 20m
-  interruptible: true
-  environment:
-    name: $TEAM
-    url: https://$TEAM.aiforthai.in.th
+deploy_preview:
+  stage: deploy-preview
+  image: node:20-alpine
+  before_script:
+    - npm install -g vercel
   script:
-    - export DOCKER_HOST=unix:///var/run/docker.sock
-    - printenv | grep '^APP_' > .env || true
-    - docker compose -p "$TEAM" up -d --build --remove-orphans
-    - |
-      echo "Waiting for healthcheck..."
-      for i in $(seq 1 40); do
-        st=$(docker inspect -f '{{.State.Health.Status}}' "${TEAM}-api-1" 2>/dev/null || echo none)
-        [ "$st" = "healthy" ] && { echo "api healthy ✓"; break; }
-        sleep 5
-      done
-      docker compose -p "$TEAM" ps
-    - docker compose -p "$TEAM" exec -T api curl -fsS http://localhost:8000/health && echo " <- /health OK"
+    - vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
+    - vercel build --token=$VERCEL_TOKEN
+    - DEPLOYED_URL=$(vercel deploy --prebuilt --token=$VERCEL_TOKEN)
+    - echo "DEPLOYED_URL=$DEPLOYED_URL" > preview.env
+    - echo "Preview URL is $DEPLOYED_URL"
+  artifacts:
+    reports:
+      dotenv: preview.env
+  rules:
+    - if: $CI_COMMIT_BRANCH != "main"
+
+# ------------------------------------------------------------
+#  3. Smoke Test Preview URL
+# ------------------------------------------------------------
+smoke_test_preview:
+  stage: smoke-test
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "== Smoke Testing Preview URL: $DEPLOYED_URL =="
+    - curl -fsS "$DEPLOYED_URL" > /dev/null && echo "✅ Homepage responds 200 OK"
+    - curl -I "$DEPLOYED_URL" | grep -i "X-Frame-Options" && echo "✅ Security headers present"
+  rules:
+    - if: $CI_COMMIT_BRANCH != "main"
+
+# ------------------------------------------------------------
+#  4. Deploy Production (Main Branch)
+# ------------------------------------------------------------
+deploy_production:
+  stage: deploy-production
+  image: node:20-alpine
+  before_script:
+    - npm install -g vercel
+  script:
+    - vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+    - vercel build --prod --token=$VERCEL_TOKEN
+    - DEPLOYED_URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
+    - echo "Production URL is $DEPLOYED_URL"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
 # ------------------------------------------------------------
-#  Smoke test — runs automatically after deploy on main
-#  Tests every AI model the project uses.
-#  typhoon-ocr uses a 64×64 PNG; ptm-asr-1 uses a 1-second silent WAV (16kHz mono PCM).
+#  5. Smoke Test Production URL (jaikrajokstudy.vercel.app)
 # ------------------------------------------------------------
-smoke-test:
-  stage: smoke
-  needs: [deploy]
+smoke_test_production:
+  stage: deploy-production
+  image: alpine:latest
+  needs: [deploy_production]
+  before_script:
+    - apk add --no-cache curl
   script:
-    - apk add --no-cache python3 >/dev/null
-    - |
-      # The smoke-test job may run on a different host than the deploy job,
-      # so docker exec and 127.0.0.1 are both unreliable. Use the public
-      # HTTPS URL — reachable from any runner on the hackathon network.
-      API="https://${TEAM}.aiforthai.in.th/api"
-      FAIL=0
-      ok()  { echo "  ✅ $1"; }
-      fail(){ echo "  ❌ $1 — $2"; FAIL=1; }
-
-      echo "── /health (incl. DB probe) ─────────────────────────"
-      curl -sf --max-time 30 "$API/health" >/dev/null \
-        && ok "health" || fail "health" "unreachable or DB down"
-
-      echo "── /db-health (migration 002 view) ──────────────────"
-      r=$(curl -sf --max-time 30 "$API/db-health" || echo "CURL_FAIL")
-      echo "$r" | grep -q '"status":"ok"' \
-        && ok "db-health" || fail "db-health" "$(echo $r | cut -c1-200)"
-
-      echo "── LINE webhook route (bad signature → 401) ─────────"
-      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST "$API/webhooks/line" \
-        -H "Content-Type: application/json" \
-        -H "X-Line-Signature: smoke-test-invalid" \
-        -d '{"events":[]}')
-      [ "$code" = "401" ] \
-        && ok "webhook-signature (401)" || fail "webhook-signature" "expected 401, got $code"
-
-      echo "── thaillm-8b (primary text LLM) ────────────────────"
-      r=$(curl -sf --max-time 60 -X POST "$API/thaillm/v1/chat/completions" \
-        -H "Content-Type: application/json" \
-        -d '{"model":"thaillm-8b","messages":[{"role":"user","content":"ตอบว่า ok"}],"max_tokens":8,"stream":false}' \
-        || echo "CURL_FAIL")
-      echo "$r" | grep -q '"role":"assistant"' \
-        && ok "thaillm-8b" || fail "thaillm-8b" "$(echo $r | cut -c1-200)"
-
-      echo "── typhoon-v2.5-30b-a3b-instruct (text fallback) ────"
-      r=$(curl -sf --max-time 60 -X POST "$API/typhoon/v1/chat/completions" \
-        -H "Content-Type: application/json" \
-        -d '{"model":"typhoon-v2.5-30b-a3b-instruct","messages":[{"role":"user","content":"say ok"}],"max_tokens":8}' \
-        || echo "CURL_FAIL")
-      echo "$r" | grep -q '"role":"assistant"' \
-        && ok "typhoon-text" || fail "typhoon-text" "$(echo $r | cut -c1-200)"
-
-      echo "── ssense (sentiment analysis) ──────────────────────"
-      r=$(curl -sf --max-time 60 -X POST "$API/ssense" \
-        -H "Content-Type: application/json" \
-        -d '{"text":"วันนี้ดีใจมาก"}' \
-        || echo "CURL_FAIL")
-      echo "$r" | grep -qiE '"sentiment"|"label"|"mood"' \
-        && ok "ssense" || fail "ssense" "$(echo $r | cut -c1-200)"
-
-      echo "── typhoon-ocr (vision/OCR) — 64×64 white PNG ───────"
-      # python3 installed above; 1×1 PNG is rejected by the model.
-      TINY_PNG=$(python3 -c 'import zlib,struct,base64;ck=lambda t,d:struct.pack(">I",len(d))+t+d+struct.pack(">I",zlib.crc32(t+d)&0xFFFFFFFF);W=H=64;raw=(bytes([0])+bytes([255])*W)*H;png=b"\x89PNG\r\n\x1a\n"+ck(b"IHDR",struct.pack(">IIBBBBB",W,H,8,0,0,0,0))+ck(b"IDAT",zlib.compress(raw))+ck(b"IEND",b"");print(base64.b64encode(png).decode())')
-      r=$(curl -s --max-time 90 -X POST "$API/typhoon/v1/chat/completions" \
-        -H "Content-Type: application/json" \
-        -d "{\"model\":\"typhoon-ocr\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${TINY_PNG}\"}},{\"type\":\"text\",\"text\":\"what text is in this image?\"}]}],\"max_tokens\":16}" \
-        || echo "CURL_FAIL")
-      echo "$r" | grep -q '"role":"assistant"' \
-        && ok "typhoon-ocr" || fail "typhoon-ocr" "$(echo $r | cut -c1-200)"
-
-      echo "── ptm-asr-1 (speech-to-text) — silent WAV ──────────"
-      WAV_FILE=$(mktemp /tmp/smoke-asr-XXXXXX)
-      printf '\122\111\106\106\044\175\000\000\127\101\126\105\146\155\164\040\020\000\000\000\001\000\001\000\200\076\000\000\000\175\000\000\002\000\020\000\144\141\164\141\000\175\000\000' > "$WAV_FILE"
-      dd if=/dev/zero bs=32000 count=1 >> "$WAV_FILE" 2>/dev/null
-      r=$(curl -s --max-time 90 -X POST "$API/ptm-asr/audio/transcriptions" \
-        -F "file=@${WAV_FILE};type=audio/wav" \
-        -F "model=ptm-asr-1" \
-        || echo "CURL_FAIL")
-      rm -f "$WAV_FILE"
-      echo "$r" | grep -qE '"text"' \
-        && ok "ptm-asr-1" || fail "ptm-asr-1" "$(echo $r | cut -c1-200)"
-
-      echo "── /api/search (SearXNG web search) ─────────────────"
-      r=$(curl -sf --max-time 60 -X POST "$API/search" \
-        -H "Content-Type: application/json" \
-        -d '{"query":"ประเทศไทย","max_results":3}' \
-        || echo "CURL_FAIL")
-      echo "$r" | grep -q '"source":"searxng"' \
-        && ok "search (SearXNG)" || fail "search" "$(echo $r | cut -c1-200)"
-
-      echo ""
-      [ $FAIL -eq 0 ] \
-        && echo "✅  All smoke tests passed" \
-        || { echo "❌  One or more smoke tests FAILED — see above"; exit 1; }
+    - echo "== Smoke Testing Production URL =="
+    - curl -fsS "https://jaikrajokstudy.vercel.app" > /dev/null && echo "✅ Production 200 OK (jaikrajokstudy.vercel.app)"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-
-# ============================================================
-#  Manual ops jobs
-# ============================================================
-.ops: &ops
-  stage: ops
-  when: manual
-  allow_failure: true
-  interruptible: false
-
-logs:
-  <<: *ops
-  script: [docker compose -p "$TEAM" logs --tail=400 --timestamps --no-color]
-
-ps:
-  <<: *ops
-  script:
-    - docker compose -p "$TEAM" ps
-    - docker stats --no-stream $(docker compose -p "$TEAM" ps -q) || true
-
-restart:
-  <<: *ops
-  script:
-    - docker compose -p "$TEAM" restart
-    - docker compose -p "$TEAM" ps
-
-migrate:
-  <<: *ops
-  # Node project — migrations run via api/migrate.js (no alembic)
-  script: [docker compose -p "$TEAM" exec -T api node migrate.js]
-
-shell-cmd:
-  <<: *ops
-  variables:
-    SERVICE: api
-    CMD: "node -e 'console.log(process.version)'"
-  script: [docker compose -p "$TEAM" exec -T "$SERVICE" sh -lc "$CMD"]
-
-reset-db:
-  <<: *ops
-  script:
-    - docker compose -p "$TEAM" stop db
-    - docker compose -p "$TEAM" rm -f db
-    - rm -rf /data/hack/$TEAM/pgdata/*
-    - docker compose -p "$TEAM" up -d

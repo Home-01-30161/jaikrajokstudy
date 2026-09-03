@@ -9,11 +9,11 @@
 // recorded in the DB and a clear warning is logged — the chat flow must never
 // break because email fails.
 // ─────────────────────────────────────────────────────────────────────────────
-import pg from "pg";
 import nodemailer from "nodemailer";
 import { hashId } from "./privacy.js";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const sbUrl = () => process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+const sbKey = () => process.env.SUPABASE_SERVICE_KEY || "";
 const PLACEHOLDER_PASS = /^(your-|changeme|xxxx|replace)/i;
 let warnedSmtp = false;
 
@@ -31,26 +31,6 @@ export function isSmtpConfigured() {
   return true;
 }
 
-async function ensureAlertTable() {
-  // 001_new_schema.sql creates emotion_alerts; this is a safety net for
-  // databases where that migration hasn't run yet.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS emotion_alerts (
-      id                      SERIAL PRIMARY KEY,
-      anon_user_id            INT,
-      line_user_id_hash       TEXT,
-      triggered_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      alert_type              TEXT NOT NULL,
-      consecutive_negative    INT,
-      message_shown_to_user   TEXT,
-      admin_notified          BOOLEAN NOT NULL DEFAULT FALSE,
-      resolved_at             TIMESTAMPTZ,
-      resolution_note         TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_alerts_hash ON emotion_alerts (line_user_id_hash, triggered_at DESC);
-  `);
-}
-
 /**
  * Record a crisis / continuous-negative alert and notify the human admin.
  * Never throws — failures are logged so the LINE chat keeps working.
@@ -59,22 +39,34 @@ export async function recordAlert({ userId, alert_type, consecutive_negative, me
   const lineUserIdHash = hashId(userId);
   let alertId = null;
 
-  if (process.env.DATABASE_URL) {
+  if (sbUrl() && sbKey()) {
     try {
-      await ensureAlertTable();
-      const inserted = await pool.query(
-        `INSERT INTO emotion_alerts
-           (line_user_id_hash, alert_type, consecutive_negative, message_shown_to_user)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
-        [lineUserIdHash, alert_type, consecutive_negative ?? null, String(message_shown_to_user ?? "").slice(0, 500)]
-      );
-      alertId = inserted.rows[0]?.id ?? null;
+      const res = await fetch(`${sbUrl()}/rest/v1/emotion_alerts`, {
+        method: "POST",
+        headers: {
+          apikey:         sbKey(),
+          Authorization:  `Bearer ${sbKey()}`,
+          "Content-Type": "application/json",
+          Prefer:         "return=representation",
+        },
+        body: JSON.stringify({
+          line_user_id_hash:      lineUserIdHash,
+          alert_type,
+          consecutive_negative:   consecutive_negative ?? null,
+          message_shown_to_user:  String(message_shown_to_user ?? "").slice(0, 500),
+        }),
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        alertId = Array.isArray(rows) ? rows[0]?.id ?? null : null;
+      } else {
+        console.warn("[notify] Supabase alert insert failed:", res.status);
+      }
     } catch (err) {
-      console.warn("[notify] DB alert record failed:", err.message);
+      console.warn("[notify] Supabase alert record failed:", err.message);
     }
   } else {
-    console.warn("[notify] DATABASE_URL not set — DB record skipped, sending email");
+    console.warn("[notify] SUPABASE_URL / SUPABASE_SERVICE_KEY not set — DB record skipped");
   }
 
   const sent = await sendAdminEmail({
@@ -84,8 +76,12 @@ export async function recordAlert({ userId, alert_type, consecutive_negative, me
     message_shown_to_user,
   });
 
-  if (sent && alertId && pool) {
-    await pool.query(`UPDATE emotion_alerts SET admin_notified = TRUE WHERE id = $1`, [alertId]).catch(() => {});
+  if (sent && alertId && sbUrl() && sbKey()) {
+    await fetch(`${sbUrl()}/rest/v1/emotion_alerts?id=eq.${alertId}`, {
+      method: "PATCH",
+      headers: { apikey: sbKey(), Authorization: `Bearer ${sbKey()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ admin_notified: true }),
+    }).catch(() => {});
   }
 
   return { id: alertId, admin_notified: sent };

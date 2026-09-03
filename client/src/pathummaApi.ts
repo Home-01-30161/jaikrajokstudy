@@ -21,7 +21,7 @@ const TYPHOON_OCR_MODEL = "typhoon-ocr";
 const PATHUMMA_PROXY = "/api/pathumma";
 const TAVILY_PROXY = "/api/search";  // SearXNG primary + Tavily fallback
 const PTM_ASR_PROXY = "/api/ptm-asr";
-const PTM_ASR_MODEL = "ptm-asr-1";
+const PTM_ASR_MODEL = "typhoon-asr-realtime";
 
 // Keys are server-side only — proxies always inject auth.
 
@@ -844,7 +844,7 @@ export async function analyzeImageWithCaption(imageBlob: Blob, caption: string =
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 3. AUDIO — Pathumma ptm-asr-1 (primary) + Pathumma AudioQA (fallback)
+// 3. AUDIO — Typhoon ASR (typhoon-asr-realtime) + Pathumma AudioQA (fallback)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface AudioResult {
@@ -853,9 +853,9 @@ export interface AudioResult {
   emotionKey: string;
 }
 
-/** Pathumma ptm-asr-1 — OpenAI-compatible transcription endpoint */
+/** Typhoon ASR — OpenAI-compatible transcription endpoint (typhoon-asr-realtime) */
 export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
-  // ptm-asr-1 supported formats: wav, mp3, flac, ogg, opus
+  // typhoon-asr-realtime supported formats: wav, mp3, flac, ogg, opus
   // Chrome MediaRecorder produces audio/webm which is rejected (415).
   // Convert any unsupported format to WAV via Web Audio API.
   const SUPPORTED = ["audio/wav", "audio/wave", "audio/x-wav", "audio/mp3", "audio/mpeg", "audio/flac", "audio/ogg", "audio/opus"];
@@ -865,7 +865,7 @@ export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
   let fileName: string;
 
   if (!isSupported) {
-    console.debug("[ptm-asr-1] Converting", audioBlob.type, "→ WAV for upload");
+    console.debug("[typhoon-asr] Converting", audioBlob.type, "→ WAV for upload");
     fileBlob = await blobToWav(audioBlob);
     fileName = "recording.wav";
   } else {
@@ -890,14 +890,14 @@ export async function callTyphoonASR(audioBlob: Blob): Promise<string> {
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    console.error("[ptm-asr-1] HTTP error", res.status, errBody.slice(0, 300));
-    throw new Error(`ptm-asr-1 ${res.status}: ${errBody.slice(0, 200)}`);
+    console.error("[typhoon-asr] HTTP error", res.status, errBody.slice(0, 300));
+    throw new Error(`typhoon-asr ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  console.debug("[ptm-asr-1] raw response:", raw);
+  console.debug("[typhoon-asr] raw response:", raw);
   const text = (raw.text as string) ?? "";
-  if (!text.trim()) throw new Error("ptm-asr-1 returned empty transcription");
+  if (!text.trim()) throw new Error("typhoon-asr returned empty transcription");
   return text.trim();
 }
 
