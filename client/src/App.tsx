@@ -13,6 +13,8 @@ import {
 } from "./pathummaApi";
 import MathText from "./MathText";
 import LandingPage from "./pages/LandingPage";
+import { StorageChoiceModal } from "./components/StorageChoiceModal";
+import { getStoragePref, StoragePref } from "./lib/storagePref";
 
 /* ============ IMAGE PATHS ============ */
 const IMG = {
@@ -3543,6 +3545,8 @@ export default function App() {
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianStage, setGuardianStage] = useState<"input" | "pending" | "approved">("input");
   const [guardianVerificationCode, setGuardianVerificationCode] = useState("");
+  const [showStorageModal, setShowStorageModal] = useState(false);
+  const [pendingLoginUser, setPendingLoginUser] = useState<UserAccount | null>(null);
 
   // Check for guardian_token in URL — show guardian confirmation page regardless of device
   useEffect(() => {
@@ -3608,35 +3612,37 @@ export default function App() {
               avatarUrl: profile.pictureUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${profile.userId}`,
             };
 
-            // Fetch shared LINE+Web history via Vercel serverless function (uses service key server-side)
-            try {
-              const histRes = await fetch(`/api/history?line_user_id=${encodeURIComponent(profile.userId)}`);
-              if (histRes.ok) {
-                const { sessions: dbSessions } = await histRes.json() as {
-                  sessions: { session_id: string; session_title: string; messages: { role: string; text: string; source: string; created_at: string }[] }[]
-                };
-                if (dbSessions && dbSessions.length > 0) {
-                  const chatSessions: ChatSession[] = dbSessions.map(ds => ({
-                    id: ds.session_id,
-                    title: ds.session_title || "สนทนา",
-                    timestamp: new Date(ds.messages[ds.messages.length - 1]?.created_at || Date.now()).getTime(),
-                    messages: ds.messages.map(m => ({
-                      id: crypto.randomUUID(),
-                      role: m.role as "user" | "bot",
-                      text: m.text,
-                      timestamp: new Date(m.created_at).getTime() || Date.now(),
-                      sourceTag: m.source === "line" ? "LINE" : "Web",
-                    })),
-                    mood: "calm",
-                  }));
-                  // Sort newest session first
-                  chatSessions.sort((a, b) => b.timestamp - a.timestamp);
-                  localStorage.setItem(`jaikrajok:sessions:${lineUser.id}`, JSON.stringify(chatSessions));
-                  toast.info(`โหลดประวัติสนทนา ${dbSessions.length} ช่องแชท`);
+            // Fetch shared LINE+Web history via Vercel serverless function ONLY if storage pref is "cloud"
+            if (getStoragePref() === "cloud") {
+              try {
+                const histRes = await fetch(`/api/history?line_user_id=${encodeURIComponent(profile.userId)}`);
+                if (histRes.ok) {
+                  const { sessions: dbSessions } = await histRes.json() as {
+                    sessions: { session_id: string; session_title: string; messages: { role: string; text: string; source: string; created_at: string }[] }[]
+                  };
+                  if (dbSessions && dbSessions.length > 0) {
+                    const chatSessions: ChatSession[] = dbSessions.map(ds => ({
+                      id: ds.session_id,
+                      title: ds.session_title || "สนทนา",
+                      timestamp: new Date(ds.messages[ds.messages.length - 1]?.created_at || Date.now()).getTime(),
+                      messages: ds.messages.map(m => ({
+                        id: crypto.randomUUID(),
+                        role: m.role as "user" | "bot",
+                        text: m.text,
+                        timestamp: new Date(m.created_at).getTime() || Date.now(),
+                        sourceTag: m.source === "line" ? "LINE" : "Web",
+                      })),
+                      mood: "calm",
+                    }));
+                    // Sort newest session first
+                    chatSessions.sort((a, b) => b.timestamp - a.timestamp);
+                    localStorage.setItem(`jaikrajok:sessions:${lineUser.id}`, JSON.stringify(chatSessions));
+                    toast.info(`โหลดประวัติสนทนา ${dbSessions.length} ช่องแชท`);
+                  }
                 }
+              } catch {
+                // History fetch is best-effort — never block login
               }
-            } catch {
-              // History fetch is best-effort — never block login
             }
 
             handleLoginSuccess(lineUser);
@@ -3653,11 +3659,7 @@ export default function App() {
     }
   }, []);
 
-  // Remove old cross-tab approval logic - now using verification codes instead
-  // Cross-tab approval is no longer needed as parent approves on their device
-  // and child enters the code manually
-
-  const handleLoginSuccess = (user: UserAccount) => {
+  const executeLoginNavigation = (user: UserAccount) => {
     setCurrentUserState(user);
     if (!user.age) {
       setPage("onb1");
@@ -3665,6 +3667,23 @@ export default function App() {
       setAge(user.age);
       setGuardianStage(user.guardianConsent ? "approved" : "input");
       setPage("app");
+    }
+  };
+
+  const handleLoginSuccess = (user: UserAccount) => {
+    if (!getStoragePref()) {
+      setPendingLoginUser(user);
+      setShowStorageModal(true);
+    } else {
+      executeLoginNavigation(user);
+    }
+  };
+
+  const handleStorageChoiceSelect = (pref: StoragePref) => {
+    setShowStorageModal(false);
+    if (pendingLoginUser) {
+      executeLoginNavigation(pendingLoginUser);
+      setPendingLoginUser(null);
     }
   };
 
@@ -3826,6 +3845,9 @@ export default function App() {
             guardianConsent={guardianStage === "approved"}
           />
         </PageWrapper>
+      )}
+      {showStorageModal && (
+        <StorageChoiceModal onSelect={handleStorageChoiceSelect} />
       )}
     </div>
   );
