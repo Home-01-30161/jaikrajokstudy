@@ -314,26 +314,33 @@ export async function callTextLLM(
     temperature: effectiveTemperature,
   });
 
-  // ── Gemini 1.5 Flash Preferred ─────────────────────────────────────────────
+  // ── Gemini Flash (latest) — native generateContent REST API ─────────────────
   if (textModel === "gemini") {
     try {
-      const geminiBody = JSON.stringify({
-        model: "gemini-1.5-flash",
-        messages,
-        max_tokens: maxTokens,
-        temperature: effectiveTemperature,
-      });
-      const res = await fetch("/api/gemini/v1beta/openai/chat/completions", {
+      // Build contents from messages array
+      const geminiContents = messages
+        .filter((m) => m.role !== "system")
+        .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+      const geminiSystemPrompt = messages.find((m) => m.role === "system")?.content ?? "";
+      const geminiPayload = {
+        contents: geminiContents,
+        ...(geminiSystemPrompt ? { system_instruction: { parts: [{ text: geminiSystemPrompt }] } } : {}),
+        generationConfig: { temperature: effectiveTemperature, maxOutputTokens: maxTokens },
+      };
+      const res = await fetch("/api/gemini/v1beta/models/gemini-flash-latest:generateContent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: geminiBody,
+        body: JSON.stringify(geminiPayload),
       });
       if (res.ok) {
         const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
-        const choices = raw.choices as { message?: { content?: string } }[] | undefined;
-        const content = choices?.[0]?.message?.content ?? "";
+        const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
+        const content = candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") ?? "";
         const text = stripThink(content);
         if (text) return text;
+      } else {
+        const errBody = await res.text().catch(() => "");
+        console.warn("[Gemini Text] HTTP", res.status, errBody.slice(0, 200), "— falling back to standard chain");
       }
     } catch (err) {
       console.warn("[Gemini Text] failed — falling back to standard chain:", err);
@@ -640,7 +647,7 @@ export async function callGeminiVision(
     },
   };
 
-  const res = await fetch("/api/gemini/v1beta/models/gemini-1.5-flash:generateContent", {
+  const res = await fetch("/api/gemini/v1beta/models/gemini-flash-latest:generateContent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(nativePayload),
