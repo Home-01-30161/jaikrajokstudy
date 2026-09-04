@@ -115,4 +115,12 @@ app.get("/admin-db", adminDbHandler);
 app.get("/user-data/export", exportUserData);
 app.delete("/user-data", deleteUserData);
 
-export default app;
+// Vercel serverless entry-point.
+// All /api/* traffic is rewritten to this single function.
+// Vercel strips the /api prefix before calling the handler,
+// so we restore it so Express routes (e.g. "/webhook") match.
+export default function handler(req, res) {
+  // req.url comes in as the path AFTER /api, e.g. "/webhook"
+  // Express routes are registered without /api prefix → works as-is.
+  return app(req, res);
+}
