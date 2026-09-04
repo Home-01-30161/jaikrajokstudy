@@ -2949,11 +2949,11 @@ function ChatView({
               className="w-full bg-transparent outline-none text-sm resize-none text-black placeholder:text-gray-400"
               style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#000000", fontWeight: 500 }}
             />
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-2">
-              <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 sm:pt-3 border-t border-gray-100 mt-2 prompt-toolbar-container">
+              <div className="flex items-center gap-1 sm:gap-1.5">
                 <button
                   onClick={handleSelfie}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors touch-target flex items-center justify-center"
                   title="ถ่ายเซลฟี่ประเมินอารมณ์"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2963,7 +2963,7 @@ function ChatView({
                 </button>
                 <button
                   onClick={handleAttachImageClick}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors touch-target flex items-center justify-center"
                   title="แนบรูปภาพหรือการบ้าน"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2972,35 +2972,9 @@ function ChatView({
                     <polyline points="21 15 16 10 5 21" />
                   </svg>
                 </button>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Text Model Dropdown */}
-                <select
-                  value={selectedTextModel}
-                  onChange={(e) => onSelectTextModel(e.target.value as TextModelChoice)}
-                  className="text-xs px-2.5 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer outline-none shadow-xs"
-                  title="เลือกโมเดลภาษา Text LLM"
-                >
-                  <option value="auto" className="bg-slate-900 text-white">💬 Text: Auto</option>
-                  <option value="thaillm" className="bg-slate-900 text-white">🐘 ThaiLLM 8B</option>
-                  <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon 30B</option>
-                  <option value="gemini" className="bg-slate-900 text-white">♊ Gemini 1.5 Flash</option>
-                </select>
-
-                {/* VLM Model Dropdown */}
-                <select
-                  value={selectedVlmModel}
-                  onChange={(e) => onSelectVlmModel(e.target.value as VLMModelChoice)}
-                  className="text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-100 font-semibold border border-emerald-700 hover:bg-emerald-900 transition-colors cursor-pointer outline-none shadow-xs"
-                  title="เลือกโมเดลวิสัยทัศน์ VLM (อ่านภาพ/การบ้าน/เซลฟี่)"
-                >
-                  <option value="auto" className="bg-slate-900 text-white">👁️ VLM: Auto</option>
-                  <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon OCR</option>
-                  <option value="gemini" className="bg-slate-900 text-white">♊ Gemini Vision</option>
-                </select>
                 <button
                   onClick={handleVoice}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
+                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors touch-target flex items-center justify-center"
                   title="พูดระบายสภาวะจิตใจ"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3010,10 +2984,37 @@ function ChatView({
                     <line x1="8" y1="23" x2="16" y2="23" />
                   </svg>
                 </button>
+              </div>
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+                {/* Text Model Dropdown */}
+                <select
+                  value={selectedTextModel}
+                  onChange={(e) => onSelectTextModel(e.target.value as TextModelChoice)}
+                  className="text-xs px-2.5 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer outline-none shadow-xs prompt-model-select"
+                  title="เลือกโมเดลภาษา Text LLM"
+                >
+                  <option value="auto" className="bg-slate-900 text-white">💬 Text: Auto</option>
+                  <option value="thaillm" className="bg-slate-900 text-white">🐘 ThaiLLM 8B</option>
+                  <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon 30B</option>
+                  <option value="gemini" className="bg-slate-900 text-white">♊ Gemini Flash</option>
+                </select>
+
+                {/* VLM Model Dropdown */}
+                <select
+                  value={selectedVlmModel}
+                  onChange={(e) => onSelectVlmModel(e.target.value as VLMModelChoice)}
+                  className="text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-100 font-semibold border border-emerald-700 hover:bg-emerald-900 transition-colors cursor-pointer outline-none shadow-xs prompt-model-select"
+                  title="เลือกโมเดลวิสัยทัศน์ VLM (อ่านภาพ/การบ้าน/เซลฟี่)"
+                >
+                  <option value="auto" className="bg-slate-900 text-white">👁️ VLM: Auto</option>
+                  <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon OCR</option>
+                  <option value="gemini" className="bg-slate-900 text-white">♊ Gemini Vision</option>
+                </select>
+
                 <button
                   onClick={() => sendMessage()}
                   disabled={!inputText.trim() && !attachedImage}
-                  className="w-9 h-9 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm cursor-pointer"
+                  className="w-9 h-9 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm cursor-pointer shrink-0"
                   style={{ backgroundColor: T.salmon }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -3255,48 +3256,22 @@ function ChatView({
                 className="w-full bg-transparent outline-none text-sm resize-none text-black placeholder:text-gray-400"
                 style={{ fontFamily: "'Inter', 'Noto Sans Thai', sans-serif", color: "#000000", fontWeight: 500 }}
               />
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-1">
-                <div className="flex items-center gap-1.5">
-                  <button onClick={handleAttachImageClick} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="แนบรูปภาพหรือการบ้าน">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-gray-100 mt-1 prompt-toolbar-container">
+                <div className="flex items-center gap-1 sm:gap-1.5">
+                  <button onClick={handleAttachImageClick} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors touch-target flex items-center justify-center" title="แนบรูปภาพหรือการบ้าน">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                       <circle cx="8.5" cy="8.5" r="1.5" />
                       <polyline points="21 15 16 10 5 21" />
                     </svg>
                   </button>
-                  <button onClick={handleSelfie} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="ถ่ายเซลฟี่">
+                  <button onClick={handleSelfie} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors touch-target flex items-center justify-center" title="ถ่ายเซลฟี่">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
                       <circle cx="12" cy="13" r="3" />
                     </svg>
                   </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Text Model Dropdown */}
-                  <select
-                    value={selectedTextModel}
-                    onChange={(e) => onSelectTextModel(e.target.value as TextModelChoice)}
-                    className="text-[11px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer outline-none shadow-xs"
-                    title="เลือกโมเดลภาษา Text LLM"
-                  >
-                    <option value="auto" className="bg-slate-900 text-white">💬 Text: Auto</option>
-                    <option value="thaillm" className="bg-slate-900 text-white">🐘 ThaiLLM 8B</option>
-                    <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon 30B</option>
-                    <option value="gemini" className="bg-slate-900 text-white">♊ Gemini 1.5</option>
-                  </select>
-
-                  {/* VLM Model Dropdown */}
-                  <select
-                    value={selectedVlmModel}
-                    onChange={(e) => onSelectVlmModel(e.target.value as VLMModelChoice)}
-                    className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-100 font-semibold border border-emerald-700 hover:bg-emerald-900 transition-colors cursor-pointer outline-none shadow-xs"
-                    title="เลือกโมเดลวิสัยทัศน์ VLM (อ่านภาพ/การบ้าน/เซลฟี่)"
-                  >
-                    <option value="auto" className="bg-slate-900 text-white">👁️ VLM: Auto</option>
-                    <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon OCR</option>
-                    <option value="gemini" className="bg-slate-900 text-white">♊ Gemini Vision</option>
-                  </select>
-                  <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="พูดระบาย">
+                  <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors touch-target flex items-center justify-center" title="พูดระบาย">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                       <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
@@ -3304,10 +3279,37 @@ function ChatView({
                       <line x1="8" y1="23" x2="16" y2="23" />
                     </svg>
                   </button>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+                  {/* Text Model Dropdown */}
+                  <select
+                    value={selectedTextModel}
+                    onChange={(e) => onSelectTextModel(e.target.value as TextModelChoice)}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer outline-none shadow-xs prompt-model-select"
+                    title="เลือกโมเดลภาษา Text LLM"
+                  >
+                    <option value="auto" className="bg-slate-900 text-white">💬 Text: Auto</option>
+                    <option value="thaillm" className="bg-slate-900 text-white">🐘 ThaiLLM 8B</option>
+                    <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon 30B</option>
+                    <option value="gemini" className="bg-slate-900 text-white">♊ Gemini Flash</option>
+                  </select>
+
+                  {/* VLM Model Dropdown */}
+                  <select
+                    value={selectedVlmModel}
+                    onChange={(e) => onSelectVlmModel(e.target.value as VLMModelChoice)}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-100 font-semibold border border-emerald-700 hover:bg-emerald-900 transition-colors cursor-pointer outline-none shadow-xs prompt-model-select"
+                    title="เลือกโมเดลวิสัยทัศน์ VLM (อ่านภาพ/การบ้าน/เซลฟี่)"
+                  >
+                    <option value="auto" className="bg-slate-900 text-white">👁️ VLM: Auto</option>
+                    <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon OCR</option>
+                    <option value="gemini" className="bg-slate-900 text-white">♊ Gemini Vision</option>
+                  </select>
+
                   <button
                     onClick={() => sendMessage()}
                     disabled={!inputText.trim() && !attachedImage}
-                    className="w-8 h-8 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm"
+                    className="w-8 h-8 rounded-full text-white font-bold flex items-center justify-center transition-all disabled:opacity-30 active:scale-95 shadow-sm shrink-0"
                     style={{ backgroundColor: T.salmon }}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
