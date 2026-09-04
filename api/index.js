@@ -8,6 +8,7 @@ import tavilyHandler from "../server/api/tavily.js";
 import searchHandler from "../server/api/search.js";
 import pathummaHandler from "../server/api/pathumma.js";
 import typhoonHandler from "../server/api/typhoon.js";
+import geminiHandler from "../server/api/gemini.js";
 import thaillmHandler from "../server/api/thaillm.js";
 import ptmAsrHandler from "../server/api/ptm-asr.js";
 import lineTokenHandler from "../server/api/line-token.js";
@@ -83,6 +84,11 @@ app.all(["/pathumma", "/pathumma/*"], (req, res) => {
 app.all(["/typhoon", "/typhoon/*"], (req, res) => {
   req.url = "/api" + req.url;
   typhoonHandler(req, res);
+});
+
+app.all(["/gemini", "/gemini/*"], (req, res) => {
+  req.url = "/api" + req.url;
+  geminiHandler(req, res);
 });
 
 app.all(["/ptm-asr", "/ptm-asr/*"], (req, res) => {

@@ -242,6 +242,9 @@ interface ChatMessage {
   content: string;
 }
 
+export type TextModelChoice = "auto" | "thaillm" | "typhoon" | "gemini";
+export type VLMModelChoice = "auto" | "typhoon" | "gemini";
+
 /**
  * TEXT LLM: Call ThaiLLM thaillm-8b via TokenMind
  * Uses proper OpenAI messages[] array format — no need to inject history into prompt strings.
@@ -251,7 +254,8 @@ export async function callTextLLM(
   systemPrompt: string = JAIKRAJOK_SYSTEM_PROMPT,
   maxTokens: number = 2048,
   temperature: number = 0.4,
-  history?: { role: string; text: string }[]
+  history?: { role: string; text: string }[],
+  textModel: TextModelChoice = "auto"
 ): Promise<string> {
   let effectiveTemperature = temperature;
   let extraInstruction = "";
@@ -310,36 +314,64 @@ export async function callTextLLM(
     temperature: effectiveTemperature,
   });
 
-  // ── Primary: thaillm-8b (tokenmind via /api/thaillm proxy) ────────────────
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+  // ── Gemini 1.5 Flash Preferred ─────────────────────────────────────────────
+  if (textModel === "gemini") {
     try {
-      const res = await fetch(`${THAILLM_PROXY}/chat/completions`, {
+      const geminiBody = JSON.stringify({
+        model: "gemini-1.5-flash",
+        messages,
+        max_tokens: maxTokens,
+        temperature: effectiveTemperature,
+      });
+      const res = await fetch("/api/gemini/v1beta/openai/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body,
-        signal: controller.signal,
+        body: geminiBody,
       });
-
       if (res.ok) {
         const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
-        console.debug("[PTM-ThaiLLM] raw response:", raw);
         const choices = raw.choices as { message?: { content?: string } }[] | undefined;
         const content = choices?.[0]?.message?.content ?? "";
         const text = stripThink(content);
         if (text) return text;
-      } else {
-        console.warn("[PTM-ThaiLLM] HTTP", res.status, "— falling back to typhoon");
       }
-    } finally {
-      clearTimeout(timeout);
+    } catch (err) {
+      console.warn("[Gemini Text] failed — falling back to standard chain:", err);
     }
-  } catch (err) {
-    if ((err as Error).name === "AbortError") {
-      console.warn("[PTM-ThaiLLM] timed out after 60s — falling back to typhoon");
-    } else {
-      console.warn("[PTM-ThaiLLM] fetch error — falling back to typhoon:", err);
+  }
+
+  // ── Primary: thaillm-8b (tokenmind via /api/thaillm proxy) ────────────────
+  if (textModel !== "typhoon" && textModel !== "gemini") {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      try {
+        const res = await fetch(`${THAILLM_PROXY}/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          signal: controller.signal,
+        });
+
+        if (res.ok) {
+          const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
+          console.debug("[PTM-ThaiLLM] raw response:", raw);
+          const choices = raw.choices as { message?: { content?: string } }[] | undefined;
+          const content = choices?.[0]?.message?.content ?? "";
+          const text = stripThink(content);
+          if (text) return text;
+        } else {
+          console.warn("[PTM-ThaiLLM] HTTP", res.status, "— falling back to typhoon");
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        console.warn("[PTM-ThaiLLM] timed out after 60s — falling back to typhoon");
+      } else {
+        console.warn("[PTM-ThaiLLM] fetch error — falling back to typhoon:", err);
+      }
     }
   }
 
@@ -482,12 +514,13 @@ export async function callTextLLMWithSearch(
   systemPrompt: string = JAIKRAJOK_SYSTEM_PROMPT,
   maxTokens: number = 3072,
   temperature: number = 0.3,
-  history?: { role: string; text: string }[]
+  history?: { role: string; text: string }[],
+  preferredModel: LLMModelChoice = "auto"
 ): Promise<{ reply: string; searchUsed: boolean; sources: { title: string; url: string }[] }> {
   const needsSearch = NEEDS_SEARCH_RE.test(instruction);
 
   if (!needsSearch) {
-    const reply = await callTextLLM(instruction, systemPrompt, maxTokens, temperature, history);
+    const reply = await callTextLLM(instruction, systemPrompt, maxTokens, temperature, history, preferredModel);
     return { reply, searchUsed: false, sources: [] };
   }
 
@@ -513,7 +546,7 @@ export async function callTextLLMWithSearch(
   const augmentedInstruction = instruction + searchCtx;
   const effectiveSystemPrompt = searchCtx ? SEARCH_SYSTEM_PROMPT : systemPrompt;
 
-  const reply = await callTextLLM(augmentedInstruction, effectiveSystemPrompt, maxTokens, temperature, history);
+  const reply = await callTextLLM(augmentedInstruction, effectiveSystemPrompt, maxTokens, temperature, history, preferredModel);
 
   // Append source links if search was used
   if (sources.length > 0) {
@@ -580,11 +613,88 @@ export interface VisionResult {
   llmReply: string;
 }
 
+export async function callGeminiVision(
+  base64Data: string,
+  mimeType: string,
+  query: string,
+  systemPrompt: string
+): Promise<string> {
+  // 1. Primary: OpenAI compatibility endpoint on Gemini
+  try {
+    const payload = {
+      model: "gemini-1.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+            { type: "text", text: query },
+          ],
+        },
+      ],
+      max_tokens: 4096,
+      temperature: 0.1,
+    };
+    const res = await fetch("/api/gemini/v1beta/openai/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const choices = raw.choices as { message?: { content?: string } }[] | undefined;
+      const text = choices?.[0]?.message?.content?.trim();
+      if (text) return text;
+    }
+  } catch (e) {
+    console.warn("[Gemini Vision OpenAI endpoint] failed:", e);
+  }
+
+  // 2. Native Gemini REST API endpoint
+  const nativePayload = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inline_data: { mime_type: mimeType, data: base64Data } },
+          { text: query },
+        ],
+      },
+    ],
+    system_instruction: {
+      parts: [{ text: systemPrompt }],
+    },
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 4096,
+    },
+  };
+
+  const res = await fetch("/api/gemini/v1beta/models/gemini-1.5-flash:generateContent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(nativePayload),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`GeminiVision ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
+  const parts = candidates?.[0]?.content?.parts;
+  const text = parts?.map((p) => p.text || "").join("").trim();
+  if (!text) throw new Error("GeminiVision returned empty response");
+  return text;
+}
+
 export async function callVisionLLM(
   imageBlob: Blob,
   query: string,
   _filename = "image.jpg",
-  model = TYPHOON_OCR_MODEL,
+  vlmModel: VLMModelChoice = "auto",
   systemPromptOverride?: string
 ): Promise<string> {
   const base64Data = await blobToBase64(imageBlob);
@@ -600,40 +710,49 @@ export async function callVisionLLM(
     "- Include ALL visible text: headings, body text, labels, captions, choices (ก. ข. ค. ง.), numbers, units. " +
     "- Do NOT skip, summarize, or paraphrase any content. Transcribe verbatim.";
 
-  const payload = {
-    model: model,
-    messages: [
-      { role: "system", content: ocrSystemPrompt },
-      {
-        role: "user",
-        content: [
-          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } },
-          { type: "text", text: query },
-        ],
-      },
-    ],
-    max_tokens: 4096,
-    temperature: 0.1,
-    top_p: 0.6,
-    repetition_penalty: 1.2,
-  };
-
-  const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
-    method: "POST",
-    headers: { ...thaiLLMHeaders() },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`TyphoonOCR ${res.status}: ${errText.slice(0, 200)}`);
+  if (vlmModel === "gemini") {
+    return callGeminiVision(base64Data, mimeType, query, ocrSystemPrompt);
   }
 
-  const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  const choices = raw.choices as { message?: { content?: string } }[] | undefined;
-  const text = choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error("TyphoonOCR returned empty response");
-  return text;
+  try {
+    const payload = {
+      model: model,
+      messages: [
+        { role: "system", content: ocrSystemPrompt },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+            { type: "text", text: query },
+          ],
+        },
+      ],
+      max_tokens: 4096,
+      temperature: 0.1,
+      top_p: 0.6,
+      repetition_penalty: 1.2,
+    };
+
+    const res = await fetch(`${TYPHOON_PROXY}/v1/chat/completions`, {
+      method: "POST",
+      headers: { ...thaiLLMHeaders() },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const choices = raw.choices as { message?: { content?: string } }[] | undefined;
+      const text = choices?.[0]?.message?.content?.trim();
+      if (text) return text;
+    } else {
+      console.warn(`[TyphoonOCR] HTTP ${res.status} — falling back to Gemini Vision`);
+    }
+  } catch (err) {
+    console.warn("[TyphoonOCR] error — falling back to Gemini Vision:", err);
+  }
+
+  // Fallback to Gemini Vision if Typhoon OCR failed
+  return callGeminiVision(base64Data, mimeType, query, ocrSystemPrompt);
 }
 
 export const SELFIE_SYSTEM_PROMPT =
@@ -643,7 +762,11 @@ export const SELFIE_SYSTEM_PROMPT =
   "❌ ห้ามใส่ [Task List], ห้ามใส่รายการข้อ 1. 2. 3., ห้ามใส่ไดอะแกรม Mermaid หรือโค้ดใด ๆ เด็ดขาด " +
   "ตอบเฉพาะข้อความทักทาย ให้กำลังใจ และสอบถามความรู้สึกอย่างจริงใจเท่านั้น";
 
-export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { emotionKey?: string }> {
+export async function analyzeSelfie(
+  imageBlob: Blob,
+  vlmModel: VLMModelChoice = "auto",
+  textModel: TextModelChoice = "auto"
+): Promise<VisionResult & { emotionKey?: string }> {
   const visionQuery =
     "ดูใบหน้าของคนในภาพนี้แล้วบรรยายอารมณ์และความรู้สึกที่สังเกตเห็นเป็นภาษาไทย " +
     "สังเกตจากแววตา รอยยิ้ม สีหน้า และท่าทาง ตอบสั้น ๆ 1-2 ประโยค " +
@@ -651,7 +774,7 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
 
   let answer: string;
   try {
-    answer = await callVisionLLM(imageBlob, visionQuery);
+    answer = await callVisionLLM(imageBlob, visionQuery, "image.jpg", vlmModel);
   } catch (e) {
     console.warn("Vision LLM selfie failed:", e);
     answer = "ไม่สามารถวิเคราะห์ภาพใบหน้าได้ในขณะนี้";
@@ -667,7 +790,9 @@ export async function analyzeSelfie(imageBlob: Blob): Promise<VisionResult & { e
       `จากการวิเคราะห์ภาพใบหน้า: "${answer}" ตอบสนองด้วยความเห็นอกเห็นใจ สอบถามความรู้สึกของผู้ใช้ 2-3 ประโยคเป็นภาษาไทยเท่านั้น (ห้ามใส่ Task List หรือ Mermaid เด็ดขาด)`,
       SELFIE_SYSTEM_PROMPT,
       1024,
-      0.1
+      0.1,
+      undefined,
+      textModel
     );
     // Strip any stray internal Task List or Mermaid blocks or leaked thinking
     llmReply = rawReply
@@ -727,19 +852,21 @@ const HOMEWORK_VISION_SYSTEM =
   "4. State what the problem is asking to find. " +
   "Do NOT solve — only extract and describe. Be exhaustive and precise about angles; never describe grid coordinates as physics data.";
 
-export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
+export async function analyzeHomework(
+  imageBlob: Blob,
+  vlmModel: VLMModelChoice = "auto",
+  textModel: TextModelChoice = "auto"
+): Promise<VisionResult> {
   // Single vision call: unified OCR + diagram description with physics-aware system prompt
   let answer: string;
   try {
-    // typhoon-ocr is the only model that accepts image inputs; 
-    // it reasons about angles/diagram structure instead of just dumping raw text.
     answer = await callVisionLLM(
       imageBlob,
       "Read this image. Transcribe all Thai text exactly. For each diagram element (points, angles, vectors, axes), " +
       "write one sentence per element stating exactly what it shows with its precise numerical value. " +
       "List all given quantities. State what the problem asks to find. Do not solve.",
       "image.jpg",
-      TYPHOON_OCR_MODEL,
+      vlmModel,
       HOMEWORK_VISION_SYSTEM
     );
     console.debug("[Homework vision]", answer);
@@ -787,7 +914,7 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
         `❌ ห้ามสร้างตัวเลือก ก. ข. ค. ง. เพิ่มเองเด็ดขาด`;
     }
 
-    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 6144, 0.05);
+    const rawReply = await callTextLLM(solvePrompt, MATH_SYSTEM_PROMPT, 6144, 0.05, undefined, textModel);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 30) {
       llmReply = `## เฉลยการบ้าน\n\n${answer}`;
@@ -800,7 +927,12 @@ export async function analyzeHomework(imageBlob: Blob): Promise<VisionResult> {
   return { answer, llmReply };
 }
 
-export async function analyzeImageWithCaption(imageBlob: Blob, caption: string = ""): Promise<VisionResult> {
+export async function analyzeImageWithCaption(
+  imageBlob: Blob,
+  caption: string = "",
+  vlmModel: VLMModelChoice = "auto",
+  textModel: TextModelChoice = "auto"
+): Promise<VisionResult> {
   let answer: string;
   try {
     const visionQuery = caption.trim()
@@ -811,7 +943,7 @@ export async function analyzeImageWithCaption(imageBlob: Blob, caption: string =
       imageBlob,
       visionQuery,
       "image.jpg",
-      TYPHOON_OCR_MODEL,
+      vlmModel,
       HOMEWORK_VISION_SYSTEM
     );
   } catch (e) {
@@ -829,7 +961,7 @@ export async function analyzeImageWithCaption(imageBlob: Blob, caption: string =
       ? `ผู้ใช้ส่งภาพพร้อมคำสั่ง: "${caption.trim()}"\n\nข้อมูลที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 4000)}\n\nคำสั่ง: ตอบคำถามและอธิบายโจทย์/ข้อสงสัยของผู้ใช้เกี่ยวกับภาพนี้อย่างละเอียด จัดรูปแบบ Markdown และ KaTeX $$...$$ ให้ครบถ้วนสมบูรณ์`
       : `ข้อมูลที่อ่านและวิเคราะห์ได้จากภาพ:\n${answer.slice(0, 4000)}\n\nคำสั่ง: อธิบายและวิเคราะห์เนื้อหาในภาพนี้ให้ผู้ใช้เข้าใจง่าย จัดรูปแบบ Markdown และ KaTeX $$...$$ ให้สวยงาม`;
 
-    const rawReply = await callTextLLM(prompt, MATH_SYSTEM_PROMPT, 6144, 0.05);
+    const rawReply = await callTextLLM(prompt, MATH_SYSTEM_PROMPT, 6144, 0.05, undefined, textModel);
     llmReply = fixThaiChoices(rawReply, answer);
     if (!llmReply || llmReply.length < 20) {
       llmReply = answer;
@@ -1021,10 +1153,11 @@ export interface ChatResult {
 
 export async function chat(
   userMessage: string,
-  history?: { role: string; text: string }[]
+  history?: { role: string; text: string }[],
+  preferredModel: LLMModelChoice = "auto"
 ): Promise<ChatResult> {
   const [searchResult, emotionKey] = await Promise.all([
-    callTextLLMWithSearch(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history),
+    callTextLLMWithSearch(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history, preferredModel),
     analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
   ]);
   return {
@@ -1068,14 +1201,15 @@ function needsWebSearch(message: string): boolean {
  */
 export async function chatWithSearch(
   userMessage: string,
-  history?: { role: string; text: string }[]
+  history?: { role: string; text: string }[],
+  preferredModel: LLMModelChoice = "auto"
 ): Promise<ChatResult> {
   const emotionKey = await analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage));
 
   // Check if this query needs web search
   if (!needsWebSearch(userMessage)) {
     // Simple query - use LLM directly without search
-    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history);
+    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history, preferredModel);
     return { reply, emotionKey, searchUsed: false, sources: [] };
   }
 
@@ -1084,7 +1218,7 @@ export async function chatWithSearch(
 
   if (searchData.results.length === 0) {
     // No search results — fall back to regular LLM
-    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history);
+    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history, preferredModel);
     return { reply, emotionKey, searchUsed: false, sources: [] };
   }
 
@@ -1099,7 +1233,7 @@ export async function chatWithSearch(
     `**คำสั่ง**: ตอบคำถามผู้ใช้โดยอิงจากผลการค้นหาด้านบนเท่านั้น อ้างอิงด้วย [1], [2], ... ห้ามแต่งข้อมูลที่ไม่มีในผลการค้นหา\n---`;
 
   const augmentedInstruction = userMessage + searchCtx;
-  const searchReply = await callTextLLM(augmentedInstruction, SEARCH_SYSTEM_PROMPT, 3072, 0.4, history);
+  const searchReply = await callTextLLM(augmentedInstruction, SEARCH_SYSTEM_PROMPT, 3072, 0.4, history, preferredModel);
 
   // Append clickable source links
   const sourcesBlock =

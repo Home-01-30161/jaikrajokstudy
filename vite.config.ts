@@ -599,6 +599,16 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
+        '/api/gemini': {
+          target: 'https://generativelanguage.googleapis.com',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path: string) => {
+            const stripped = path.replace(/^\/api\/gemini/, '');
+            const sep = stripped.includes('?') ? '&' : '?';
+            return `${stripped}${sep}key=${env.GEMINI_API_KEY ?? env.APP_GEMINI_API_KEY ?? ''}`;
+          },
+        },
         '/api/search': {
           target: 'http://localhost:8000',
           changeOrigin: false,

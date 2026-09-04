@@ -10,6 +10,8 @@ import {
   analyzeImageWithCaption,
   analyzeAudio,
   classifyMoodFromText,
+  type TextModelChoice,
+  type VLMModelChoice,
 } from "./pathummaApi";
 import MathText from "./MathText";
 import LandingPage from "./pages/LandingPage";
@@ -1382,6 +1384,32 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     }).then(r => { if (!r.ok) r.text().then(t => console.error("[saveWebMessage] failed:", r.status, t)); })
       .catch(e => console.error("[saveWebMessage] network error:", e));
   };
+  const [selectedTextModel, setSelectedTextModel] = useState<TextModelChoice>(() => {
+    try {
+      const saved = localStorage.getItem("jaikrajok:selected_text_model");
+      if (saved === "auto" || saved === "thaillm" || saved === "typhoon" || saved === "gemini") return saved;
+    } catch { /* storage unavailable */ }
+    return "auto";
+  });
+
+  const [selectedVlmModel, setSelectedVlmModel] = useState<VLMModelChoice>(() => {
+    try {
+      const saved = localStorage.getItem("jaikrajok:selected_vlm_model");
+      if (saved === "auto" || saved === "typhoon" || saved === "gemini") return saved;
+    } catch { /* storage unavailable */ }
+    return "auto";
+  });
+
+  const handleTextModelChange = (m: TextModelChoice) => {
+    setSelectedTextModel(m);
+    try { localStorage.setItem("jaikrajok:selected_text_model", m); } catch {}
+  };
+
+  const handleVlmModelChange = (m: VLMModelChoice) => {
+    setSelectedVlmModel(m);
+    try { localStorage.setItem("jaikrajok:selected_vlm_model", m); } catch {}
+  };
+
   const [currentView, setCurrentView] = useState<AppView>("home");
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
@@ -1749,7 +1777,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
 
     try {
       if (currentImage) {
-        const { answer, llmReply } = await analyzeImageWithCaption(currentImage.file, textToSend);
+        const { answer, llmReply } = await analyzeImageWithCaption(currentImage.file, textToSend, selectedVlmModel, selectedTextModel);
         setMessages((prev) => [
           ...prev,
           { id: crypto.randomUUID(), role: "bot", text: "อ่านและวิเคราะห์รูปภาพเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer.slice(0, 300)}..."` },
@@ -1759,7 +1787,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
         pushTrend("neutral", "รูปภาพ");
       } else {
         // Always use web search for every text query
-        const { emotionKey, reply, searchUsed } = await chatWithSearch(textToSend, currentHistory);
+        const { emotionKey, reply, searchUsed } = await chatWithSearch(textToSend, currentHistory, selectedTextModel);
 
         if (searchUsed) {
           toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ");
@@ -1775,7 +1803,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     } finally {
       setIsAnalyzing(false);
     }
-  }, [inputText, attachedImage, clearAttachedImage, noteMultimodal, pushTrend]);
+  }, [inputText, attachedImage, clearAttachedImage, noteMultimodal, pushTrend, selectedVlmModel, selectedTextModel]);
 
   const handleSelfie = () => {
     selfieInputRef.current?.click();
@@ -1789,7 +1817,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     noteMultimodal("เซลฟี่");
     setIsAnalyzing(true);
     try {
-      const { answer, llmReply, emotionKey: returnedKey } = await analyzeSelfie(file);
+      const { answer, llmReply, emotionKey: returnedKey } = await analyzeSelfie(file, selectedVlmModel, selectedTextModel);
       // Classify emotion from returned key or robust fallback
       const emotionKey = returnedKey || classifyMoodFromText(answer) || "positive";
       const info = EMO[emotionKey] || EMO.positive;
@@ -1910,7 +1938,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     noteMultimodal("รูปการบ้าน");
     setIsAnalyzing(true);
     try {
-      const { answer, llmReply } = await analyzeHomework(file);
+      const { answer, llmReply } = await analyzeHomework(file, selectedVlmModel, selectedTextModel);
       setMessages((prev) => [...prev,
       { id: crypto.randomUUID(), role: "bot", text: "อ่านโจทย์เรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer}"` },
       { id: crypto.randomUUID(), role: "bot", text: llmReply, timestamp: Date.now() + 50 },
@@ -2300,6 +2328,10 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
                   handleAttachImageClick={handleAttachImageClick}
                   handlePaste={handlePaste}
                   onImageClick={(url) => setPreviewModalImage(url)}
+                  selectedTextModel={selectedTextModel}
+                  onSelectTextModel={handleTextModelChange}
+                  selectedVlmModel={selectedVlmModel}
+                  onSelectVlmModel={handleVlmModelChange}
                 />
               </PageWrapper>
             )}
@@ -2813,7 +2845,7 @@ function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, supportStrip, onDismissSupport,
-  attachedImage, clearAttachedImage, handleAttachImageClick, handlePaste, onImageClick,
+  selectedTextModel, onSelectTextModel, selectedVlmModel, onSelectVlmModel,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -2833,6 +2865,10 @@ function ChatView({
   handleAttachImageClick: () => void;
   handlePaste: (e: React.ClipboardEvent) => void;
   onImageClick: (url: string) => void;
+  selectedTextModel: TextModelChoice;
+  onSelectTextModel: (m: TextModelChoice) => void;
+  selectedVlmModel: VLMModelChoice;
+  onSelectVlmModel: (m: VLMModelChoice) => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const hasUserMsg = messages.some((m) => m.role === "user");
@@ -2928,12 +2964,30 @@ function ChatView({
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => toast("โมเดลหลัก: thaillm-8b (TokenMind)")}
-                  className="text-xs px-3 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors shadow-xs"
+                {/* Text Model Dropdown */}
+                <select
+                  value={selectedTextModel}
+                  onChange={(e) => onSelectTextModel(e.target.value as TextModelChoice)}
+                  className="text-xs px-2.5 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer outline-none shadow-xs"
+                  title="เลือกโมเดลภาษา Text LLM"
                 >
-                  thaillm-8b ▾
-                </button>
+                  <option value="auto" className="bg-slate-900 text-white">💬 Text: Auto</option>
+                  <option value="thaillm" className="bg-slate-900 text-white">🐘 ThaiLLM 8B</option>
+                  <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon 30B</option>
+                  <option value="gemini" className="bg-slate-900 text-white">♊ Gemini 1.5 Flash</option>
+                </select>
+
+                {/* VLM Model Dropdown */}
+                <select
+                  value={selectedVlmModel}
+                  onChange={(e) => onSelectVlmModel(e.target.value as VLMModelChoice)}
+                  className="text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-100 font-semibold border border-emerald-700 hover:bg-emerald-900 transition-colors cursor-pointer outline-none shadow-xs"
+                  title="เลือกโมเดลวิสัยทัศน์ VLM (อ่านภาพ/การบ้าน/เซลฟี่)"
+                >
+                  <option value="auto" className="bg-slate-900 text-white">👁️ VLM: Auto</option>
+                  <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon OCR</option>
+                  <option value="gemini" className="bg-slate-900 text-white">♊ Gemini Vision</option>
+                </select>
                 <button
                   onClick={handleVoice}
                   className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
@@ -3201,12 +3255,30 @@ function ChatView({
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => toast("โมเดลหลัก: thaillm-8b (TokenMind)")}
-                    className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer"
+                  {/* Text Model Dropdown */}
+                  <select
+                    value={selectedTextModel}
+                    onChange={(e) => onSelectTextModel(e.target.value as TextModelChoice)}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer outline-none shadow-xs"
+                    title="เลือกโมเดลภาษา Text LLM"
                   >
-                    thaillm-8b ▾
-                  </button>
+                    <option value="auto" className="bg-slate-900 text-white">💬 Text: Auto</option>
+                    <option value="thaillm" className="bg-slate-900 text-white">🐘 ThaiLLM 8B</option>
+                    <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon 30B</option>
+                    <option value="gemini" className="bg-slate-900 text-white">♊ Gemini 1.5</option>
+                  </select>
+
+                  {/* VLM Model Dropdown */}
+                  <select
+                    value={selectedVlmModel}
+                    onChange={(e) => onSelectVlmModel(e.target.value as VLMModelChoice)}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-100 font-semibold border border-emerald-700 hover:bg-emerald-900 transition-colors cursor-pointer outline-none shadow-xs"
+                    title="เลือกโมเดลวิสัยทัศน์ VLM (อ่านภาพ/การบ้าน/เซลฟี่)"
+                  >
+                    <option value="auto" className="bg-slate-900 text-white">👁️ VLM: Auto</option>
+                    <option value="typhoon" className="bg-slate-900 text-white">🌀 Typhoon OCR</option>
+                    <option value="gemini" className="bg-slate-900 text-white">♊ Gemini Vision</option>
+                  </select>
                   <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="พูดระบาย">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
