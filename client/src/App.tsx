@@ -10,7 +10,7 @@ import {
   analyzeImageWithCaption,
   analyzeAudio,
   classifyMoodFromText,
-  LLMModelChoice,
+  type LLMModelChoice,
 } from "./pathummaApi";
 import MathText from "./MathText";
 import LandingPage from "./pages/LandingPage";
@@ -1408,6 +1408,35 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
     ];
   });
   const [activeSessionId, setActiveSessionId] = useState<string>(() => sessions[0]?.id || `session_${userKey}_1`);
+
+  // Selected LLM Model State (Auto / ThaiLLM / Typhoon)
+  const [selectedModel, setSelectedModel] = useState<LLMModelChoice>(() => {
+    try {
+      const saved = localStorage.getItem("jaikrajok:selected_model");
+      if (saved === "thaillm" || saved === "typhoon" || saved === "auto") {
+        return saved as LLMModelChoice;
+      }
+    } catch {
+      /* storage unavailable */
+    }
+    return "auto";
+  });
+
+  const handleModelChange = useCallback((model: LLMModelChoice) => {
+    const val = model || "auto";
+    setSelectedModel(val);
+    try {
+      localStorage.setItem("jaikrajok:selected_model", val);
+    } catch {
+      /* storage unavailable */
+    }
+    const names: Record<string, string> = {
+      auto: "Auto (ThaiLLM 8B + Typhoon 30B Fallback)",
+      thaillm: "ThaiLLM 8B (TokenMind)",
+      typhoon: "Typhoon 30B (Opentyphoon)",
+    };
+    toast.success(`เลือกโมเดล: ${names[val] || "Auto"}`);
+  }, []);
 
   // Refs for saveWebMessage — always current, no stale closure issues
   const activeSessionIdRef = useRef<string>(activeSessionId);
@@ -3559,14 +3588,61 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
   );
 }
 
-/* ============ MAIN APP ============ */
+/* ============ ERROR BOUNDARY & PAGE WRAPPER ============ */
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Uncaught UI Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 text-center bg-stone-900 text-stone-100 min-h-screen flex flex-col items-center justify-center font-sans">
+          <div className="text-4xl mb-3">⚠️</div>
+          <h2 className="text-xl font-bold mb-2">เกิดข้อผิดพลาดในการแสดงผล</h2>
+          <p className="text-xs text-stone-400 mb-6 max-w-md mx-auto">{this.state.error?.message || "Unknown error"}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-semibold hover:bg-rose-700 transition-colors shadow-md cursor-pointer"
+          >
+            รีโหลดหน้าเว็บ
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const PageWrapper = ({ children, pageKey }: { children: React.ReactNode; pageKey: string }) => {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ref.current) return;
-    gsap.fromTo(ref.current, { opacity: 0, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0 0% 0 0)", duration: 0.55, ease: "expo.out" });
+    try {
+      gsap.fromTo(ref.current, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out" });
+    } catch {
+      if (ref.current) ref.current.style.opacity = "1";
+    }
   }, [pageKey]);
-  return <div ref={ref} className="h-full w-full" style={{ opacity: 0 }}>{children}</div>;
+  return <div ref={ref} className="h-full w-full">{children}</div>;
 };
 
 export default function App() {
@@ -3578,21 +3654,6 @@ export default function App() {
   const [guardianVerificationCode, setGuardianVerificationCode] = useState("");
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [pendingLoginUser, setPendingLoginUser] = useState<UserAccount | null>(null);
-
-  const [selectedModel, setSelectedModel] = useState<LLMModelChoice>(() => {
-    return (localStorage.getItem("jaikrajok:selected_model") as LLMModelChoice) || "auto";
-  });
-
-  const handleModelChange = (model: LLMModelChoice) => {
-    setSelectedModel(model);
-    localStorage.setItem("jaikrajok:selected_model", model);
-    const names: Record<LLMModelChoice, string> = {
-      auto: "Auto (ThaiLLM 8B + Typhoon 30B Fallback)",
-      thaillm: "ThaiLLM 8B (TokenMind)",
-      typhoon: "Typhoon 30B (Opentyphoon)",
-    };
-    toast.success(`เลือกโมเดล: ${names[model]}`);
-  };
 
   // Check for guardian_token in URL — show guardian confirmation page regardless of device
   useEffect(() => {
@@ -3779,122 +3840,124 @@ export default function App() {
   }, []);
 
   return (
-    <div className="font-sans">
-      <Toaster richColors position="top-center" />
-      {page === "landing" && (
-        <LandingPage onEnter={() => setPage("login")} />
-      )}
-      {page === "login" && (
-        <PageWrapper pageKey="login">
-          <LoginPage
-            onNext={() => setPage("onb1")}
-            onLoginSuccess={handleLoginSuccess}
-          />
-        </PageWrapper>
-      )}
-      {page === "onb1" && <PageWrapper pageKey="onb1"><OnbWelcome onNext={() => setPage("onb2")} /></PageWrapper>}
-      {page === "onb2" && (
-        <PageWrapper pageKey="onb2">
-          <OnbAge
-            age={age}
-            setAge={setAge}
-            onNext={() => {
-              const ageNum = parseInt(age);
-              setPage(ageNum < 20 ? "guardian" : "privacy");
-            }}
-          />
-        </PageWrapper>
-      )}
-      {page === "guardian" && (
-        <PageWrapper pageKey="guardian">
-          <GuardianPage
-            stage={guardianStage}
-            onSubmitEmail={async (email) => {
-              if (!email || !email.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
-              // Generate 6-digit verification code
-              const code = Math.floor(100000 + Math.random() * 900000).toString();
-              const token = `${code}_${Date.now()}`;
-              localStorage.setItem("jaikrajok:guardian_token", token);
-              localStorage.setItem("jaikrajok:guardian_code", code);
-              localStorage.setItem("jaikrajok:guardian_pending_user", currentUser?.id ?? "");
-              setGuardianVerificationCode(code);
-              const approvalLink = `${window.location.origin}${window.location.pathname}?guardian_token=${token}`;
-              try {
-                const res = await fetch("/api/guardian-email", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to_email: email, child_name: currentUser?.name ?? "บุตรหลานของคุณ", approval_link: approvalLink, verification_code: code }),
-                });
-                if (!res.ok) {
-                  const errJson = await res.json().catch(() => ({}));
-                  throw new Error(errJson.error || `HTTP ${res.status}`);
+    <ErrorBoundary>
+      <div className="font-sans">
+        <Toaster richColors position="top-center" />
+        {page === "landing" && (
+          <LandingPage onEnter={() => setPage("login")} />
+        )}
+        {page === "login" && (
+          <PageWrapper pageKey="login">
+            <LoginPage
+              onNext={() => setPage("onb1")}
+              onLoginSuccess={handleLoginSuccess}
+            />
+          </PageWrapper>
+        )}
+        {page === "onb1" && <PageWrapper pageKey="onb1"><OnbWelcome onNext={() => setPage("onb2")} /></PageWrapper>}
+        {page === "onb2" && (
+          <PageWrapper pageKey="onb2">
+            <OnbAge
+              age={age}
+              setAge={setAge}
+              onNext={() => {
+                const ageNum = parseInt(age);
+                setPage(ageNum < 20 ? "guardian" : "privacy");
+              }}
+            />
+          </PageWrapper>
+        )}
+        {page === "guardian" && (
+          <PageWrapper pageKey="guardian">
+            <GuardianPage
+              stage={guardianStage}
+              onSubmitEmail={async (email) => {
+                if (!email || !email.includes("@")) { toast("กรุณากรอกอีเมลที่ถูกต้อง"); return; }
+                // Generate 6-digit verification code
+                const code = Math.floor(100000 + Math.random() * 900000).toString();
+                const token = `${code}_${Date.now()}`;
+                localStorage.setItem("jaikrajok:guardian_token", token);
+                localStorage.setItem("jaikrajok:guardian_code", code);
+                localStorage.setItem("jaikrajok:guardian_pending_user", currentUser?.id ?? "");
+                setGuardianVerificationCode(code);
+                const approvalLink = `${window.location.origin}${window.location.pathname}?guardian_token=${token}`;
+                try {
+                  const res = await fetch("/api/guardian-email", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ to_email: email, child_name: currentUser?.name ?? "บุตรหลานของคุณ", approval_link: approvalLink, verification_code: code }),
+                  });
+                  if (!res.ok) {
+                    const errJson = await res.json().catch(() => ({}));
+                    throw new Error(errJson.error || `HTTP ${res.status}`);
+                  }
+                  setGuardianStage("pending");
+                  toast("ส่งอีเมลถึงผู้ปกครองเรียบร้อยแล้ว");
+                } catch (err: any) {
+                  console.error("Guardian Email error:", err);
+                  toast(`ส่งอีเมลไม่สำเร็จ: ${err.message || "เกิดข้อผิดพลาด"}`);
                 }
-                setGuardianStage("pending");
-                toast("ส่งอีเมลถึงผู้ปกครองเรียบร้อยแล้ว");
-              } catch (err: any) {
-                console.error("Guardian Email error:", err);
-                toast(`ส่งอีเมลไม่สำเร็จ: ${err.message || "เกิดข้อผิดพลาด"}`);
-              }
-            }}
-            onVerifyCode={async (inputCode) => {
-              const storedCode = localStorage.getItem("jaikrajok:guardian_code");
-              if (inputCode === storedCode) {
-                localStorage.removeItem("jaikrajok:guardian_token");
-                localStorage.removeItem("jaikrajok:guardian_code");
-                localStorage.removeItem("jaikrajok:guardian_pending_user");
-                setGuardianStage("approved");
-                toast.success("ยืนยันความยินยอมจากผู้ปกครองสำเร็จ");
-                return true;
-              }
-              return false;
-            }}
-            onNext={() => setPage("privacy")}
-            guardianEmail={guardianEmail}
-            setGuardianEmail={setGuardianEmail}
-          />
-        </PageWrapper>
-      )}
-      {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={(consentAt) => {
-        const users = getUsersList();
-        const idx = users.findIndex((u) => u.id === currentUser?.id);
-        if (idx !== -1) {
-          users[idx] = { ...users[idx], age, guardianConsent: guardianStage === "approved", guardianEmail, consentAt };
-          saveUsersList(users);
-          setCurrentUser({ ...users[idx] });
-        }
-        setPage("app");
-      }} /></PageWrapper>}
-      {page === "guardian_confirm" && (
-        <PageWrapper pageKey="guardian_confirm">
-          <GuardianConfirmPage
-            verificationCode={sessionStorage.getItem("jaikrajok:confirm_code") || ""}
-            onConfirm={() => {
-              const token = sessionStorage.getItem("jaikrajok:confirm_token");
-              const code = sessionStorage.getItem("jaikrajok:confirm_code");
-              if (token && code) {
-                localStorage.setItem(`jaikrajok:guardian_approved_${code}`, "true");
-              }
-              sessionStorage.removeItem("jaikrajok:confirm_token");
-              sessionStorage.removeItem("jaikrajok:confirm_code");
-              toast("ยืนยันความยินยอมเรียบร้อยแล้ว กรุณาบอกรหัสยืนยันกับบุตรหลานเพื่อดำเนินการต่อ");
-            }}
-          />
-        </PageWrapper>
-      )}
-      {page === "app" && (
-        <PageWrapper pageKey="app">
-          <AppShell
-            key={currentUser?.id ?? "guest"}
-            currentUser={currentUser}
-            onLogout={handleLogout}
-            age={age}
-            guardianConsent={guardianStage === "approved"}
-          />
-        </PageWrapper>
-      )}
-      {showStorageModal && (
-        <StorageChoiceModal onSelect={handleStorageChoiceSelect} />
-      )}
-    </div>
+              }}
+              onVerifyCode={async (inputCode) => {
+                const storedCode = localStorage.getItem("jaikrajok:guardian_code");
+                if (inputCode === storedCode) {
+                  localStorage.removeItem("jaikrajok:guardian_token");
+                  localStorage.removeItem("jaikrajok:guardian_code");
+                  localStorage.removeItem("jaikrajok:guardian_pending_user");
+                  setGuardianStage("approved");
+                  toast.success("ยืนยันความยินยอมจากผู้ปกครองสำเร็จ");
+                  return true;
+                }
+                return false;
+              }}
+              onNext={() => setPage("privacy")}
+              guardianEmail={guardianEmail}
+              setGuardianEmail={setGuardianEmail}
+            />
+          </PageWrapper>
+        )}
+        {page === "privacy" && <PageWrapper pageKey="privacy"><PrivacyPage onNext={(consentAt) => {
+          const users = getUsersList();
+          const idx = users.findIndex((u) => u.id === currentUser?.id);
+          if (idx !== -1) {
+            users[idx] = { ...users[idx], age, guardianConsent: guardianStage === "approved", guardianEmail, consentAt };
+            saveUsersList(users);
+            setCurrentUser({ ...users[idx] });
+          }
+          setPage("app");
+        }} /></PageWrapper>}
+        {page === "guardian_confirm" && (
+          <PageWrapper pageKey="guardian_confirm">
+            <GuardianConfirmPage
+              verificationCode={sessionStorage.getItem("jaikrajok:confirm_code") || ""}
+              onConfirm={() => {
+                const token = sessionStorage.getItem("jaikrajok:confirm_token");
+                const code = sessionStorage.getItem("jaikrajok:confirm_code");
+                if (token && code) {
+                  localStorage.setItem(`jaikrajok:guardian_approved_${code}`, "true");
+                }
+                sessionStorage.removeItem("jaikrajok:confirm_token");
+                sessionStorage.removeItem("jaikrajok:confirm_code");
+                toast("ยืนยันความยินยอมเรียบร้อยแล้ว กรุณาบอกรหัสยืนยันกับบุตรหลานเพื่อดำเนินการต่อ");
+              }}
+            />
+          </PageWrapper>
+        )}
+        {page === "app" && (
+          <PageWrapper pageKey="app">
+            <AppShell
+              key={currentUser?.id ?? "guest"}
+              currentUser={currentUser}
+              onLogout={handleLogout}
+              age={age}
+              guardianConsent={guardianStage === "approved"}
+            />
+          </PageWrapper>
+        )}
+        {showStorageModal && (
+          <StorageChoiceModal onSelect={handleStorageChoiceSelect} />
+        )}
+      </div>
+    </ErrorBoundary>
   );
 }
