@@ -2882,7 +2882,7 @@ function ChatView({
     if (!emptyRef.current || hasUserMsg) return;
     const els = emptyRef.current.querySelectorAll(".chat-hero-el");
     gsap.fromTo(els, { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.65, ease: "expo.out", stagger: 0.12 });
-  }, [hasUserMsg]);
+  }, [hasUserMsg, messages]);
 
   return (
     <div className="w-full flex flex-col" style={{ height: "calc(100vh - 70px)" }}>
@@ -2892,7 +2892,7 @@ function ChatView({
           <style>{`
             @keyframes chatStarSpin { 0%{transform:rotate(0deg) scale(1)} 50%{transform:rotate(180deg) scale(1.15)} 100%{transform:rotate(360deg) scale(1)} }
             .chat-star { display:inline-block; animation: chatStarSpin 8s linear infinite; }
-            .chat-hero-el { opacity: 0; }
+            .chat-hero-el { opacity: 1; }
             @keyframes chatBubblePop { from{opacity:0;transform:translateY(8px) scale(0.96)} to{opacity:1;transform:translateY(0) scale(1)} }
             .chat-bubble-in { animation: chatBubblePop 0.35s cubic-bezier(0.22,1,0.36,1) both; }
           `}</style>
@@ -3603,7 +3603,7 @@ const PageWrapper = ({ children, pageKey }: { children: React.ReactNode; pageKey
     if (!ref.current) return;
     gsap.fromTo(ref.current, { opacity: 0, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0 0% 0 0)", duration: 0.55, ease: "expo.out" });
   }, [pageKey]);
-  return <div ref={ref} className="h-full w-full" style={{ opacity: 0 }}>{children}</div>;
+  return <div ref={ref} className="h-full w-full">{children}</div>;
 };
 
 export default function App() {
