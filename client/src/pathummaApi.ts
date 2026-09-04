@@ -716,7 +716,7 @@ export async function callVisionLLM(
 
   try {
     const payload = {
-      model: model,
+      model: TYPHOON_OCR_MODEL,
       messages: [
         { role: "system", content: ocrSystemPrompt },
         {
