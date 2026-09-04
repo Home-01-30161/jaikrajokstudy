@@ -1,21 +1,21 @@
 import "dotenv/config";
 import express from "express";
-import webhookHandler from "./webhook.js";
-import historyHandler from "./history.js";
-import ssenseHandler from "./ssense.js";
-import vajaHandler from "./vaja.js";
-import tavilyHandler from "./tavily.js";
-import searchHandler from "./search.js";
-import pathummaHandler from "./pathumma.js";
-import typhoonHandler from "./typhoon.js";
-import thaillmHandler from "./thaillm.js";
-import ptmAsrHandler from "./ptm-asr.js";
-import lineTokenHandler from "./line-token.js";
-import sendOtpHandler from "./send-otp.js";
-import guardianEmailHandler from "./guardian-email.js";
-import adminDbHandler from "./admin-db.js";
-import { exportUserData, deleteUserData } from "./user-data.js";
-import { globalLimiter, strictLimiter } from "./rate-limit.js";
+import webhookHandler from "../server/api/webhook.js";
+import historyHandler from "../server/api/history.js";
+import ssenseHandler from "../server/api/ssense.js";
+import vajaHandler from "../server/api/vaja.js";
+import tavilyHandler from "../server/api/tavily.js";
+import searchHandler from "../server/api/search.js";
+import pathummaHandler from "../server/api/pathumma.js";
+import typhoonHandler from "../server/api/typhoon.js";
+import thaillmHandler from "../server/api/thaillm.js";
+import ptmAsrHandler from "../server/api/ptm-asr.js";
+import lineTokenHandler from "../server/api/line-token.js";
+import sendOtpHandler from "../server/api/send-otp.js";
+import guardianEmailHandler from "../server/api/guardian-email.js";
+import adminDbHandler from "../server/api/admin-db.js";
+import { exportUserData, deleteUserData } from "../server/api/user-data.js";
+import { globalLimiter, strictLimiter } from "../server/api/rate-limit.js";
 
 
 // Strip APP_ prefix injected by CI so handlers read env vars normally
