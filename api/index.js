@@ -115,8 +115,4 @@ app.get("/admin-db", adminDbHandler);
 app.get("/user-data/export", exportUserData);
 app.delete("/user-data", deleteUserData);
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`JaiKraJok API listening on :${PORT}`);
-});
+export default app;
