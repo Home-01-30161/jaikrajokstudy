@@ -2839,6 +2839,7 @@ function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, supportStrip, onDismissSupport,
+  attachedImage, clearAttachedImage, handleAttachImageClick, handlePaste, onImageClick,
   selectedTextModel, onSelectTextModel, selectedVlmModel, onSelectVlmModel,
 }: {
   messages: ChatMsg[];
