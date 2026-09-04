@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, Component } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { gsap } from "gsap";
@@ -3598,7 +3598,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
