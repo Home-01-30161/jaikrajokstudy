@@ -316,7 +316,8 @@ export async function callTextLLM(
 
   // ── Gemini Flash — native generateContent REST API with retry + model fallback ─
   if (textModel === "gemini") {
-    const GEMINI_TEXT_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-3.5-flash-lite"];
+    // gemini-2.5-flash is 404 for new API keys → use gemini-3.6-flash
+    const GEMINI_TEXT_MODELS = ["gemini-flash-latest", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
     // Build contents from messages array (same payload for all models)
     const geminiContents = messages
       .filter((m) => m.role !== "system")
@@ -641,10 +642,10 @@ export async function callGeminiVision(
   systemPrompt: string
 ): Promise<string> {
   // Model fallback chain — if one is overloaded (503) try the next
-  // gemini-2.5-flash-lite is deprecated → use gemini-3.5-flash-lite
+  // gemini-2.5-flash is 404 for new API keys → use gemini-3.6-flash (vision verified)
   const GEMINI_MODELS = [
     "gemini-flash-latest",
-    "gemini-2.5-flash",
+    "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
   ];
 
@@ -729,7 +730,8 @@ export async function callVisionLLM(
     "- Include ALL visible text: headings, body text, labels, captions, choices (ก. ข. ค. ง.), numbers, units. " +
     "- Do NOT skip, summarize, or paraphrase any content. Transcribe verbatim.";
 
-  if (vlmModel === "gemini") {
+  // Typhoon OCR is image-only — PDFs go straight to Gemini Vision (native PDF support)
+  if (vlmModel === "gemini" || mimeType === "application/pdf") {
     return callGeminiVision(base64Data, mimeType, query, ocrSystemPrompt);
   }
 
