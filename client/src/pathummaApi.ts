@@ -619,39 +619,8 @@ export async function callGeminiVision(
   query: string,
   systemPrompt: string
 ): Promise<string> {
-  // 1. Primary: OpenAI compatibility endpoint on Gemini
-  try {
-    const payload = {
-      model: "gemini-1.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } },
-            { type: "text", text: query },
-          ],
-        },
-      ],
-      max_tokens: 4096,
-      temperature: 0.1,
-    };
-    const res = await fetch("/api/gemini/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      const choices = raw.choices as { message?: { content?: string } }[] | undefined;
-      const text = choices?.[0]?.message?.content?.trim();
-      if (text) return text;
-    }
-  } catch (e) {
-    console.warn("[Gemini Vision OpenAI endpoint] failed:", e);
-  }
-
-  // 2. Native Gemini REST API endpoint
+  // Use native Gemini REST API endpoint — API key passed as ?key= via proxy
+  // NOTE: The /v1beta/openai/ compat endpoint requires OAuth2, NOT API keys — skip it
   const nativePayload = {
     contents: [
       {
@@ -689,6 +658,7 @@ export async function callGeminiVision(
   if (!text) throw new Error("GeminiVision returned empty response");
   return text;
 }
+
 
 export async function callVisionLLM(
   imageBlob: Blob,

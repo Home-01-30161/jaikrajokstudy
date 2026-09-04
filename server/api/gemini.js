@@ -12,6 +12,8 @@ export default async function handler(req, res) {
     for await (const chunk of req) chunks.push(chunk);
     const rawBody = Buffer.concat(chunks);
 
+    // For generativelanguage.googleapis.com, API key goes in ?key= query param
+    // Do NOT send Authorization: Bearer — that requires OAuth2, not API keys
     const separator = path.includes("?") ? "&" : "?";
     const targetUrl = `https://generativelanguage.googleapis.com${path}${separator}key=${apiKey}`;
 
@@ -19,7 +21,7 @@ export default async function handler(req, res) {
       method: req.method,
       headers: {
         "Content-Type": contentType || "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        "x-goog-api-key": apiKey,
       },
       body: req.method !== "GET" ? rawBody : undefined,
       signal: AbortSignal.timeout(90000),
