@@ -314,37 +314,51 @@ export async function callTextLLM(
     temperature: effectiveTemperature,
   });
 
-  // ── Gemini Flash (latest) — native generateContent REST API ─────────────────
+  // ── Gemini Flash — native generateContent REST API with retry + model fallback ─
   if (textModel === "gemini") {
-    try {
-      // Build contents from messages array
-      const geminiContents = messages
-        .filter((m) => m.role !== "system")
-        .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
-      const geminiSystemPrompt = messages.find((m) => m.role === "system")?.content ?? "";
-      const geminiPayload = {
-        contents: geminiContents,
-        ...(geminiSystemPrompt ? { system_instruction: { parts: [{ text: geminiSystemPrompt }] } } : {}),
-        generationConfig: { temperature: effectiveTemperature, maxOutputTokens: maxTokens },
-      };
-      const res = await fetch("/api/gemini/v1beta/models/gemini-flash-latest:generateContent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(geminiPayload),
-      });
-      if (res.ok) {
-        const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
-        const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
-        const content = candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") ?? "";
-        const text = stripThink(content);
-        if (text) return text;
-      } else {
-        const errBody = await res.text().catch(() => "");
-        console.warn("[Gemini Text] HTTP", res.status, errBody.slice(0, 200), "— falling back to standard chain");
+    const GEMINI_TEXT_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-3.5-flash-lite"];
+    // Build contents from messages array (same payload for all models)
+    const geminiContents = messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+    const geminiSystemPrompt = messages.find((m) => m.role === "system")?.content ?? "";
+    const geminiPayload = {
+      contents: geminiContents,
+      ...(geminiSystemPrompt ? { system_instruction: { parts: [{ text: geminiSystemPrompt }] } } : {}),
+      generationConfig: { temperature: effectiveTemperature, maxOutputTokens: maxTokens },
+    };
+    let geminiSucceeded = false;
+    for (const gModel of GEMINI_TEXT_MODELS) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+        try {
+          const res = await fetch(`/api/gemini/v1beta/models/${gModel}:generateContent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(geminiPayload),
+          });
+          if (res.ok) {
+            const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
+            const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
+            const content = candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") ?? "";
+            const text = stripThink(content);
+            if (text) { geminiSucceeded = true; return text; }
+            break;
+          } else if (res.status === 503 || res.status === 429) {
+            console.warn(`[Gemini Text] ${gModel} overloaded (${res.status}), attempt ${attempt + 1}/2`);
+          } else {
+            const errBody = await res.text().catch(() => "");
+            console.warn(`[Gemini Text] ${gModel} HTTP ${res.status}:`, errBody.slice(0, 120), "— trying next model");
+            break;
+          }
+        } catch (err) {
+          console.warn(`[Gemini Text] ${gModel} error:`, err);
+          break;
+        }
       }
-    } catch (err) {
-      console.warn("[Gemini Text] failed — falling back to standard chain:", err);
+      if (geminiSucceeded) break;
     }
+    if (!geminiSucceeded) console.warn("[Gemini Text] all models failed — falling back to standard chain");
   }
 
   // ── Primary: thaillm-8b (tokenmind via /api/thaillm proxy) ────────────────
@@ -627,10 +641,11 @@ export async function callGeminiVision(
   systemPrompt: string
 ): Promise<string> {
   // Model fallback chain — if one is overloaded (503) try the next
+  // gemini-2.5-flash-lite is deprecated → use gemini-3.5-flash-lite
   const GEMINI_MODELS = [
     "gemini-flash-latest",
     "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
+    "gemini-3.5-flash-lite",
   ];
 
   const nativePayload = {
