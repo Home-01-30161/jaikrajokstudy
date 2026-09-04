@@ -116,11 +116,14 @@ app.get("/user-data/export", exportUserData);
 app.delete("/user-data", deleteUserData);
 
 // Vercel serverless entry-point.
-// All /api/* traffic is rewritten to this single function.
-// Vercel strips the /api prefix before calling the handler,
-// so we restore it so Express routes (e.g. "/webhook") match.
+// All /api/* traffic is rewritten here. Vercel keeps the ORIGINAL path in
+// req.url (e.g. "/api/history"), but Express routes are registered without
+// the /api prefix (e.g. "/history"). Strip it before delegating.
 export default function handler(req, res) {
-  // req.url comes in as the path AFTER /api, e.g. "/webhook"
-  // Express routes are registered without /api prefix → works as-is.
+  if (req.url.startsWith("/api/")) {
+    req.url = req.url.slice(4); // "/api/history" → "/history"
+  } else if (req.url === "/api") {
+    req.url = "/";
+  }
   return app(req, res);
 }
