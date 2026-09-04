@@ -1685,8 +1685,17 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
   const attachedImageRef = useRef<{ file: File; preview: string } | null>(null);
 
   const handleImageSelect = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("กรุณาเลือกไฟล์รูปภาพเท่านั้น");
+    const isPdf = file.type === "application/pdf";
+    if (!file.type.startsWith("image/") && !isPdf) {
+      toast.error("กรุณาเลือกไฟล์รูปภาพหรือ PDF เท่านั้น");
+      return;
+    }
+    if (isPdf) {
+      // No data-URL preview for PDFs — can't render in <img>, and the File is what gets sent
+      const imgObj = { file, preview: "" };
+      attachedImageRef.current = imgObj;
+      setAttachedImage(imgObj);
+      toast.success("แนบไฟล์ PDF สำเร็จ");
       return;
     }
     const reader = new FileReader();
@@ -1765,22 +1774,25 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       {
         id: crypto.randomUUID(),
         role: "user",
-        text: textToSend,
+        text: textToSend || (currentImage?.file.type === "application/pdf" ? `📄 ${currentImage.file.name}` : ""),
         imageUrl: currentImage?.preview || undefined,
         timestamp: Date.now(),
-        sourceTag: currentImage ? "รูปภาพ" : (sourceLabel !== "ข้อความ" ? sourceLabel : undefined)
+        sourceTag: currentImage
+          ? (currentImage.file.type === "application/pdf" ? "PDF" : "รูปภาพ")
+          : (sourceLabel !== "ข้อความ" ? sourceLabel : undefined)
       }
     ]);
-    saveWebMessage("user", currentImage ? `[รูปภาพ] ${textToSend}` : textToSend);
+    saveWebMessage("user", currentImage ? `[${currentImage.file.type === "application/pdf" ? "PDF" : "รูปภาพ"}] ${textToSend}` : textToSend);
     noteMultimodal(currentImage ? "รูปภาพ" : sourceLabel);
     setIsAnalyzing(true);
 
     try {
       if (currentImage) {
+        const isPdf = currentImage.file.type === "application/pdf";
         const { answer, llmReply } = await analyzeImageWithCaption(currentImage.file, textToSend, selectedVlmModel, selectedTextModel);
         setMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), role: "bot", text: "อ่านและวิเคราะห์รูปภาพเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer.slice(0, 300)}..."` },
+          { id: crypto.randomUUID(), role: "bot", text: isPdf ? "อ่านและวิเคราะห์เอกสาร PDF เรียบร้อยแล้ว" : "อ่านและวิเคราะห์รูปภาพเรียบร้อยแล้ว", timestamp: Date.now(), cardType: "ocr", ocrText: `"${answer.slice(0, 300)}..."` },
           { id: crypto.randomUUID(), role: "bot", text: llmReply, timestamp: Date.now() + 50 }
         ]);
         saveWebMessage("bot", llmReply);
@@ -2406,7 +2418,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
       <input
         ref={generalImageInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         style={{ display: "none" }}
         onChange={handleGeneralImageChange}
         aria-hidden="true"
@@ -2900,12 +2912,19 @@ function ChatView({
             {/* Image Preview */}
             {attachedImage && (
               <div className="mb-3 relative inline-block text-left">
-                <img
-                  src={attachedImage.preview}
-                  alt="แนบรูปภาพ"
-                  className="max-h-32 rounded-lg border border-gray-200 cursor-pointer"
-                  onClick={() => onImageClick(attachedImage.preview)}
-                />
+                {attachedImage.file.type === "application/pdf" ? (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700">
+                    <span>📄</span>
+                    <span className="truncate max-w-[220px]">{attachedImage.file.name}</span>
+                  </div>
+                ) : (
+                  <img
+                    src={attachedImage.preview}
+                    alt="แนบรูปภาพ"
+                    className="max-h-32 rounded-lg border border-gray-200 cursor-pointer"
+                    onClick={() => onImageClick(attachedImage.preview)}
+                  />
+                )}
                 <button
                   onClick={clearAttachedImage}
                   className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold hover:bg-red-600 transition-colors shadow-md"
@@ -3200,11 +3219,18 @@ function ChatView({
               {/* Image Preview */}
               {attachedImage && (
                 <div className="mb-3 relative inline-block">
-                  <img
-                    src={attachedImage.preview}
-                    alt="แนบรูปภาพ"
-                    className="max-h-32 rounded-lg border border-gray-200"
-                  />
+                  {attachedImage.file.type === "application/pdf" ? (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700">
+                      <span>📄</span>
+                      <span className="truncate max-w-[220px]">{attachedImage.file.name}</span>
+                    </div>
+                  ) : (
+                    <img
+                      src={attachedImage.preview}
+                      alt="แนบรูปภาพ"
+                      className="max-h-32 rounded-lg border border-gray-200"
+                    />
+                  )}
                   <button
                     onClick={clearAttachedImage}
                     className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold hover:bg-red-600 transition-colors shadow-md"
