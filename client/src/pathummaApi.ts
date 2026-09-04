@@ -242,8 +242,10 @@ interface ChatMessage {
   content: string;
 }
 
+export type LLMModelChoice = "auto" | "thaillm" | "typhoon";
+
 /**
- * TEXT LLM: Call ThaiLLM thaillm-8b via TokenMind
+ * TEXT LLM: Call ThaiLLM thaillm-8b via TokenMind or Typhoon fallback / preference
  * Uses proper OpenAI messages[] array format — no need to inject history into prompt strings.
  */
 export async function callTextLLM(
@@ -251,7 +253,8 @@ export async function callTextLLM(
   systemPrompt: string = JAIKRAJOK_SYSTEM_PROMPT,
   maxTokens: number = 2048,
   temperature: number = 0.4,
-  history?: { role: string; text: string }[]
+  history?: { role: string; text: string }[],
+  preferredModel: LLMModelChoice = "auto"
 ): Promise<string> {
   let effectiveTemperature = temperature;
   let extraInstruction = "";
@@ -310,40 +313,44 @@ export async function callTextLLM(
     temperature: effectiveTemperature,
   });
 
-  // ── Primary: thaillm-8b (tokenmind via /api/thaillm proxy) ────────────────
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
-    try {
-      const res = await fetch(`${THAILLM_PROXY}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-        signal: controller.signal,
-      });
+  const tryThaiLLM = preferredModel !== "typhoon";
 
-      if (res.ok) {
-        const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
-        console.debug("[PTM-ThaiLLM] raw response:", raw);
-        const choices = raw.choices as { message?: { content?: string } }[] | undefined;
-        const content = choices?.[0]?.message?.content ?? "";
-        const text = stripThink(content);
-        if (text) return text;
-      } else {
-        console.warn("[PTM-ThaiLLM] HTTP", res.status, "— falling back to typhoon");
+  // ── Primary: thaillm-8b (tokenmind via /api/thaillm proxy) ────────────────
+  if (tryThaiLLM) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      try {
+        const res = await fetch(`${THAILLM_PROXY}/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          signal: controller.signal,
+        });
+
+        if (res.ok) {
+          const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
+          console.debug("[PTM-ThaiLLM] raw response:", raw);
+          const choices = raw.choices as { message?: { content?: string } }[] | undefined;
+          const content = choices?.[0]?.message?.content ?? "";
+          const text = stripThink(content);
+          if (text) return text;
+        } else {
+          console.warn("[PTM-ThaiLLM] HTTP", res.status, "— falling back to typhoon");
+        }
+      } finally {
+        clearTimeout(timeout);
       }
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch (err) {
-    if ((err as Error).name === "AbortError") {
-      console.warn("[PTM-ThaiLLM] timed out after 60s — falling back to typhoon");
-    } else {
-      console.warn("[PTM-ThaiLLM] fetch error — falling back to typhoon:", err);
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        console.warn("[PTM-ThaiLLM] timed out after 60s — falling back to typhoon");
+      } else {
+        console.warn("[PTM-ThaiLLM] fetch error — falling back to typhoon:", err);
+      }
     }
   }
 
-  // ── Fallback: typhoon-v2.5-30b ────────────────────────────────────────────
+  // ── Fallback / Typhoon Direct: typhoon-v2.5-30b ───────────────────────────
   const fallbackBody = JSON.stringify({
     model: TYPHOON_TEXT_MODEL,
     messages,
@@ -359,19 +366,19 @@ export async function callTextLLM(
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    console.error("[Typhoon fallback] HTTP error", res.status, errBody.slice(0, 300));
-    throw new Error(`ThaiLLM ${res.status}: ${errBody.slice(0, 200)}`);
+    console.error("[Typhoon] HTTP error", res.status, errBody.slice(0, 300));
+    throw new Error(`LLM ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
   const raw = await res.json().catch(() => ({})) as Record<string, unknown>;
-  console.debug("[Typhoon fallback] raw response:", raw);
+  console.debug("[Typhoon] raw response:", raw);
 
   // OpenAI-compatible extraction
   const choices = raw.choices as { message?: { content?: string } }[] | undefined;
   const content = choices?.[0]?.message?.content ?? "";
 
   const text = stripThink(content);
-  if (!text) throw new Error("ThaiLLM returned empty response");
+  if (!text) throw new Error("LLM returned empty response");
   return text;
 }
 
@@ -482,12 +489,13 @@ export async function callTextLLMWithSearch(
   systemPrompt: string = JAIKRAJOK_SYSTEM_PROMPT,
   maxTokens: number = 3072,
   temperature: number = 0.3,
-  history?: { role: string; text: string }[]
+  history?: { role: string; text: string }[],
+  preferredModel: LLMModelChoice = "auto"
 ): Promise<{ reply: string; searchUsed: boolean; sources: { title: string; url: string }[] }> {
   const needsSearch = NEEDS_SEARCH_RE.test(instruction);
 
   if (!needsSearch) {
-    const reply = await callTextLLM(instruction, systemPrompt, maxTokens, temperature, history);
+    const reply = await callTextLLM(instruction, systemPrompt, maxTokens, temperature, history, preferredModel);
     return { reply, searchUsed: false, sources: [] };
   }
 
@@ -513,7 +521,7 @@ export async function callTextLLMWithSearch(
   const augmentedInstruction = instruction + searchCtx;
   const effectiveSystemPrompt = searchCtx ? SEARCH_SYSTEM_PROMPT : systemPrompt;
 
-  const reply = await callTextLLM(augmentedInstruction, effectiveSystemPrompt, maxTokens, temperature, history);
+  const reply = await callTextLLM(augmentedInstruction, effectiveSystemPrompt, maxTokens, temperature, history, preferredModel);
 
   // Append source links if search was used
   if (sources.length > 0) {
@@ -1021,10 +1029,11 @@ export interface ChatResult {
 
 export async function chat(
   userMessage: string,
-  history?: { role: string; text: string }[]
+  history?: { role: string; text: string }[],
+  preferredModel: LLMModelChoice = "auto"
 ): Promise<ChatResult> {
   const [searchResult, emotionKey] = await Promise.all([
-    callTextLLMWithSearch(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history),
+    callTextLLMWithSearch(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history, preferredModel),
     analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage)),
   ]);
   return {
@@ -1068,14 +1077,15 @@ function needsWebSearch(message: string): boolean {
  */
 export async function chatWithSearch(
   userMessage: string,
-  history?: { role: string; text: string }[]
+  history?: { role: string; text: string }[],
+  preferredModel: LLMModelChoice = "auto"
 ): Promise<ChatResult> {
   const emotionKey = await analyzeSentiment(userMessage).catch(() => classifyMoodFromText(userMessage));
 
   // Check if this query needs web search
   if (!needsWebSearch(userMessage)) {
     // Simple query - use LLM directly without search
-    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history);
+    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history, preferredModel);
     return { reply, emotionKey, searchUsed: false, sources: [] };
   }
 
@@ -1084,7 +1094,7 @@ export async function chatWithSearch(
 
   if (searchData.results.length === 0) {
     // No search results — fall back to regular LLM
-    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history);
+    const reply = await callTextLLM(userMessage, JAIKRAJOK_SYSTEM_PROMPT, 3072, 0.4, history, preferredModel);
     return { reply, emotionKey, searchUsed: false, sources: [] };
   }
 
@@ -1099,7 +1109,7 @@ export async function chatWithSearch(
     `**คำสั่ง**: ตอบคำถามผู้ใช้โดยอิงจากผลการค้นหาด้านบนเท่านั้น อ้างอิงด้วย [1], [2], ... ห้ามแต่งข้อมูลที่ไม่มีในผลการค้นหา\n---`;
 
   const augmentedInstruction = userMessage + searchCtx;
-  const searchReply = await callTextLLM(augmentedInstruction, SEARCH_SYSTEM_PROMPT, 3072, 0.4, history);
+  const searchReply = await callTextLLM(augmentedInstruction, SEARCH_SYSTEM_PROMPT, 3072, 0.4, history, preferredModel);
 
   // Append clickable source links
   const sourcesBlock =
