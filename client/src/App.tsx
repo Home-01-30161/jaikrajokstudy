@@ -2653,13 +2653,7 @@ function HomeView({
   trendData: TrendPoint[];
   onMoodTap: (key: string) => void;
 }) {
-  useEffect(() => {
-    gsap.fromTo("#hv-dateline", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" });
-    gsap.fromTo("#hv-question", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out", delay: 0.1 });
-    gsap.fromTo("#hv-cta-block", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", delay: 0.25 });
-    gsap.fromTo("#hv-img", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 1.0, ease: "power2.out", delay: 0.15 });
-    gsap.fromTo(".hv-strip", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, stagger: 0.08, ease: "power3.out", delay: 0.3 });
-  }, []);
+  // Entrance effect cleanly handled by CSS default visibility
 
   const _hour = new Date().getHours();
   const todayThai = new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" });
@@ -2693,7 +2687,7 @@ function HomeView({
           <div className="flex flex-col justify-between px-6 pt-8 pb-6 md:px-10 md:py-10" style={{ flex: "0 0 55%" }}>
 
             {/* Dateline anchor */}
-            <div id="hv-dateline" style={{ opacity: 0 }}>
+            <div id="hv-dateline">
               <p style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: "0.1em", color: T.khaki, textTransform: "uppercase", marginBottom: 4 }}>
                 {todayThai}
               </p>
@@ -2701,7 +2695,7 @@ function HomeView({
             </div>
 
             {/* h1 — emotional question, display scale */}
-            <div id="hv-question" style={{ opacity: 0, flex: 1, display: "flex", alignItems: "center", paddingTop: 24, paddingBottom: 24 }}>
+            <div id="hv-question" style={{ flex: 1, display: "flex", alignItems: "center", paddingTop: 24, paddingBottom: 24 }}>
               <h1
                 style={{
                   fontFamily: "'Noto Sans Thai', 'Plus Jakarta Sans', sans-serif",
@@ -2720,7 +2714,7 @@ function HomeView({
             </div>
 
             {/* CTA block */}
-            <div id="hv-cta-block" style={{ opacity: 0 }}>
+            <div id="hv-cta-block">
               <div style={{ width: "100%", height: 2, background: T.ink, marginBottom: 12 }} />
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -2754,7 +2748,7 @@ function HomeView({
           </div>
 
           {/* Right: collage photo */}
-          <div id="hv-img" style={{ opacity: 0, flex: "0 0 45%", position: "relative", minHeight: 240, overflow: "hidden" }}>
+          <div id="hv-img" style={{ flex: "0 0 45%", position: "relative", minHeight: 240, overflow: "hidden" }}>
             <img
               src={IMG.glasses}
               alt=""
@@ -2878,11 +2872,7 @@ function ChatView({
     if (chatBodyRef.current) chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
   }, [messages, isAnalyzing]);
 
-  useEffect(() => {
-    if (!emptyRef.current || hasUserMsg) return;
-    const els = emptyRef.current.querySelectorAll(".chat-hero-el");
-    gsap.fromTo(els, { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.65, ease: "expo.out", stagger: 0.12 });
-  }, [hasUserMsg, messages]);
+  // Scroll to bottom on message change
 
   return (
     <div className="w-full flex flex-col" style={{ height: "calc(100vh - 70px)" }}>
@@ -3597,13 +3587,8 @@ function SafetyView({ age, guardianConsent, onExport, onClearAll }: {
 }
 
 /* ============ MAIN APP ============ */
-const PageWrapper = ({ children, pageKey }: { children: React.ReactNode; pageKey: string }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!ref.current) return;
-    gsap.fromTo(ref.current, { opacity: 0, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0 0% 0 0)", duration: 0.55, ease: "expo.out" });
-  }, [pageKey]);
-  return <div ref={ref} className="h-full w-full">{children}</div>;
+const PageWrapper = ({ children }: { children: React.ReactNode; pageKey: string }) => {
+  return <div className="h-full w-full">{children}</div>;
 };
 
 export default function App() {
