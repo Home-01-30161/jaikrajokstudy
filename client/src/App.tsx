@@ -2796,10 +2796,6 @@ function HomeView({
           </div>
         </div>
 
-        {/* LINE Integration card */}
-        <div style={{ padding: "0 24px 20px" }}>
-          <LINEIntegrationCard />
-        </div>
 
         {/* Catalog footer */}
         <div style={{ padding: "8px 24px 16px", borderTop: `1px solid ${T.khaki}44`, marginTop: "auto" }}>
