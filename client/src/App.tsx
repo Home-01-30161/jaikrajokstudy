@@ -10,7 +10,6 @@ import {
   analyzeImageWithCaption,
   analyzeAudio,
   classifyMoodFromText,
-  LLMModelChoice,
 } from "./pathummaApi";
 import MathText from "./MathText";
 import LandingPage from "./pages/LandingPage";
@@ -1760,7 +1759,7 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
         pushTrend("neutral", "รูปภาพ");
       } else {
         // Always use web search for every text query
-        const { emotionKey, reply, searchUsed } = await chatWithSearch(textToSend, currentHistory, selectedModel);
+        const { emotionKey, reply, searchUsed } = await chatWithSearch(textToSend, currentHistory);
 
         if (searchUsed) {
           toast.info("🌐 ค้นหาข้อมูลล่าสุดจากเว็บสำเร็จ");
@@ -2301,8 +2300,6 @@ function AppShell({ currentUser, onLogout, age, guardianConsent }: { currentUser
                   handleAttachImageClick={handleAttachImageClick}
                   handlePaste={handlePaste}
                   onImageClick={(url) => setPreviewModalImage(url)}
-                  selectedModel={selectedModel}
-                  setSelectedModel={handleModelChange}
                 />
               </PageWrapper>
             )}
@@ -2812,51 +2809,11 @@ function HomeView({
   );
 }
 
-function ModelSelectDropdown({
-  selectedModel,
-  onSelectModel,
-  small = false,
-}: {
-  selectedModel: LLMModelChoice;
-  onSelectModel: (m: LLMModelChoice) => void;
-  small?: boolean;
-}) {
-  return (
-    <div className="relative inline-block text-left z-30">
-      <select
-        value={selectedModel}
-        onChange={(e) => onSelectModel(e.target.value as LLMModelChoice)}
-        className={`${
-          small ? "text-[11px] py-0.5 pl-3 pr-7" : "text-xs py-1 pl-3 pr-8"
-        } rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-all shadow-xs cursor-pointer outline-none appearance-none font-sans`}
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "right 0.5rem center",
-          backgroundSize: "0.85em 0.85em",
-        }}
-        title="เลือกโมเดลประมวลผล (LLM)"
-      >
-        <option value="auto" className="bg-slate-900 text-slate-100 py-1">
-          ⚡ Auto (ThaiLLM + Typhoon)
-        </option>
-        <option value="thaillm" className="bg-slate-900 text-slate-100 py-1">
-          🐘 ThaiLLM 8B (TokenMind)
-        </option>
-        <option value="typhoon" className="bg-slate-900 text-slate-100 py-1">
-          🌀 Typhoon 30B (Opentyphoon)
-        </option>
-      </select>
-    </div>
-  );
-}
-
 function ChatView({
   messages, inputText, setInputText, sendMessage, isAnalyzing,
   handleSelfie, handleVoice, handleHomeworkPhoto, resetChat, speakText,
   mood, supportStrip, onDismissSupport,
   attachedImage, clearAttachedImage, handleAttachImageClick, handlePaste, onImageClick,
-  selectedModel, setSelectedModel,
 }: {
   messages: ChatMsg[];
   inputText: string;
@@ -2876,8 +2833,6 @@ function ChatView({
   handleAttachImageClick: () => void;
   handlePaste: (e: React.ClipboardEvent) => void;
   onImageClick: (url: string) => void;
-  selectedModel: LLMModelChoice;
-  setSelectedModel: (m: LLMModelChoice) => void;
 }) {
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const hasUserMsg = messages.some((m) => m.role === "user");
@@ -2973,7 +2928,12 @@ function ChatView({
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <ModelSelectDropdown selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+                <button
+                  onClick={() => toast("โมเดลหลัก: thaillm-8b (TokenMind)")}
+                  className="text-xs px-3 py-1 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors shadow-xs"
+                >
+                  thaillm-8b ▾
+                </button>
                 <button
                   onClick={handleVoice}
                   className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-black transition-colors"
@@ -3241,7 +3201,12 @@ function ChatView({
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <ModelSelectDropdown selectedModel={selectedModel} onSelectModel={setSelectedModel} small />
+                  <button
+                    onClick={() => toast("โมเดลหลัก: thaillm-8b (TokenMind)")}
+                    className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-100 font-semibold border border-slate-700 hover:bg-black transition-colors cursor-pointer"
+                  >
+                    thaillm-8b ▾
+                  </button>
                   <button onClick={handleVoice} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition-colors" title="พูดระบาย">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -3578,21 +3543,6 @@ export default function App() {
   const [guardianVerificationCode, setGuardianVerificationCode] = useState("");
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [pendingLoginUser, setPendingLoginUser] = useState<UserAccount | null>(null);
-
-  const [selectedModel, setSelectedModel] = useState<LLMModelChoice>(() => {
-    return (localStorage.getItem("jaikrajok:selected_model") as LLMModelChoice) || "auto";
-  });
-
-  const handleModelChange = (model: LLMModelChoice) => {
-    setSelectedModel(model);
-    localStorage.setItem("jaikrajok:selected_model", model);
-    const names: Record<LLMModelChoice, string> = {
-      auto: "Auto (ThaiLLM 8B + Typhoon 30B Fallback)",
-      thaillm: "ThaiLLM 8B (TokenMind)",
-      typhoon: "Typhoon 30B (Opentyphoon)",
-    };
-    toast.success(`เลือกโมเดล: ${names[model]}`);
-  };
 
   // Check for guardian_token in URL — show guardian confirmation page regardless of device
   useEffect(() => {
