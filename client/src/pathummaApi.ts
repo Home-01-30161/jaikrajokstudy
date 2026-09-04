@@ -626,8 +626,13 @@ export async function callGeminiVision(
   query: string,
   systemPrompt: string
 ): Promise<string> {
-  // Use native Gemini REST API endpoint — API key passed as ?key= via proxy
-  // NOTE: The /v1beta/openai/ compat endpoint requires OAuth2, NOT API keys — skip it
+  // Model fallback chain — if one is overloaded (503) try the next
+  const GEMINI_MODELS = [
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+  ];
+
   const nativePayload = {
     contents: [
       {
@@ -647,24 +652,46 @@ export async function callGeminiVision(
     },
   };
 
-  const res = await fetch("/api/gemini/v1beta/models/gemini-flash-latest:generateContent", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(nativePayload),
-  });
+  let lastError = "";
+  for (const modelName of GEMINI_MODELS) {
+    // Retry up to 2 times per model for transient 503s
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 1500 * attempt));
+      try {
+        const res = await fetch(`/api/gemini/v1beta/models/${modelName}:generateContent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(nativePayload),
+        });
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`GeminiVision ${res.status}: ${errText.slice(0, 200)}`);
+        if (res.ok) {
+          const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
+          const parts = candidates?.[0]?.content?.parts;
+          const text = parts?.map((p) => p.text || "").join("").trim();
+          if (text) return text;
+          lastError = `${modelName}: empty response`;
+          break; // empty response — try next model, no point retrying
+        } else if (res.status === 503 || res.status === 429) {
+          const errText = await res.text().catch(() => "");
+          lastError = `${modelName} ${res.status}: ${errText.slice(0, 120)}`;
+          console.warn(`[GeminiVision] ${modelName} overloaded (${res.status}), attempt ${attempt + 1}/2`);
+          // continue to retry or next model
+        } else {
+          const errText = await res.text().catch(() => "");
+          lastError = `${modelName} ${res.status}: ${errText.slice(0, 200)}`;
+          break; // non-retriable error — skip to next model
+        }
+      } catch (err) {
+        lastError = `${modelName} fetch error: ${String(err)}`;
+        break;
+      }
+    }
   }
 
-  const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  const candidates = raw.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
-  const parts = candidates?.[0]?.content?.parts;
-  const text = parts?.map((p) => p.text || "").join("").trim();
-  if (!text) throw new Error("GeminiVision returned empty response");
-  return text;
+  throw new Error(`GeminiVision failed all models: ${lastError}`);
 }
+
 
 
 export async function callVisionLLM(
