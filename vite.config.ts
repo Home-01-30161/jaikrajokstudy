@@ -537,6 +537,29 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: path.resolve(import.meta.dirname, "dist/public"),
       emptyOutDir: true,
+      sourcemap: false,
+      chunkSizeWarningLimit: 1500,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // Core React runtime
+            "vendor-react": ["react", "react-dom"],
+            // Animation libraries
+            "vendor-animation": ["gsap", "framer-motion"],
+            // Math rendering (KaTeX is very large)
+            "vendor-katex": ["katex", "react-katex"],
+            // UI component library
+            "vendor-radix": [
+              "@radix-ui/react-dialog",
+              "@radix-ui/react-dropdown-menu",
+              "@radix-ui/react-tabs",
+              "@radix-ui/react-tooltip",
+              "@radix-ui/react-select",
+              "@radix-ui/react-accordion",
+            ],
+          },
+        },
+      },
     },
     server: {
       port: 3000,

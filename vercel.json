@@ -1,6 +1,7 @@
 {
-  "framework": "vite",
+  "framework": null,
   "buildCommand": "vite build",
+  "installCommand": "pnpm install --no-frozen-lockfile",
   "outputDirectory": "dist/public",
   "headers": [
     {
@@ -32,6 +33,9 @@
   "rewrites": [
     { "source": "/api/tavily/(.*)", "destination": "/api/tavily" },
     { "source": "/api/typhoon/(.*)", "destination": "/api/typhoon" },
+    { "source": "/api/ptm-asr/(.*)", "destination": "/api/ptm-asr" },
+    { "source": "/api/thaillm/(.*)", "destination": "/api/thaillm" },
+    { "source": "/api/pathumma/(.*)", "destination": "/api/pathumma" },
     { "source": "/api/ssense/(.*)", "destination": "/api/ssense" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
