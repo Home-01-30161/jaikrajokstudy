@@ -626,11 +626,12 @@ function LineOAuthModal({
     sessionStorage.setItem("jaikrajok:line_state", state);
     sessionStorage.setItem("jaikrajok:line_nonce", nonce);
 
-    // Must exactly match a Callback URL registered in the LINE Login channel console,
-    // and must be identical to the redirect_uri sent to /api/line-token at exchange.
+    // Always use origin + "/" as redirect_uri and persist it so the callback
+    // can send the exact same value to LINE's token endpoint.
     const redirectUri = window.location.origin + "/";
+    sessionStorage.setItem("jaikrajok:line_redirect_uri", redirectUri);
     console.log("[LINE OAuth] redirect_uri:", redirectUri);
-    const authUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${encodeURIComponent(channelId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=profile%20openid&nonce=${encodeURIComponent(nonce)}&bot_prompt=aggressive`;
+    const authUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${encodeURIComponent(channelId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=profile%20openid%20email&nonce=${encodeURIComponent(nonce)}&bot_prompt=aggressive`;
 
     onRedirect();
     window.location.href = authUrl;
@@ -3668,8 +3669,13 @@ export default function App() {
       sessionStorage.removeItem("jaikrajok:line_state");
       sessionStorage.removeItem("jaikrajok:line_nonce");
 
-      // Must be byte-identical to the redirect_uri used in the authorize request
-      const redirectUri = window.location.origin + "/";
+      // Read the exact redirect_uri stored when the authorize request was made.
+      // LINE requires the token exchange to use a byte-identical redirect_uri.
+      const redirectUri =
+        sessionStorage.getItem("jaikrajok:line_redirect_uri") ||
+        window.location.origin + "/";
+      sessionStorage.removeItem("jaikrajok:line_redirect_uri");
+      console.log("[LINE callback] redirect_uri used for token exchange:", redirectUri);
       toast("กำลังยืนยันตัวตนด้วย LINE...");
 
       fetch("/api/line-token", {
