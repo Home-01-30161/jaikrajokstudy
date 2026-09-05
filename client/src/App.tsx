@@ -613,6 +613,10 @@ function LineOAuthModal({
   const channelId = (import.meta.env.VITE_LINE_LOGIN_CHANNEL_ID || import.meta.env.VITE_LINE_CHANNEL_ID) as string;
 
   const startOAuth = () => {
+    if (!channelId) {
+      toast.error("LINE Login ยังไม่ได้ตั้งค่า (VITE_LINE_CHANNEL_ID missing)");
+      return;
+    }
     setLoading(true);
     const buf = new Uint8Array(16);
     crypto.getRandomValues(buf);
@@ -622,9 +626,11 @@ function LineOAuthModal({
     sessionStorage.setItem("jaikrajok:line_state", state);
     sessionStorage.setItem("jaikrajok:line_nonce", nonce);
 
+    // Must exactly match a Callback URL registered in the LINE Login channel console,
+    // and must be identical to the redirect_uri sent to /api/line-token at exchange.
     const redirectUri = window.location.origin + "/";
     console.log("[LINE OAuth] redirect_uri:", redirectUri);
-    const authUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${encodeURIComponent(channelId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=profile%20openid%20email&nonce=${encodeURIComponent(nonce)}&bot_prompt=aggressive`;
+    const authUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${encodeURIComponent(channelId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=profile%20openid&nonce=${encodeURIComponent(nonce)}&bot_prompt=aggressive`;
 
     onRedirect();
     window.location.href = authUrl;
@@ -3662,7 +3668,8 @@ export default function App() {
       sessionStorage.removeItem("jaikrajok:line_state");
       sessionStorage.removeItem("jaikrajok:line_nonce");
 
-      const redirectUri = window.location.origin + window.location.pathname;
+      // Must be byte-identical to the redirect_uri used in the authorize request
+      const redirectUri = window.location.origin + "/";
       toast("กำลังยืนยันตัวตนด้วย LINE...");
 
       fetch("/api/line-token", {
